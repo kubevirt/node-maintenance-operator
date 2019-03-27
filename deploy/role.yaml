@@ -1,0 +1,59 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: node-maintenance-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/eviction
+  - nodes
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - events
+  - configmaps
+  - secrets
+  - replicationcontrollers
+  - serviceaccounts  
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - '*'
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - get
+  - create
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - oauth.openshift.io
+  resources:
+  - '*'
+  verbs:
+  - '*'   
+
+
+   
