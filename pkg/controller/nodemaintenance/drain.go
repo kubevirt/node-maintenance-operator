@@ -7,7 +7,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/kubectl/drain"
@@ -71,8 +70,12 @@ func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod) error {
 		return err
 	}
 
-	getPodFn := func(namespace, name string) (*corev1.Pod, error) {
-		return r.drainer.Client.CoreV1().Pods(namespace).Get(name, metav1.GetOptions{})
+	getPodFn := func(name string) (bool, error) {
+		_, exists, err := r.podInformer.GetStore().GetByKey(name)
+		if err != nil {
+			return exists, err
+		}
+		return exists, nil
 	}
 
 	if len(policyGroupVersion) > 0 {
@@ -82,7 +85,7 @@ func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod) error {
 
 }
 
-func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
+func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(name string) (bool, error)) error {
 	// 0 timeout means infinite, we use MaxInt64 to represent it.
 	var globalTimeout time.Duration
 	if r.drainer.Timeout == 0 {
@@ -100,7 +103,7 @@ func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(na
 	return err
 }
 
-func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersion string, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
+func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersion string, getPodFn func(name string) (bool, error)) error {
 	returnCh := make(chan error, 1)
 
 	for _, pod := range pods {
@@ -156,7 +159,7 @@ func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersio
 	return utilerrors.NewAggregate(errors)
 }
 
-func waitForDelete(pods []corev1.Pod, interval, timeout time.Duration, usingEviction bool, getPodFn func(string, string) (*corev1.Pod, error)) ([]corev1.Pod, error) {
+func waitForDelete(pods []corev1.Pod, interval, timeout time.Duration, usingEviction bool, getPodFn func(string) (bool, error)) ([]corev1.Pod, error) {
 	var verbStr string
 	if usingEviction {
 		verbStr = "evicted"
@@ -167,12 +170,12 @@ func waitForDelete(pods []corev1.Pod, interval, timeout time.Duration, usingEvic
 	err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		pendingPods := []corev1.Pod{}
 		for i, pod := range pods {
-			p, err := getPodFn(pod.Namespace, pod.Name)
-			if apierrors.IsNotFound(err) || (p != nil && p.ObjectMeta.UID != pod.ObjectMeta.UID) {
+			exists, err := getPodFn(pod.Name)
+			if err != nil {
+				return false, err
+			} else if !exists {
 				log.Info(fmt.Sprintf("%s Pod: %s", verbStr, pod.Name))
 				continue
-			} else if err != nil {
-				return false, err
 			} else {
 				pendingPods = append(pendingPods, pods[i])
 			}

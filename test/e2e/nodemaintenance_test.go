@@ -8,7 +8,7 @@ import (
 	"time"
 
 	apis "kubevirt.io/node-maintenance-operator/pkg/apis"
-	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha3"
+	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 
 	framework "github.com/operator-framework/operator-sdk/pkg/test"
 	"github.com/operator-framework/operator-sdk/pkg/test/e2eutil"
@@ -34,7 +34,7 @@ func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha3",
+			APIVersion: "kubevirt.io/v1alpha1",
 		},
 	}
 	err := framework.AddToFrameworkScheme(apis.AddToScheme, nodeMainenanceList)
@@ -95,7 +95,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	nodeMaintenance := &operator.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha3",
+			APIVersion: "kubevirt.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nodeName,
@@ -136,7 +136,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	}
 	computeNodesNumber := nodes.Size()
 
-	if computeNodesNumber > 1 {
+	if computeNodesNumber > 2 {
 		// Check that the deployment has 1 replica running after maintenance
 		err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
 		if err != nil {

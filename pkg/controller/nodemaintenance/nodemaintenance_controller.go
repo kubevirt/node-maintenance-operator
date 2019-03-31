@@ -7,12 +7,15 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/kubectl/drain"
-	kubevirtv1alpha3 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha3"
+
+	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -59,7 +62,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Create a source for watching noe maintenance events.
-	src := &source.Kind{Type: &kubevirtv1alpha3.NodeMaintenance{}}
+	src := &source.Kind{Type: &kubevirtv1alpha1.NodeMaintenance{}}
 
 	// Watch for changes to primary resource NodeMaintenance
 	err = c.Watch(src, &handler.EnqueueRequestForObject{}, pred)
@@ -119,9 +122,10 @@ var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
 type ReconcileNodeMaintenance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client  client.Client
-	scheme  *runtime.Scheme
-	drainer *drain.Helper
+	client      client.Client
+	scheme      *runtime.Scheme
+	drainer     *drain.Helper
+	podInformer cache.SharedInformer
 }
 
 // Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
@@ -135,7 +139,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	maintanenceMode := true
 
 	// Fetch the NodeMaintenance instance
-	instance := &kubevirtv1alpha3.NodeMaintenance{}
+	instance := &kubevirtv1alpha1.NodeMaintenance{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -166,19 +170,38 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	if maintanenceMode {
-		updated, err := addTaint(r.client, node)
+
+		drainNode, err := r.fetchNode(nodeName)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		updated, err := addTaint(r.client, drainNode)
 		if !updated {
 			reqLogger.Error(err, fmt.Sprintf("kubevirt.io/drain taint was not added to Node: %s", nodeName))
 			if err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+
+		stop := make(chan struct{})
+		defer close(stop)
+
+		if err = r.startPodInformer(node, stop); err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to start pod informer"))
+			return reconcile.Result{}, err
+		}
+
 		reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
 		if err = drainPods(r, nodeName); err != nil {
 			return reconcile.Result{}, err
 		}
 	} else {
-		updated, err := removeTaint(r.client, node)
+		uncordonedNode, err := r.fetchNode(nodeName)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		updated, err := removeTaint(r.client, uncordonedNode)
 		if !updated {
 			reqLogger.Error(err, fmt.Sprintf("kubevirt.io/drain taint was not removed from Node: %s", nodeName))
 			if err != nil {
@@ -201,4 +224,23 @@ func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, err
 		return nil, err
 	}
 	return node, nil
+}
+
+func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-chan struct{}) error {
+	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name})
+
+	lw := cache.NewListWatchFromClient(
+		r.drainer.Client.CoreV1().RESTClient(),
+		"pods",
+		node.Namespace,
+		fieldSelector)
+
+	r.podInformer = cache.NewSharedInformer(lw, &corev1.Pod{}, 30*time.Minute)
+
+	go r.podInformer.Run(stop)
+	if !cache.WaitForCacheSync(stop, r.podInformer.HasSynced) {
+		return fmt.Errorf("Timed out waiting for caches to sync")
+	}
+
+	return nil
 }

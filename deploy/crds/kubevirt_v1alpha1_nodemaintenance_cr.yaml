@@ -1,4 +1,4 @@
-apiVersion: kubevirt.io/v1alpha3
+apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
 metadata:
   name: node02

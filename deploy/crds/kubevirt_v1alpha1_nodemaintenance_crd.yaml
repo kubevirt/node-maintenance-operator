@@ -23,11 +23,17 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            reason:
+              type: string
           type: object
         status:
+          properties:
+            phase:
+              type: string
           type: object
-  version: v1alpha3
+  version: v1alpha1
   versions:
-  - name: v1alpha3
+  - name: v1alpha1
     served: true
     storage: true
