@@ -7,19 +7,37 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
-  - pods/eviction
-  - nodes
   - services
   - endpoints
-  - persistentvolumeclaims
   - events
   - configmaps
-  - secrets
-  - replicationcontrollers
   - serviceaccounts  
   verbs:
   - '*'
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - update
+  - patch 
+  - watch  
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch  
+- apiGroups:
+  - ""  
+  resources:
+  - pods/eviction
+  verbs:
+  - create        
 - apiGroups:
   - ""
   resources:

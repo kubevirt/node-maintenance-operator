@@ -28,6 +28,7 @@ import (
 )
 
 var log = logf.Log.WithName("controller_nodemaintenance")
+var taintRetries = 3
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -171,17 +172,10 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	if maintanenceMode {
 
-		drainNode, err := r.fetchNode(nodeName)
+		taintRetries = 3
+		err = r.taintNodeForLiveMigration(nodeName)
 		if err != nil {
 			return reconcile.Result{}, err
-		}
-
-		updated, err := addTaint(r.client, drainNode)
-		if !updated {
-			reqLogger.Error(err, fmt.Sprintf("kubevirt.io/drain taint was not added to Node: %s", nodeName))
-			if err != nil {
-				return reconcile.Result{}, err
-			}
 		}
 
 		stop := make(chan struct{})
@@ -242,5 +236,25 @@ func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-ch
 		return fmt.Errorf("Timed out waiting for caches to sync")
 	}
 
+	return nil
+}
+
+func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string) error {
+	drainNode, err := r.fetchNode(nodeName)
+	if err != nil {
+		return err
+	}
+	updated, err := addTaint(r.client, drainNode)
+	if !updated {
+		log.Error(err, fmt.Sprintf("kubevirt.io/drain taint was not added to Node: %s", nodeName))
+		if taintRetries > 0 {
+			log.Info(fmt.Sprintf("Retry adding taint to node: %s . %d retries left.", nodeName, taintRetries))
+			taintRetries--
+			time.Sleep(20 * time.Second)
+			return r.taintNodeForLiveMigration(nodeName)
+		} else if err != nil {
+			return err
+		}
+	}
 	return nil
 }

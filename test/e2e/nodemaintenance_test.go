@@ -134,7 +134,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	if err != nil {
 		t.Fatal(err)
 	}
-	computeNodesNumber := nodes.Size()
+	computeNodesNumber := len(nodes.Items)
 
 	if computeNodesNumber > 2 {
 		// Check that the deployment has 1 replica running after maintenance
