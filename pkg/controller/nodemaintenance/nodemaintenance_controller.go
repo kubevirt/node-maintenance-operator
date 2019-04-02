@@ -173,7 +173,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	if maintanenceMode {
 
 		taintRetries = 3
-		err = r.taintNodeForLiveMigration(nodeName)
+		err = r.taintNodeForLiveMigration(nodeName, true)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -181,26 +181,16 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		stop := make(chan struct{})
 		defer close(stop)
 
-		if err = r.startPodInformer(node, stop); err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to start pod informer"))
+		reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
+		if err = drainPods(r, node, stop); err != nil {
 			return reconcile.Result{}, err
 		}
 
-		reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
-		if err = drainPods(r, nodeName); err != nil {
-			return reconcile.Result{}, err
-		}
 	} else {
-		uncordonedNode, err := r.fetchNode(nodeName)
+		taintRetries = 3
+		err = r.taintNodeForLiveMigration(nodeName, false)
 		if err != nil {
 			return reconcile.Result{}, err
-		}
-		updated, err := removeTaint(r.client, uncordonedNode)
-		if !updated {
-			reqLogger.Error(err, fmt.Sprintf("kubevirt.io/drain taint was not removed from Node: %s", nodeName))
-			if err != nil {
-				return reconcile.Result{}, err
-			}
 		}
 	}
 
@@ -226,7 +216,7 @@ func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-ch
 	lw := cache.NewListWatchFromClient(
 		r.drainer.Client.CoreV1().RESTClient(),
 		"pods",
-		node.Namespace,
+		corev1.NamespaceAll,
 		fieldSelector)
 
 	r.podInformer = cache.NewSharedInformer(lw, &corev1.Pod{}, 30*time.Minute)
@@ -239,19 +229,29 @@ func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-ch
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string) error {
+func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string, taintNode bool) error {
+
 	drainNode, err := r.fetchNode(nodeName)
 	if err != nil {
 		return err
 	}
-	updated, err := addTaint(r.client, drainNode)
+	taintStr := ""
+	updated := false
+	if taintNode {
+		taintStr = "add"
+		updated, err = addTaint(r.client, drainNode)
+	} else {
+		taintStr = "remove"
+		updated, err = removeTaint(r.client, drainNode)
+	}
+
 	if !updated {
-		log.Error(err, fmt.Sprintf("kubevirt.io/drain taint was not added to Node: %s", nodeName))
+		log.Error(err, fmt.Sprintf("kubevirt.io/drain taint %s was not applied on Node: %s", taintStr, nodeName))
 		if taintRetries > 0 {
-			log.Info(fmt.Sprintf("Retry adding taint to node: %s . %d retries left.", nodeName, taintRetries))
+			log.Info(fmt.Sprintf("Retry taint %s on node: %s . %d retries left.", taintStr, nodeName, taintRetries))
 			taintRetries--
 			time.Sleep(20 * time.Second)
-			return r.taintNodeForLiveMigration(nodeName)
+			return r.taintNodeForLiveMigration(nodeName, taintNode)
 		} else if err != nil {
 			return err
 		}

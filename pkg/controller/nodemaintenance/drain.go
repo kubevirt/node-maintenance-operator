@@ -33,11 +33,17 @@ func runCordonOrUncordon(r *ReconcileNodeMaintenance, node *corev1.Node, desired
 	return nil
 }
 
-func drainPods(r *ReconcileNodeMaintenance, nodeName string) error {
+func drainPods(r *ReconcileNodeMaintenance, node *corev1.Node, stop <-chan struct{}) error {
+	nodeName := node.Name
 	list, errs := r.drainer.GetPodsForDeletion(nodeName)
 
 	if errs != nil {
 		return utilerrors.NewAggregate(errs)
+	}
+
+	if err := r.startPodInformer(node, stop); err != nil {
+		log.Error(err, fmt.Sprintf("Failed to start pod informer \n"))
+		return err
 	}
 
 	if warnings := list.Warnings(); warnings != "" {
@@ -70,8 +76,8 @@ func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod) error {
 		return err
 	}
 
-	getPodFn := func(name string) (bool, error) {
-		_, exists, err := r.podInformer.GetStore().GetByKey(name)
+	getPodFn := func(namespacedName string) (bool, error) {
+		_, exists, err := r.podInformer.GetStore().GetByKey(namespacedName)
 		if err != nil {
 			return exists, err
 		}
@@ -85,7 +91,7 @@ func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod) error {
 
 }
 
-func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(name string) (bool, error)) error {
+func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(namespacedName string) (bool, error)) error {
 	// 0 timeout means infinite, we use MaxInt64 to represent it.
 	var globalTimeout time.Duration
 	if r.drainer.Timeout == 0 {
@@ -103,7 +109,7 @@ func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(na
 	return err
 }
 
-func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersion string, getPodFn func(name string) (bool, error)) error {
+func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersion string, getPodFn func(namespacedName string) (bool, error)) error {
 	returnCh := make(chan error, 1)
 
 	for _, pod := range pods {
@@ -170,7 +176,7 @@ func waitForDelete(pods []corev1.Pod, interval, timeout time.Duration, usingEvic
 	err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		pendingPods := []corev1.Pod{}
 		for i, pod := range pods {
-			exists, err := getPodFn(pod.Name)
+			exists, err := getPodFn(pod.Namespace + "/" + pod.Name)
 			if err != nil {
 				return false, err
 			} else if !exists {
