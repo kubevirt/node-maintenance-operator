@@ -10,7 +10,7 @@ The purpose of this operator is to watch for new or deleted custom resources cal
 Before running the operator, the NodeMaintenance CRD must be registered with the Openshift/Kubernetes apiserver:
 
 ```sh
-$ kubectl create -f deploy/crds/kubevirt_v1alpha3_nodemaintenance_crd.yaml
+$ kubectl create -f deploy/crds/kubevirt_v1alpha1_nodemaintenance_crd.yaml
 ```
 
 Once this is done, there are two ways to run the operator:
@@ -71,12 +71,12 @@ A `NodeMaintenance` CR contains:
 - Name: The name of the node which will be put into maintenance
 - Reason: the reason for the node maintenance
 
-Create the example `NodeMaintenance` CR found at `deploy/crds/kubevirt_v1alpha3_nodemaintenance_cr.yaml`:
+Create the example `NodeMaintenance` CR found at `deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml`:
 
 ```sh
-$ cat deploy/crds/kubevirt_v1alpha3_nodemaintenance_cr.yaml
+$ cat deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml
 
-apiVersion: kubevirt.io/v1alpha3
+apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
 metadata:
   name: node02
@@ -116,9 +116,9 @@ $ kubectl apply -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
 To remove maintenance from a node a `NodeMaintenance` CR with the node's name  should be deleted.
 
 ```sh
-$ cat deploy/crds/kubevirt_v1alpha3_nodemaintenance_cr.yaml
+$ cat deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml
 
-apiVersion: kubevirt.io/v1alpha3
+apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
 metadata:
   name: node02
