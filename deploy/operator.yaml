@@ -19,14 +19,10 @@ spec:
         - name: node-maintenance-operator
           # Replace this with the built image name
           image: quay.io/yanirq/node-maintenance-operator:v0.0.1
-          command:
-          - node-maintenance-operator
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
             - name: POD_NAME
               valueFrom:
                 fieldRef:
