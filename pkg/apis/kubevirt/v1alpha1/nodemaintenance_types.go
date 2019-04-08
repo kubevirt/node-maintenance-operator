@@ -4,9 +4,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	NodeMaintenanceFinalizer string = "foregroundDeleteNodeMaintenance"
+)
+
 // NodeMaintenanceSpec defines the desired state of NodeMaintenance
 // +k8s:openapi-gen=true
 type NodeMaintenanceSpec struct {
+	// Node name to apply maintanance on/off
+	NodeName string `json:"nodeName"`
+	// Reason for maintanance
 	Reason string `json:"reason,omitempty"`
 }
 

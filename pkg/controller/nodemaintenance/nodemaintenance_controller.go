@@ -148,7 +148,6 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info(fmt.Sprintf("NodeMaintenance Object: %s Deleted ", request.NamespacedName))
-			maintanenceMode = false
 		} else {
 			// Error reading the object - requeue the request.
 			reqLogger.Info("Error reading the request object, requeuing.")
@@ -156,7 +155,29 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		}
 	}
 
-	nodeName := request.Name
+	//Add finalizer when object is created
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !containsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
+			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
+			if err := r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if containsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
+			// remove our finalizer from the list and update it.
+			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
+			if err := r.client.Update(context.Background(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+			maintanenceMode = false
+		} else {
+			return reconcile.Result{}, nil
+		}
+	}
+
+	nodeName := instance.Spec.NodeName
 
 	if maintanenceMode {
 		reqLogger.Info(fmt.Sprintf("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason))
@@ -257,4 +278,23 @@ func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string, ta
 		}
 	}
 	return nil
+}
+
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
 }

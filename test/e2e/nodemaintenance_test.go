@@ -98,11 +98,12 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 			APIVersion: "kubevirt.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nodeName,
+			Name:      "nodeMaintenance",
 			Namespace: namespace,
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			Reason: "Set maintenance on node for e2e testing",
+			NodeName: nodeName,
+			Reason:   "Set maintenance on node for e2e testing",
 		},
 	}
 
