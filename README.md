@@ -79,8 +79,9 @@ $ cat deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml
 apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
 metadata:
-  name: node02
+  name: nodemaintenance-xyz
 spec:
+  nodeName: node02
   reason: "Test node maintenance"
 
 $ kubectl apply -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
@@ -121,8 +122,9 @@ $ cat deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml
 apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
 metadata:
-  name: node02
+  name: nodemaintenance-xyz
 spec:
+  nodeName: node02
   reason: "Test node maintenance"
 
 $ kubectl delete -f deploy/crds/cache_v1alpha1_memcached_cr.yaml

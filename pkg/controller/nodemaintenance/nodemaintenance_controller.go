@@ -57,8 +57,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	pred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			// Ignore updates to NodeMaintenance CR
-			return false
+			newObj := e.ObjectNew.(*kubevirtv1alpha1.NodeMaintenance)
+			return !newObj.DeletionTimestamp.IsZero()
 		},
 	}
 
@@ -137,7 +137,6 @@ type ReconcileNodeMaintenance struct {
 func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling NodeMaintenance")
-	maintanenceMode := true
 
 	// Fetch the NodeMaintenance instance
 	instance := &kubevirtv1alpha1.NodeMaintenance{}
@@ -148,6 +147,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info(fmt.Sprintf("NodeMaintenance Object: %s Deleted ", request.NamespacedName))
+			return reconcile.Result{}, nil
 		} else {
 			// Error reading the object - requeue the request.
 			reqLogger.Info("Error reading the request object, requeuing.")
@@ -155,9 +155,9 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		}
 	}
 
-	//Add finalizer when object is created
+	// Add finalizer when object is created
 	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !containsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
+		if !ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
 			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
 			if err := r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
@@ -165,57 +165,68 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		}
 	} else {
 		// The object is being deleted
-		if containsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
-			// remove our finalizer from the list and update it.
-			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
+		if ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
+			// Stop node maintenance - uncordon and remove live migration taint from the node.
+			if err := r.stopNodeMaintenance(instance.Spec.NodeName); err != nil {
+				return reconcile.Result{}, err
+			}
+			// Remove our finalizer from the list and update it.
+			instance.ObjectMeta.Finalizers = RemoveString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
 			if err := r.client.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
-			maintanenceMode = false
-		} else {
-			return reconcile.Result{}, nil
 		}
+		return reconcile.Result{}, nil
 	}
 
 	nodeName := instance.Spec.NodeName
 
-	if maintanenceMode {
-		reqLogger.Info(fmt.Sprintf("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason))
-	}
+	reqLogger.Info(fmt.Sprintf("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason))
+
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if err := runCordonOrUncordon(r, node, maintanenceMode); err != nil {
+	// Cordon node
+	if err := runCordonOrUncordon(r, node, true); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if maintanenceMode {
+	taintRetries = 3
+	// Add kubevirt live migration taint on the node
+	err = r.taintNodeForLiveMigration(nodeName, true)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
-		taintRetries = 3
-		err = r.taintNodeForLiveMigration(nodeName, true)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	stop := make(chan struct{})
+	defer close(stop)
 
-		stop := make(chan struct{})
-		defer close(stop)
-
-		reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
-		if err = drainPods(r, node, stop); err != nil {
-			return reconcile.Result{}, err
-		}
-
-	} else {
-		taintRetries = 3
-		err = r.taintNodeForLiveMigration(nodeName, false)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
+	if err = drainPods(r, node, stop); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
+	node, err := r.fetchNode(nodeName)
+	if err != nil {
+		return err
+	}
+	// Uncordon the node
+	if err := runCordonOrUncordon(r, node, false); err != nil {
+		return err
+	}
+	taintRetries = 3
+	// Remove kubevirt live migration taint from node
+	err = r.taintNodeForLiveMigration(nodeName, false)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, error) {
@@ -278,23 +289,4 @@ func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string, ta
 		}
 	}
 	return nil
-}
-
-func containsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(slice []string, s string) (result []string) {
-	for _, item := range slice {
-		if item == s {
-			continue
-		}
-		result = append(result, item)
-	}
-	return
 }
