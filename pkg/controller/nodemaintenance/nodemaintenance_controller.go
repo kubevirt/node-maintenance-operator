@@ -28,7 +28,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_nodemaintenance")
-var taintRetries = 3
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -148,11 +147,10 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Return and don't requeue
 			reqLogger.Info(fmt.Sprintf("NodeMaintenance Object: %s Deleted ", request.NamespacedName))
 			return reconcile.Result{}, nil
-		} else {
-			// Error reading the object - requeue the request.
-			reqLogger.Info("Error reading the request object, requeuing.")
-			return reconcile.Result{}, err
 		}
+		// Error reading the object - requeue the request.
+		reqLogger.Info("Error reading the request object, requeuing.")
+		return reconcile.Result{}, err
 	}
 
 	// Add finalizer when object is created
@@ -193,9 +191,9 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	taintRetries = 3
 	// Add kubevirt live migration taint on the node
-	err = r.taintNodeForLiveMigration(nodeName, true)
+	err = AddOrRemoveTaint(r.drainer.Client, node, true)
+
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -220,9 +218,8 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 	if err := runCordonOrUncordon(r, node, false); err != nil {
 		return err
 	}
-	taintRetries = 3
 	// Remove kubevirt live migration taint from node
-	err = r.taintNodeForLiveMigration(nodeName, false)
+	err = AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
 		return err
 	}
@@ -258,35 +255,5 @@ func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-ch
 		return fmt.Errorf("Timed out waiting for caches to sync")
 	}
 
-	return nil
-}
-
-func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string, taintNode bool) error {
-
-	drainNode, err := r.fetchNode(nodeName)
-	if err != nil {
-		return err
-	}
-	taintStr := ""
-	updated := false
-	if taintNode {
-		taintStr = "add"
-		updated, err = addTaint(r.client, drainNode)
-	} else {
-		taintStr = "remove"
-		updated, err = removeTaint(r.client, drainNode)
-	}
-
-	if !updated {
-		log.Error(err, fmt.Sprintf("kubevirt.io/drain taint %s was not applied on Node: %s", taintStr, nodeName))
-		if taintRetries > 0 {
-			log.Info(fmt.Sprintf("Retry taint %s on node: %s . %d retries left.", taintStr, nodeName, taintRetries))
-			taintRetries--
-			time.Sleep(20 * time.Second)
-			return r.taintNodeForLiveMigration(nodeName, taintNode)
-		} else if err != nil {
-			return err
-		}
-	}
 	return nil
 }
