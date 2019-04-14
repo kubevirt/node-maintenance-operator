@@ -28,7 +28,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_nodemaintenance")
-var taintRetries = 3
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -57,8 +56,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	pred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			// Ignore updates to NodeMaintenance CR
-			return false
+			newObj := e.ObjectNew.(*kubevirtv1alpha1.NodeMaintenance)
+			return !newObj.DeletionTimestamp.IsZero()
 		},
 	}
 
@@ -137,7 +136,6 @@ type ReconcileNodeMaintenance struct {
 func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling NodeMaintenance")
-	maintanenceMode := true
 
 	// Fetch the NodeMaintenance instance
 	instance := &kubevirtv1alpha1.NodeMaintenance{}
@@ -148,53 +146,84 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info(fmt.Sprintf("NodeMaintenance Object: %s Deleted ", request.NamespacedName))
-			maintanenceMode = false
-		} else {
-			// Error reading the object - requeue the request.
-			reqLogger.Info("Error reading the request object, requeuing.")
-			return reconcile.Result{}, err
+			return reconcile.Result{}, nil
 		}
+		// Error reading the object - requeue the request.
+		reqLogger.Info("Error reading the request object, requeuing.")
+		return reconcile.Result{}, err
 	}
 
-	nodeName := request.Name
-
-	if maintanenceMode {
-		reqLogger.Info(fmt.Sprintf("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason))
+	// Add finalizer when object is created
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
+			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
+			if err := r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
+			// Stop node maintenance - uncordon and remove live migration taint from the node.
+			if err := r.stopNodeMaintenance(instance.Spec.NodeName); err != nil {
+				return reconcile.Result{}, err
+			}
+			// Remove our finalizer from the list and update it.
+			instance.ObjectMeta.Finalizers = RemoveString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
+			if err := r.client.Update(context.Background(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		return reconcile.Result{}, nil
 	}
+
+	nodeName := instance.Spec.NodeName
+
+	reqLogger.Info(fmt.Sprintf("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason))
+
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if err := runCordonOrUncordon(r, node, maintanenceMode); err != nil {
+	// Cordon node
+	if err := runCordonOrUncordon(r, node, true); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if maintanenceMode {
+	// Add kubevirt live migration taint on the node
+	err = AddOrRemoveTaint(r.drainer.Client, node, true)
 
-		taintRetries = 3
-		err = r.taintNodeForLiveMigration(nodeName, true)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
-		stop := make(chan struct{})
-		defer close(stop)
+	stop := make(chan struct{})
+	defer close(stop)
 
-		reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
-		if err = drainPods(r, node, stop); err != nil {
-			return reconcile.Result{}, err
-		}
-
-	} else {
-		taintRetries = 3
-		err = r.taintNodeForLiveMigration(nodeName, false)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
+	if err = drainPods(r, node, stop); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
+	node, err := r.fetchNode(nodeName)
+	if err != nil {
+		return err
+	}
+	// Uncordon the node
+	if err := runCordonOrUncordon(r, node, false); err != nil {
+		return err
+	}
+	// Remove kubevirt live migration taint from node
+	err = AddOrRemoveTaint(r.drainer.Client, node, false)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, error) {
@@ -226,35 +255,5 @@ func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-ch
 		return fmt.Errorf("Timed out waiting for caches to sync")
 	}
 
-	return nil
-}
-
-func (r *ReconcileNodeMaintenance) taintNodeForLiveMigration(nodeName string, taintNode bool) error {
-
-	drainNode, err := r.fetchNode(nodeName)
-	if err != nil {
-		return err
-	}
-	taintStr := ""
-	updated := false
-	if taintNode {
-		taintStr = "add"
-		updated, err = addTaint(r.client, drainNode)
-	} else {
-		taintStr = "remove"
-		updated, err = removeTaint(r.client, drainNode)
-	}
-
-	if !updated {
-		log.Error(err, fmt.Sprintf("kubevirt.io/drain taint %s was not applied on Node: %s", taintStr, nodeName))
-		if taintRetries > 0 {
-			log.Info(fmt.Sprintf("Retry taint %s on node: %s . %d retries left.", taintStr, nodeName, taintRetries))
-			taintRetries--
-			time.Sleep(20 * time.Second)
-			return r.taintNodeForLiveMigration(nodeName, taintNode)
-		} else if err != nil {
-			return err
-		}
-	}
 	return nil
 }

@@ -24,8 +24,12 @@ spec:
           type: object
         spec:
           properties:
+            nodeName:
+              type: string
             reason:
               type: string
+          required:
+          - nodeName
           type: object
         status:
           properties:

@@ -68,13 +68,22 @@ func schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenanceSpec(ref common.ReferenceC
 			SchemaProps: spec.SchemaProps{
 				Description: "NodeMaintenanceSpec defines the desired state of NodeMaintenance",
 				Properties: map[string]spec.Schema{
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Node name to apply maintanance on/off",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"reason": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Reason for maintanance",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
+				Required: []string{"nodeName"},
 			},
 		},
 		Dependencies: []string{},

@@ -98,11 +98,12 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 			APIVersion: "kubevirt.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nodeName,
+			Name:      "nodemaintenance-xyz",
 			Namespace: namespace,
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			Reason: "Set maintenance on node for e2e testing",
+			NodeName: nodeName,
+			Reason:   "Set maintenance on node for e2e testing",
 		},
 	}
 
@@ -155,10 +156,17 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	t.Logf("Setting node %s out of maintanance", nodeName)
 
-	// Delete the node maintenance custom resource
-	err = f.Client.Delete(goctx.TODO(), nodeMaintenance)
+	nodeMaintenanceDelete := &operator.NodeMaintenance{}
+
+	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: nodeMaintenance.Namespace, Name: nodeMaintenance.Name}, nodeMaintenanceDelete)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Delete the node maintenance custom resource
+	err = f.Client.Delete(goctx.TODO(), nodeMaintenanceDelete)
+	if err != nil {
+		t.Fatalf("Could not delete node maintenance CR : %v", err)
 	}
 
 	time.Sleep(60 * time.Second)
