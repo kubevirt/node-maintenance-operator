@@ -1,6 +1,7 @@
 apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
 metadata:
-  name: node02
+  name: nodemaintenance-xyz
 spec:
+  nodeName: node02
   reason: "Test node maintenance"
