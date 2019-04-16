@@ -7,10 +7,11 @@ The purpose of this operator is to watch for new or deleted custom resources cal
 > *Note*:  The current behavior of the  operator is to mimic `kubectl drain <node name>` as performed in [Kubevirt - evict all VMs and Pods on a node ](https://kubevirt.io/user-guide/docs/latest/administration/node-eviction.html#how-to-evict-all-vms-and-pods-on-a-node)
 
 ## Build and run the operator
-Before running the operator, the NodeMaintenance CRD must be registered with the Openshift/Kubernetes apiserver:
+Before running the operator, the NodeMaintenance CRD and namespace must be registered with the Openshift/Kubernetes apiserver:
 
 ```sh
-$ kubectl create -f deploy/crds/kubevirt_v1alpha1_nodemaintenance_crd.yaml
+$ kubectl create -f deploy/crds/nodemaintenance_crd.yaml
+$ kubectl create -f deploy/crds/namespace.yaml
 ```
 
 Once this is done, there are two ways to run the operator:
@@ -71,10 +72,10 @@ A `NodeMaintenance` CR contains:
 - Name: The name of the node which will be put into maintenance
 - Reason: the reason for the node maintenance
 
-Create the example `NodeMaintenance` CR found at `deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml`:
+Create the example `NodeMaintenance` CR found at `deploy/crds/nodemaintenance_cr.yaml`:
 
 ```sh
-$ cat deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml
+$ cat deploy/crds/nodemaintenance_cr.yaml
 
 apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
@@ -84,7 +85,7 @@ spec:
   nodeName: node02
   reason: "Test node maintenance"
 
-$ kubectl apply -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
+$ kubectl apply -f deploy/crds/nodemaintenance_cr.yaml
 {"level":"info","ts":1551794418.6742408,"logger":"controller_nodemaintenance","msg":"Reconciling NodeMaintenance","Request.Namespace":"default","Request.Name":"node02"}
 {"level":"info","ts":1551794418.674294,"logger":"controller_nodemaintenance","msg":"Applying Maintenance mode on Node: node02 with Reason: Test node maintenance","Request.Namespace":"default","Request.Name":"node02"}
 {"level":"info","ts":1551783365.7430992,"logger":"controller_nodemaintenance","msg":"WARNING: ignoring DaemonSet-managed Pods: default/local-volume-provisioner-5xft8, kubevirt/disks-images-provider-bxpc5, kubevirt/virt-handler-52kpr, openshift-monitoring/node-exporter-4c9jt, openshift-node/sync-8w5x8, openshift-sdn/ovs-kvz9w, openshift-sdn/sdn-qnjdz\n"}
@@ -117,7 +118,7 @@ $ kubectl apply -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
 To remove maintenance from a node a `NodeMaintenance` CR with the node's name  should be deleted.
 
 ```sh
-$ cat deploy/crds/kubevirt_v1alpha1_nodemaintenance_cr.yaml
+$ cat deploy/crds/nodemaintenance_cr.yaml
 
 apiVersion: kubevirt.io/v1alpha1
 kind: NodeMaintenance
@@ -140,15 +141,21 @@ $ kubectl delete -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
 Running e2e tests:
 
 ### Local 
+Before running the tests, the NodeMaintenance CRD and namespace must be registered with the Openshift/Kubernetes apiserver:
+
+```sh
+$ kubectl create -f deploy/crds/nodemaintenance_crd.yaml
+$ kubectl create -f deploy/crds/namespace.yaml
+```
+
 Run the operator tests locally with the default Kubernetes config file present at `$HOME/.kube/config` or  with specificing kubeconfig via the flag `--kubeconfig=<path/to/kubeconfig>` and a namespace `--namespace=<namespace>`:
 
 
 ```sh
-operator-sdk test local ./test/e2e --kubeconfig=<path/to/kubeconfig> --namespace=<namespace>
+operator-sdk test local ./test/e2e --kubeconfig=<path/to/kubeconfig> --namespace="node-maintenance-operator"
 ```
 
 ## Next Steps
-- Trigger VM migration 
 - Handle unremoved pods and daemonsets
 - Check where should the operator be deployed (infra pods?)
 - Check behavior for storage pods
