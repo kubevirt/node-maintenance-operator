@@ -5,7 +5,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: node-maintenance-operator
-  namespace: default
+  namespace: node-maintenance-operator
 roleRef:
   kind: ClusterRole
   name: node-maintenance-operator
