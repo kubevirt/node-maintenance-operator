@@ -1,0 +1,4 @@
+packageName: node-maintenance
+channels:
+  - name: beta
+    currentCSV: node-maintenance-operator.v0.1.0
