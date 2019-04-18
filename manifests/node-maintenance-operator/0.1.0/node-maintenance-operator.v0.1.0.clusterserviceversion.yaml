@@ -5,8 +5,10 @@ metadata:
     alm-examples: '[{"apiVersion":"kubevirt.io/v1alpha1","kind":"NodeMaintenance","metadata":{"name":"nodemaintenance-xyz"},"spec":{"nodeName":"node02","reason":"Test
       node maintenance"}}]'
     capabilities: Basic Install
-    categories: Virtualization
+    categories: OpenShift Optional
+    containerImage: quay.io/kubevirt/node-maintenance-operator
     description: Node-maintenance-operator maintains nodes in cluster
+    repository: https://github.com/kubevirt/node-maintenance-operator
   name: node-maintenance-operator.v0.1.0
   namespace: node-maintenance-operator
 spec:

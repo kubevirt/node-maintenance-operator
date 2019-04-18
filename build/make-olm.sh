@@ -41,6 +41,6 @@ ls ${BUNDLE_DIR_VERSION}
 
 cp "${BUNDLE_DIR}node-maintenance-package.yaml" "${BUNDLE_DIR_VERSION}node-maintenance-package.yaml"
 
-operator-courier verify ${BUNDLE_DIR_VERSION} && echo "OLM verify passed" || echo "OLM verify failed"
+operator-courier verify --ui_validate_io ${BUNDLE_DIR_VERSION} && echo "OLM verify passed" || echo "OLM verify failed"
 
 rm "${BUNDLE_DIR_VERSION}node-maintenance-package.yaml"

@@ -6,7 +6,9 @@ import yaml
 
 
 _ANNOTATIONS = {
-    'categories': 'Virtualization',
+    'categories': 'OpenShift Optional',
+    'containerImage': 'quay.io/kubevirt/node-maintenance-operator',
+    'repository': 'https://github.com/kubevirt/node-maintenance-operator',
     'description': \
         'Node-maintenance-operator maintains nodes in cluster',
 }
