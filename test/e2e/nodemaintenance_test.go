@@ -98,8 +98,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 			APIVersion: "kubevirt.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "nodemaintenance-xyz",
-			Namespace: namespace,
+			Name: "nodemaintenance-xyz",
 		},
 		Spec: operator.NodeMaintenanceSpec{
 			NodeName: nodeName,

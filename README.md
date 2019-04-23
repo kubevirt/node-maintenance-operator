@@ -234,6 +234,13 @@ $ kubectl create -f deploy/crds/nodemaintenance_crd.yaml
 $ kubectl create -f deploy/crds/namespace.yaml
 ```
 
+Chang the `<IMAGE_VERSION>` under `deploy/operator.yaml` image link to the desired version:
+
+```
+image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
+```
+
+
 Run the operator tests locally with the default Kubernetes config file present at `$HOME/.kube/config` or  with specificing kubeconfig via the flag `--kubeconfig=<path/to/kubeconfig>` and a namespace `--namespace=<namespace>`:
 
 
