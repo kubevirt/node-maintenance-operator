@@ -49,7 +49,7 @@ _CRD_INFOS = {
     'nodemaintenances.kubevirt.io': {
         'displayName': 'KubeVirt node maintenance',
         'description': \
-                'Represents a deployment of node maintenance',
+                'Represents a deployment of node maintenance crd',
         'specDescriptors': [{
             'description': \
                 'The version of the node maintenance to deploy',

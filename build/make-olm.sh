@@ -1,8 +1,8 @@
 #!/bin/bash
 
 CSV_VERSION="${1:-0.0.0}"
-BUNDLE_DIR="manifests/node-maintenance-operator/"
-BUNDLE_DIR_VERSION="${BUNDLE_DIR}${CSV_VERSION}/"
+BUNDLE_DIR="manifests/node-maintenance-operator"
+BUNDLE_DIR_VERSION="${BUNDLE_DIR}/v${CSV_VERSION}"
 
 
 # TODO: tested with operator-sdk 0.7.0: should we require it?
@@ -29,18 +29,18 @@ for CRD in $( ls deploy/crds/nodemaintenance_*crd.yaml ); do
 	cp ${CRD} ${BUNDLE_DIR_VERSION}
 done
 
-cat << EOF > ${BUNDLE_DIR}/node-maintenance-package.yaml
-packageName: node-maintenance
+cat << EOF > ${BUNDLE_DIR}/node-maintenance-operator.package.yaml
+packageName: node-maintenance-operator
 channels:
-  - name: beta
-    currentCSV: node-maintenance-operator.v${CSV_VERSION}
+- name: beta
+  currentCSV: node-maintenance-operator.v${CSV_VERSION}
 EOF
 
 echo "built these manifests:"
 ls ${BUNDLE_DIR_VERSION}
 
-cp "${BUNDLE_DIR}node-maintenance-package.yaml" "${BUNDLE_DIR_VERSION}node-maintenance-package.yaml"
+cp "${BUNDLE_DIR}/node-maintenance-operator.package.yaml" "${BUNDLE_DIR_VERSION}/node-maintenance-operator.package.yaml"
 
 operator-courier verify --ui_validate_io ${BUNDLE_DIR_VERSION} && echo "OLM verify passed" || echo "OLM verify failed"
 
-rm "${BUNDLE_DIR_VERSION}node-maintenance-package.yaml"
+rm "${BUNDLE_DIR_VERSION}/node-maintenance-operator.package.yaml"
