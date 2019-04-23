@@ -10,7 +10,7 @@ spec:
     listKind: NodeMaintenanceList
     plural: nodemaintenances
     singular: nodemaintenance
-  scope: Namespaced
+  scope: Cluster
   subresources:
     status: {}
   validation:
