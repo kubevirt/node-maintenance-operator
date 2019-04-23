@@ -1,5 +1,5 @@
 IMAGE_REGISTRY ?= quay.io/kubevirt
-IMAGE_TAG ?= latest
+IMAGE_TAG ?= v0.1.0
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 

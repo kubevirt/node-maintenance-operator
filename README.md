@@ -19,6 +19,92 @@ Once this is done, there are two ways to run the operator:
 - As a Deployment inside a Openshift/Kubernetes cluster
 - As Go program outside a cluster
 
+## Deploy operator using OLM
+
+For more information on the [Operator Lifecycle
+Manager](https://github.com/operator-framework/operator-lifecycle-manager) and
+Cluster Service Versions checkout out ["Building a Cluster Service
+Version"](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/Documentation/design/building-your-csv.md).
+
+
+1) Build and push operator and operator-registry image.
+
+```shell
+./build/make-olm.sh <VERSION>
+make container-build
+make container-push
+```
+
+2) Create the node-maintenance-operator Namespace.
+
+```shell
+oc create -f olm-deploy-manifests/nm-ns.yaml
+
+cat <<EOF | oc create -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+  labels:
+    kubevirt.io: ""
+  name: node-maintenance-operator
+EOF
+```
+
+3) Create the operator group.
+
+```shell
+oc create -f olm-deploy-manifests/nm-op-group.yaml
+
+cat <<EOF | oc create -f -
+apiVersion: operators.coreos.com/v1alpha2
+kind: OperatorGroup
+metadata:
+  name: node-maintenance-operator
+  namespace: node-maintenance-operator
+EOF
+```
+
+4)  Using the `node-maintenance-operator-registry` container image built in step 1,
+create a CatalogSource. This object tells OLM about the operator.
+
+```shell
+oc create -f olm-deploy-manifests/nm-catalog-source.yaml
+
+cat <<EOF | oc create -f -
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: node-maintenance-operator
+  namespace: openshift-operator-lifecycle-manager
+spec:
+  sourceType: grpc
+  image: quay.io/kubevirt/node-maintenance-operator-registry:<VERSION>
+  displayName: node-maintenance-operator
+  publisher: Red hat
+EOF
+```
+
+5) Subscribe to the node-maintenance-operator.
+
+```shell
+oc create -f olm-deploy-manifests/nm-sub.yaml
+
+cat <<EOF | oc create -f -
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: node-maintenance-operator-subscription
+  namespace: node-maintenance-operator
+spec:
+  channel: beta
+  name: node-maintenance-operator
+  source: node-maintenance-operator
+  sourceNamespace: openshift-operator-lifecycle-manager
+  startingCSV: node-maintenance-operator.<VERSION>
+EOF
+```
+
 ### 1. Run as a Deployment inside the cluster
 
 The Deployment manifest is generated at `deploy/operator.yaml`. Be sure to update the deployment image if there are changes as shown [here](https://github.com/operator-framework/operator-sdk/blob/master/doc/user-guide.md#1-run-as-a-deployment-inside-the-cluster).

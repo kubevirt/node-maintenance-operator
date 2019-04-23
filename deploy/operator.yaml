@@ -27,7 +27,7 @@ spec:
       containers:
         - name: node-maintenance-operator
           # Replace this with the built image name
-          image: quay.io/kubevirt/node-maintenance-operator:latest
+          image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE

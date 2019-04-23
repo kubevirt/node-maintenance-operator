@@ -16,9 +16,16 @@ which operator-courier &> /dev/null || {
 	exit 2
 }
 
+# store original operator.yaml file
+cp deploy/operator.yaml operator.yaml
+sed -i "s/<IMAGE_VERSION>/v${CSV_VERSION}/g" deploy/operator.yaml
+
 mkdir -p ${BUNDLE_DIR_VERSION}
 
 operator-sdk olm-catalog gen-csv --csv-version ${CSV_VERSION}
+
+# mode back original operator.yaml file
+mv operator.yaml deploy/operator.yaml
 
 ./build/update-olm.py \
 	deploy/olm-catalog/node-maintenance-operator/${CSV_VERSION}/node-maintenance-operator.v${CSV_VERSION}.clusterserviceversion.yaml > \
