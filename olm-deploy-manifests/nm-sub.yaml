@@ -8,4 +8,4 @@ spec:
   name: node-maintenance-operator
   source: node-maintenance-operator
   sourceNamespace: openshift-operator-lifecycle-manager
-  startingCSV: node-maintenance-operator.v0.1.0
+  startingCSV: node-maintenance-operator.v0.2.0
