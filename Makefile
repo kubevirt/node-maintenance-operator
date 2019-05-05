@@ -1,5 +1,6 @@
 IMAGE_REGISTRY ?= quay.io/kubevirt
-IMAGE_TAG ?= v0.2.0
+IMAGE_TAG ?= v0.3.0
+CSV_VERSION := $(shell echo ${IMAGE_TAG} | cut -c 2- )
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
@@ -26,4 +27,8 @@ container-push-operator:
 container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
 
-.PHONY: vet fmt container-build container-push all
+manifests:	
+	CSV_VERSION=$(CSV_VERSION) \
+		./hack/release-manifests.sh
+
+.PHONY: vet fmt container-build container-push manifests all

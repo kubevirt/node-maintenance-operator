@@ -4,17 +4,38 @@ go: "1.10"
 services:
 - docker
 
-install: true
+install:
+   - make manifests
+
 script: make container-build 
+
+before_deploy:
+- docker login -u="$DOCKER_USER" -p="$DOCKER_PASS" quay.io
 
 deploy:
 - provider: script
-  script: docker login -u="$DOCKER_USER" -p="$DOCKER_PASS" quay.io && make container-build container-push
+  script: make container-build container-push
   skip_cleanup: true
   on:
     branch: master
 - provider: script
-  script: docker login -u="$DOCKER_USER" -p="$DOCKER_PASS" quay.io && make container-build container-push IMAGE_TAG=$TRAVIS_TAG 
+  script: make container-build container-push IMAGE_TAG=$TRAVIS_TAG 
   skip_cleanup: true
   on:
     tags: true
+# Release assests
+- provider: releases
+  branches:
+    only: /v[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+){0,1}/
+  on:
+    tags: true
+    repo: kubevirt/node-maintenance-operator
+  api_key:
+    secure: vu7hEF10GBxbVRbWZ6wltZTNDfMZXUzRCsmtHGwmQ7z2kpMlGJkuGpIp7+eTkgHlFUPA2bmjSTkuO8nyVWLWgfx/Pf/mIZYUSYdLKg+N+KDIEqF0dk9GLYE6oXpF9bywgW1LollUygTuaHe/nvQVHElfdFSs4PAQabGnCDarsyEJPLPNJAUDmTtfm2wiSzVOWpvmIXucQKWRz5bMi1nf0z8+0bPUo7PkaTX2CvbcCkb8EXZ99+x4wjp/AqRGwNFpQUbtRn5YaRuZUC3wjT0Oar+/INHCMxIW4dzHsOEQhQgRx/UUW+0S9LZ7MGe5rLZHl0XT4Cxn7LuCEi3TzclnQJwyt2VNFususIxKPzn5T1cV67EG50k0JR9QmNsOIQTLiZkCT17ne3/cs5CLn5WBBFMsbf7bK8B2ne7ZXaQdZE9m0HBh2ArEnhjBaM/zKSwIX7iqFhidE55QZGuQ5pwRru44tFFDllkC3lsVCOOYjbEGBftqV7HmUOhfr//l7CR3s4LM7IywVKq3D2nZQ4zwSkUxzicVTrS4w4PQtz4jim6cIvvs1AZI6wj1iqhrJcFVqA8v7P63XEcBaHT+1CNJ/kkmOk2s8M06GEQ1sHCqBNk4AJY1hvVuGcV9Z+lhS19KadJZAXsqR9v1+0bRw1OjteQRewIcbROVzQ2k3Zi8Swk=
+  overwrite: true
+  skip_cleanup: true
+  file_glob: true
+  file:
+  - _out/operator.yaml
+  - manifests/node-maintenance-operator/$TRAVIS_TAG/*
+  - manifests/node-maintenance-operator/node-maintenance-operator.package.yaml

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CSV_VERSION="${1:-0.0.0}"
-BUNDLE_DIR="manifests/node-maintenance-operator"
+BUNDLE_DIR="${2:-manifests/node-maintenance-operator}"
 BUNDLE_DIR_VERSION="${BUNDLE_DIR}/v${CSV_VERSION}"
 
 
@@ -23,6 +23,7 @@ sed -i "s/<IMAGE_VERSION>/v${CSV_VERSION}/g" deploy/operator.yaml
 mkdir -p ${BUNDLE_DIR_VERSION}
 
 operator-sdk olm-catalog gen-csv --csv-version ${CSV_VERSION}
+
 
 # mode back original operator.yaml file
 mv operator.yaml deploy/operator.yaml
