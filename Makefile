@@ -27,7 +27,15 @@ container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
 
 manifests:	
-	CSV_VERSION=$(IMAGE_TAG) \
-		./hack/release-manifests.sh
+	CSV_VERSION=$(IMAGE_TAG) ./hack/release-manifests.sh
 
-.PHONY: vet fmt container-build container-push manifests all
+cluster-up:
+	CLUSTER_NUM_NODES=3 ./cluster/up.sh
+
+cluster-down:
+	./cluster/down.sh
+
+cluster-functest:
+	./cluster/functest.sh	
+
+.PHONY: vet fmt container-build container-push manifests cluster-up cluster-down cluster-functest all

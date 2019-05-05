@@ -4,6 +4,12 @@ set -e
 PROJECT_ROOT="$(readlink -e $(dirname "$BASH_SOURCE[0]")/../)"
 OUT_DIR=${PROJECT_ROOT}/_out
 
+rm -rf ${OUT_DIR}
+mkdir -p ${OUT_DIR}
+
+cp deploy/operator.yaml ${OUT_DIR}/operator.yaml
+sed -i "s/<IMAGE_VERSION>/v${CSV_VERSION}/g" ${OUT_DIR}/operator.yaml
+
 if [ "$CSV_VERSION" == "latest" ]; then
   echo "Running latest release, no need to verify manifests."
   exit 0
@@ -20,11 +26,6 @@ if [ ! -d "$MANIFESTS_DIR" ] || [ ! -f "$CSV_FILE" ] ; then
   exit 1
 fi
 
-rm -rf ${OUT_DIR}
-mkdir -p ${OUT_DIR}
-
-cp deploy/operator.yaml ${OUT_DIR}/operator.yaml
-sed -i "s/<IMAGE_VERSION>/v${CSV_VERSION}/g" ${OUT_DIR}/operator.yaml
 
 
 
