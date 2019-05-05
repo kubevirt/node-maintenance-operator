@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-REPO_ORG=kubevirt
-REPO_NAME=node-maintenance-operator
 PROJECT_ROOT="$(readlink -e $(dirname "$BASH_SOURCE[0]")/../)"
 OUT_DIR=${PROJECT_ROOT}/_out
 
-VERSION=$(git ls-remote https://github.com/${REPO_ORG}/${REPO_NAME}.git | tail -1 | tr -d '^{}' | awk '{ print $2}' | cut -f 3 -d / | cut -f 2 -d v)
-CSV_VERSION="${CSV_VERSION:-$VERSION}"
+if [ "$CSV_VERSION" == "latest" ]; then
+  echo "Running latest release, no need to verify manifests."
+  exit 0
+fi
 
+CSV_VERSION=$(echo ${CSV_VERSION} | cut -c 2- )
 MANIFESTS_DIR=manifests/node-maintenance-operator/v${CSV_VERSION}
 CSV_FILE=${MANIFESTS_DIR}/node-maintenance-operator.v${CSV_VERSION}.clusterserviceversion.yaml
-echo $CSV_FILE
 
 if [ ! -d "$MANIFESTS_DIR" ] || [ ! -f "$CSV_FILE" ] ; then
   echo "Manifests under directory ${MANIFESTS_DIR} for version v${CSV_VERSION} do not exist."
