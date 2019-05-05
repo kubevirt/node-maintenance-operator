@@ -1,5 +1,5 @@
 IMAGE_REGISTRY ?= quay.io/kubevirt
-IMAGE_TAG ?= v0.3.0
+IMAGE_TAG ?= v0.2.0
 CSV_VERSION := $(shell echo ${IMAGE_TAG} | cut -c 2- )
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry

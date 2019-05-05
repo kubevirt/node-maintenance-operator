@@ -7,7 +7,6 @@ PROJECT_ROOT="$(readlink -e $(dirname "$BASH_SOURCE[0]")/../)"
 OUT_DIR=${PROJECT_ROOT}/_out
 
 VERSION=$(git ls-remote https://github.com/${REPO_ORG}/${REPO_NAME}.git | tail -1 | tr -d '^{}' | awk '{ print $2}' | cut -f 3 -d / | cut -f 2 -d v)
-echo $CSV_VERSION
 CSV_VERSION="${CSV_VERSION:-$VERSION}"
 
 MANIFESTS_DIR=manifests/node-maintenance-operator/v${CSV_VERSION}
