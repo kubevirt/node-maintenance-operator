@@ -35,7 +35,13 @@ cluster-up:
 cluster-down:
 	./cluster/down.sh
 
-cluster-functest:
-	./cluster/functest.sh	
+cluster-sync:
+	./cluster/sync.sh	
 
-.PHONY: vet fmt container-build container-push manifests cluster-up cluster-down cluster-functest all
+cluster-functest:
+	./cluster/functest.sh
+
+cluster-clean:
+	./cluster/clean.sh		
+
+.PHONY: vet fmt container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean all

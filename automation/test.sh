@@ -9,4 +9,5 @@ trap '{ make cluster-down; }' EXIT SIGINT SIGTERM SIGSTOP
 
 make cluster-down
 make cluster-up
+make cluster-sync
 make cluster-functest

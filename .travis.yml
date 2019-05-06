@@ -39,3 +39,4 @@ deploy:
   - _out/operator.yaml
   - manifests/node-maintenance-operator/$TRAVIS_TAG/*
   - manifests/node-maintenance-operator/node-maintenance-operator.package.yaml
+  
