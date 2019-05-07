@@ -9,7 +9,9 @@ function new_test() {
 }
 
 new_test 'Test e2e Node Mainenance'
-# Run tests
-go test ./test/e2e/... -root=$(pwd) -kubeconfig=cluster/.kubeconfig -globalMan deploy/crds/nodemaintenance_crd.yaml --namespacedMan deploy/namespace-init.yaml -namespace=node-maintenance-operator
 
+# Run tests
+TEST_NAMESPACE=node-maintenance-operator go test ./test/e2e/... -root=$(pwd) -kubeconfig=cluster/.kubeconfig -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
+
+echo "E2e tests passed"
 

@@ -18,9 +18,10 @@ done
 rm -rf _out/
 mkdir -p _out/
 
+# Create node-maintenance-operator namespace
+./cluster/kubectl.sh create -f deploy/namespace.yaml
+
 # Combine service_account, rbac, operator manifest into namespaced manifest
-cp deploy/namespace.yaml _out/namespace-init.yaml
-echo -e "\n---\n" >> _out/namespace-init.yaml
 cp deploy/service_account.yaml _out/namespace-init.yaml
 echo -e "\n---\n" >> _out/namespace-init.yaml
 cat deploy/role.yaml >> _out/namespace-init.yaml
