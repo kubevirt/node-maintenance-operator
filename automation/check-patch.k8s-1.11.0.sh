@@ -22,9 +22,9 @@ main() {
     source /etc/profile.d/gimme.sh
 
     echo "Install operator repository to the right place"
-    mkdir -p $GOPATH/src/kubevirt.io/node-maintenance-operator
+    mkdir -p $GOPATH/src/kubevirt.io
     mkdir -p $GOPATH/pkg
-    ln -s $(pwd)/node-maintenance-operator $GOPATH/src/kubevirt.io/node-maintenance-operator
+    ln -s $(pwd)/node-maintenance-operator $GOPATH/src/kubevirt.io/
     cd $GOPATH/src/kubevirt.io/node-maintenance-operator
 
     echo "Run functional tests"

@@ -10,7 +10,7 @@ install:
 script: make container-build 
 
 before_deploy:
-- docker login -u="$DOCKER_USER" -p="$DOCKER_PASS" quay.io
+- echo "$DOCKER_PASS" | docker login -u="$DOCKER_USER" quay.io --password-stdin
 
 deploy:
 - provider: script
@@ -39,4 +39,3 @@ deploy:
   - _out/operator.yaml
   - manifests/node-maintenance-operator/$TRAVIS_TAG/*
   - manifests/node-maintenance-operator/node-maintenance-operator.package.yaml
-  

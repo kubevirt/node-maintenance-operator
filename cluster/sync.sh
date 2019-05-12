@@ -3,7 +3,9 @@
 registry_port=$(./cluster/cli.sh ports registry | tr -d '\r')
 registry=localhost:$registry_port
 
-make cluster-clean
+if [ -d "_out"]; then
+    make cluster-clean
+fi
 
 IMAGE_REGISTRY=$registry make container-build-operator container-push-operator
 
