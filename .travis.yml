@@ -4,10 +4,9 @@ go: "1.10"
 services:
 - docker
 
-install:
-   - make manifests
+install: true
 
-script: make container-build 
+script: make container-build
 
 before_deploy:
 - echo "$DOCKER_PASS" | docker login -u="$DOCKER_USER" quay.io --password-stdin
@@ -19,19 +18,16 @@ deploy:
   on:
     branch: master
 - provider: script
-  script: make container-build container-push IMAGE_TAG=$TRAVIS_TAG 
+  script: make manifests container-build container-push IMAGE_TAG=$TRAVIS_TAG 
   skip_cleanup: true
   on:
     tags: true
-# Release assests
 - provider: releases
-  branches:
-    only: /v[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+){0,1}/
   on:
     tags: true
     repo: kubevirt/node-maintenance-operator
   api_key:
-    secure: vu7hEF10GBxbVRbWZ6wltZTNDfMZXUzRCsmtHGwmQ7z2kpMlGJkuGpIp7+eTkgHlFUPA2bmjSTkuO8nyVWLWgfx/Pf/mIZYUSYdLKg+N+KDIEqF0dk9GLYE6oXpF9bywgW1LollUygTuaHe/nvQVHElfdFSs4PAQabGnCDarsyEJPLPNJAUDmTtfm2wiSzVOWpvmIXucQKWRz5bMi1nf0z8+0bPUo7PkaTX2CvbcCkb8EXZ99+x4wjp/AqRGwNFpQUbtRn5YaRuZUC3wjT0Oar+/INHCMxIW4dzHsOEQhQgRx/UUW+0S9LZ7MGe5rLZHl0XT4Cxn7LuCEi3TzclnQJwyt2VNFususIxKPzn5T1cV67EG50k0JR9QmNsOIQTLiZkCT17ne3/cs5CLn5WBBFMsbf7bK8B2ne7ZXaQdZE9m0HBh2ArEnhjBaM/zKSwIX7iqFhidE55QZGuQ5pwRru44tFFDllkC3lsVCOOYjbEGBftqV7HmUOhfr//l7CR3s4LM7IywVKq3D2nZQ4zwSkUxzicVTrS4w4PQtz4jim6cIvvs1AZI6wj1iqhrJcFVqA8v7P63XEcBaHT+1CNJ/kkmOk2s8M06GEQ1sHCqBNk4AJY1hvVuGcV9Z+lhS19KadJZAXsqR9v1+0bRw1OjteQRewIcbROVzQ2k3Zi8Swk=
+    secure: whS1MO7NoOY7HDTGhRWwi+YY391g46PiDUMQNxaaeGaMkvpCjw97j4QHk1MS7k59Yx1C8k7Cn27CkM0/6vy3jAkaSXY8WCODWqgV1PJcC8ruRQMHuSIpCKNKWbzXksl46jYz2rechnPFGWcTET3/t192/Pzdl07uLfY/GrTwJ1Xs4vH5NRxKcqJmDNiRBysqHxvEx4dz8ozLLXFjdR/XPinUA+A5dtbqbuBb89k4zvBaziLl1p75Z5G/Sffq5pRDj/XXi18mMYmal2lS0vo1KreZEGaz5N670U15J7KzgUyMr8TUgAj18gth6y4eEaIIp3eW2uNDwf38D5UA6hcCVHAfbrttD/EER5QWitI8IQ5UhuL1muQNCeJg+SYRGcS8c6T3dgZYqxEXsKRwoJ/4OQhi1FohsR6abQvK5nMPKzuKHhlZ2bGL+a4CoxDacnra2pF+FASaLdzmYxVtWdaoQuutc/ssM1fhlTw44VmeVs/d9VWD3lk0zx2QuNmd4iLD6NfVPaRFeiYyITOB8bR/a5e+1M0IKYd14qJ6mp3UKgOq8oVef97Y0ky4qduANRlTh8Uf3OxNrJ81KfGb9csZ6PQMqEAkW5Qb+tqg14WsrYR1TOiQeBtpDV0Sd44c9akKgyynOrG/ejHD2um3IuuFxtB02Zx39YvoxBgSrpO+/2M=
   overwrite: true
   skip_cleanup: true
   file_glob: true

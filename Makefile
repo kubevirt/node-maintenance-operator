@@ -3,7 +3,7 @@ IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
-all: vet fmt container-build container-push
+all: vet fmt
 vet:
 	go vet ./pkg/... ./cmd/...
 
