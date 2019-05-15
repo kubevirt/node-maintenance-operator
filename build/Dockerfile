@@ -4,7 +4,7 @@ ENV GOPATH=/go
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
 
-FROM centos:centos7
+FROM registry.access.redhat.com/ubi8/ubi-minimal
 ENV ENTRYPOINT=/entrypoint \
     OPERATOR=/node-maintenance-operator \
     USER_UID=1001 \

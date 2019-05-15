@@ -214,7 +214,7 @@ spec:
   nodeName: node02
   reason: "Test node maintenance"
 
-$ kubectl delete -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
+$ kubectl delete -f deploy/crds/nodemaintenance_cr.yaml
 
 {"level":"info","ts":1551794725.0018933,"logger":"controller_nodemaintenance","msg":"Reconciling NodeMaintenance","Request.Namespace":"default","Request.Name":"node02"}
 {"level":"info","ts":1551794725.0021605,"logger":"controller_nodemaintenance","msg":"NodeMaintenance Object: default/node02 Deleted ","Request.Namespace":"default","Request.Name":"node02"}

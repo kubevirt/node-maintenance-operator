@@ -1,9 +1,9 @@
 IMAGE_REGISTRY ?= quay.io/kubevirt
-IMAGE_TAG ?= v0.2.0
+IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
-all: vet fmt container-build container-push
+all: vet fmt
 vet:
 	go vet ./pkg/... ./cmd/...
 
@@ -26,4 +26,22 @@ container-push-operator:
 container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
 
-.PHONY: vet fmt container-build container-push all
+manifests:	
+	CSV_VERSION=$(IMAGE_TAG) ./hack/release-manifests.sh
+
+cluster-up:
+	CLUSTER_NUM_NODES=3 ./cluster/up.sh
+
+cluster-down:
+	./cluster/down.sh
+
+cluster-sync:
+	./cluster/sync.sh	
+
+cluster-functest:
+	./cluster/functest.sh
+
+cluster-clean:
+	./cluster/clean.sh		
+
+.PHONY: vet fmt container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean all

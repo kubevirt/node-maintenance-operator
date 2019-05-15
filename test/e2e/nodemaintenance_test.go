@@ -27,7 +27,6 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
-	computeLabels        = map[string]string{"node-role.kubernetes.io/compute": "true"}
 )
 
 func TestNodeMainenance(t *testing.T) {
@@ -128,13 +127,19 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		t.Fatal(fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-	nodes := &corev1.NodeList{}
-	computeNodesSelector := labels.SelectorFromSet(computeLabels)
-	err = f.Client.List(goctx.TODO(), &client.ListOptions{LabelSelector: computeNodesSelector}, nodes)
+	nodesList := &corev1.NodeList{}
+	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
 	if err != nil {
 		t.Fatal(err)
 	}
-	computeNodesNumber := len(nodes.Items)
+
+	computeNodesNumber := 0
+
+	for _, node := range nodesList.Items {
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+			computeNodesNumber++
+		}
+	}
 
 	if computeNodesNumber > 2 {
 		// Check that the deployment has 1 replica running after maintenance
@@ -215,7 +220,22 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 					Labels:    podLabel,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: computeLabels,
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "node-role.kubernetes.io/master",
+												Operator: corev1.NodeSelectorOpDoesNotExist,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
 					Containers: []corev1.Container{{
 						Image:   "busybox",
 						Name:    "testpodbusybox",
