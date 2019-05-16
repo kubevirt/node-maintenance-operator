@@ -40,29 +40,31 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 
 	log.Info(fmt.Sprintf("Applying %s taint %s on Node: %s", taint.Key, taintStr, node.Name))
 
+	if err != nil {
+		return err
+	}
+
 	if !updated {
-		log.Error(err, fmt.Sprintf("%s taint %s was not applied on Node: %s", taint.Key, taintStr, node.Name))
-	}
-
-	if err != nil {
-		return err
-	}
-
-	newData, err := json.Marshal(freshNode)
-	if err != nil {
-		return err
-	}
-
-	patchBytes, patchErr := strategicpatch.CreateTwoWayMergePatch(oldData, newData, node)
-	if patchErr == nil {
-		_, err = client.Patch(node.Name, types.StrategicMergePatchType, patchBytes)
+		log.Info(fmt.Sprintf("%s taint %s was not applied on Node: %s", taint.Key, taintStr, node.Name))
 	} else {
-		_, err = client.Update(node)
+		newData, err := json.Marshal(freshNode)
+		if err != nil {
+			return err
+		}
+
+		patchBytes, patchErr := strategicpatch.CreateTwoWayMergePatch(oldData, newData, node)
+		if patchErr == nil {
+			_, err = client.Patch(node.Name, types.StrategicMergePatchType, patchBytes)
+		} else {
+			log.Error(patchErr, fmt.Sprintf("%s taint %s could not be patched on Node: %s , performing update", taint.Key, taintStr, node.Name))
+			_, err = client.Update(freshNode)
+		}
+
+		if err != nil {
+			return err
+		}
+		log.Info(fmt.Sprintf("%s taint %s applied on Node: %s", taint.Key, taintStr, node.Name))
 	}
 
-	if patchErr != nil {
-		log.Error(err, fmt.Sprintf("%s taint %s was not applied on Node: %s", taint.Key, taintStr, node.Name))
-	}
-
-	return err
+	return nil
 }
