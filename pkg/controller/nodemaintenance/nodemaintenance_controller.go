@@ -219,13 +219,8 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 		return err
 	}
 
-	uncordonedNode, err := r.fetchNode(nodeName)
-	if err != nil {
-		return err
-	}
-
-	// Remove kubevirt live migration taint from node
-	err = AddOrRemoveTaint(r.drainer.Client, uncordonedNode, false)
+	// Remove kubevirt migration taint from node
+	err = AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
 		return err
 	}
