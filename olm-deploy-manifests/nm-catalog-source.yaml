@@ -5,6 +5,6 @@ metadata:
   namespace: openshift-operator-lifecycle-manager
 spec:
   sourceType: grpc
-  image: quay.io/kubevirt/node-maintenance-operator-registry:v0.2.0
+  image: quay.io/kubevirt/node-maintenance-operator-registry:v0.3.0
   displayName: node-maintenance-operator
   publisher: Red hat
