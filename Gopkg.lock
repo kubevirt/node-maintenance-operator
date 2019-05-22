@@ -812,12 +812,7 @@
 
 [[projects]]
   name = "k8s.io/kubernetes"
-  packages = [
-    "pkg/apis/core",
-    "pkg/apis/core/helper",
-    "pkg/kubectl/drain",
-    "pkg/util/taints"
-  ]
+  packages = ["pkg/kubectl/drain"]
   revision = "6c7afd1222ebf2cb91567364471d74ac056437b7"
   version = "v1.14.0-beta.1"
 
@@ -878,6 +873,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4399f91d23b1f9b143b47afc8c830a7a5c06d9f898dfd63498796b960844d4a1"
+  inputs-digest = "e6357bb78c4967f57fd9782e23e367ce58c4dbe4457db9458f2057fd983d08e2"
   solver-name = "gps-cdcl"
   solver-version = 1
