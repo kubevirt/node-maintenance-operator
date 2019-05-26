@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
-KUBERNETES_IMAGE="k8s-1.11.0@sha256:3412f158ecad53543c9b0aa8468db84dd043f01832a66f0db90327b7dc36a8e8"
+KUBERNETES_1_11_IMAGE="k8s-1.11.0@sha256:3412f158ecad53543c9b0aa8468db84dd043f01832a66f0db90327b7dc36a8e8"
+KUBERNETES_1_13_3_IMAGE="k8s-1.13.3@sha256:bc0f02d6b970650eb16d12f97e5aa1376b3a13b0ffed6227db98675be2ca1184"
 OPENSHIFT_IMAGE="os-3.11.0-crio@sha256:3f11a6f437fcdf2d70de4fcc31e0383656f994d0d05f9a83face114ea7254bc0"
 
 CLUSTER_PROVIDER=${CLUSTER_PROVIDER:-k8s-1.11.0}
@@ -13,15 +14,18 @@ fi
 
 case "${CLUSTER_PROVIDER}" in
     'k8s-1.11.0')
-        image=$KUBERNETES_IMAGE
+        image=$KUBERNETES_1_11_IMAGE
         ;;
+    'k8s-1.13.3')
+        image=$KUBERNETES_1_13_3_IMAGE
+        ;;        
     'os-3.11.0')
         image=$OPENSHIFT_IMAGE
         ;;
 esac
 
 echo "Install cluster from image: ${image}"
-if [[ $image == $KUBERNETES_IMAGE ]]; then
+if [[ $image == $KUBERNETES_1_11_IMAGE ]] || [[ $image == $KUBERNETES_1_13_3_IMAGE ]]; then
     # Run Kubernetes cluster image
     ./cluster/cli.sh run --random-ports --nodes ${CLUSTER_NUM_NODES} --memory ${CLUSTER_MEMORY_SIZE} --background kubevirtci/${image}
 

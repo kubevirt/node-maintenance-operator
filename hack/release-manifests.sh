@@ -8,7 +8,7 @@ rm -rf ${OUT_DIR}
 mkdir -p ${OUT_DIR}
 
 cp deploy/operator.yaml ${OUT_DIR}/operator.yaml
-sed -i "s/<IMAGE_VERSION>/v${CSV_VERSION}/g" ${OUT_DIR}/operator.yaml
+sed -i "s/<IMAGE_VERSION>/${CSV_VERSION}/g" ${OUT_DIR}/operator.yaml
 
 if [ "$CSV_VERSION" == "latest" ]; then
   echo "Running latest release, no need to verify manifests."
