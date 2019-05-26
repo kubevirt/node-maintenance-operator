@@ -14,6 +14,11 @@ var KubevirtDrainTaint = &corev1.Taint{
 	Effect: corev1.TaintEffectNoSchedule,
 }
 
+var NodeUnschedulableTaint = &corev1.Taint{
+	Key:    "node.kubernetes.io/unschedulable",
+	Effect: corev1.TaintEffectNoSchedule,
+}
+
 func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add bool) error {
 
 	taintStr := ""
@@ -25,7 +30,7 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 		return err
 	}
 
-	newTaints, err := json.Marshal([]corev1.Taint{*KubevirtDrainTaint})
+	newTaints, err := json.Marshal([]corev1.Taint{*NodeUnschedulableTaint, *KubevirtDrainTaint})
 	if err != nil {
 		return err
 	}

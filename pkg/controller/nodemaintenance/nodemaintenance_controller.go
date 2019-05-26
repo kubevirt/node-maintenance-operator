@@ -187,14 +187,12 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	// Cordon node
-	if err := runCordonOrUncordon(r, node, true); err != nil {
+	err = AddOrRemoveTaint(r.drainer.Client, node, true)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Add kubevirt live migration taint on the node
-	err = AddOrRemoveTaint(r.drainer.Client, node, true)
-
-	if err != nil {
+	if err = runCordonOrUncordon(r, node, true); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -214,16 +212,17 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 	if err != nil {
 		return err
 	}
-	// Uncordon the node
-	if err := runCordonOrUncordon(r, node, false); err != nil {
-		return err
-	}
 
-	// Remove kubevirt migration taint from node
+	// Uncordon the node
 	err = AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
 		return err
 	}
+
+	if err = runCordonOrUncordon(r, node, false); err != nil {
+		return err
+	}
+
 	return nil
 }
 
