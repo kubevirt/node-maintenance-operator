@@ -30,7 +30,7 @@ Version"](https://github.com/operator-framework/operator-lifecycle-manager/blob/
 1) Build and push operator and operator-registry image.
 
 ```shell
-./build/make-olm.sh <VERSION>
+./build/make-manifests.sh <VERSION>
 make container-build
 make container-push
 ```

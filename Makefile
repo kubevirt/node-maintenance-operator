@@ -1,3 +1,4 @@
+OPERATOR_SDK_VERSION ?= v0.8.0
 IMAGE_REGISTRY ?= quay.io/kubevirt
 IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
@@ -26,8 +27,13 @@ container-push-operator:
 container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
 
-manifests:	
-	CSV_VERSION=$(IMAGE_TAG) ./hack/release-manifests.sh
+operator-sdk:
+	curl -JL https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk-$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu -o operator-sdk
+	chmod 0755 operator-sdk
+
+manifests: operator-sdk
+	./build/make-manifests.sh ${IMAGE_TAG}
+	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:
 	CLUSTER_NUM_NODES=3 ./cluster/up.sh
