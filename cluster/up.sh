@@ -18,7 +18,7 @@ case "${CLUSTER_PROVIDER}" in
         ;;
     'k8s-1.13.3')
         image=$KUBERNETES_1_13_3_IMAGE
-        ;;        
+        ;;
     'os-3.11.0')
         image=$OPENSHIFT_IMAGE
         ;;

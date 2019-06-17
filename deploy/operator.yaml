@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: node-maintenance-operator
-  namespace: node-maintenance-operator 
+  namespace: node-maintenance-operator
 spec:
   replicas: 1
   selector:
@@ -23,7 +23,7 @@ spec:
                 operator: Exists
       tolerations:
       - key: node-role.kubernetes.io/master
-        effect: NoSchedule      
+        effect: NoSchedule
       containers:
         - name: node-maintenance-operator
           # Replace this with the built image name

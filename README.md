@@ -142,8 +142,8 @@ Run the operator locally with the default Kubernetes config file present at `$HO
 ```sh
 $ operator-sdk up local --kubeconfig="<path/to/kubeconfig>"
 
-INFO[0000] Running the operator locally.                
-INFO[0000] Using namespace default.                     
+INFO[0000] Running the operator locally.
+INFO[0000] Using namespace default.
 {"level":"info","ts":1551793839.3308277,"logger":"cmd","msg":"Go Version: go1.11.4"}
 {"level":"info","ts":1551793839.3308823,"logger":"cmd","msg":"Go OS/Arch: linux/amd64"}
 {"level":"info","ts":1551793839.330899,"logger":"cmd","msg":"Version of operator-sdk: v0.5.0+git"}
@@ -151,7 +151,7 @@ INFO[0000] Using namespace default.
 
 ```
 
-## Setting Node Maintenance 
+## Setting Node Maintenance
 ### Set Maintenance on - Create a NodeMaintenance CR
 To set maintenance on a node a `NodeMaintenance` CR should be created.
 A `NodeMaintenance` CR contains:
@@ -226,7 +226,7 @@ $ kubectl delete -f deploy/crds/nodemaintenance_cr.yaml
 
 Running e2e tests:
 
-### Local 
+### Local
 Before running the tests, the NodeMaintenance CRD and namespace must be registered with the Openshift/Kubernetes apiserver:
 
 ```sh
