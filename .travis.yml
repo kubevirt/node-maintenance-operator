@@ -1,13 +1,17 @@
+
 dist: xenial
 language: go
-go: "1.10"
+go_import_path: kubevirt.io/node-maintenance-operator
+go: "1.11"
 
 services:
 - docker
 
 install: true
 
-script: make container-build
+script:
+- make check
+- make container-build
 
 before_deploy:
 - echo "$DOCKER_PASS" | docker login -u="$DOCKER_USER" quay.io --password-stdin
@@ -19,7 +23,7 @@ deploy:
   on:
     branch: master
 - provider: script
-  script: make manifests container-build container-push IMAGE_TAG=$TRAVIS_TAG 
+  script: make manifests container-build container-push IMAGE_TAG=$TRAVIS_TAG
   skip_cleanup: true
   on:
     tags: true

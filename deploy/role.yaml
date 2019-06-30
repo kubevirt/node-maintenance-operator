@@ -12,7 +12,7 @@ rules:
   - endpoints
   - events
   - configmaps
-  - serviceaccounts  
+  - serviceaccounts
   verbs:
   - '*'
 - apiGroups:
@@ -23,8 +23,8 @@ rules:
   - get
   - list
   - update
-  - patch 
-  - watch  
+  - patch
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -32,13 +32,13 @@ rules:
   verbs:
   - get
   - list
-  - watch  
+  - watch
 - apiGroups:
-  - ""  
+  - ""
   resources:
   - pods/eviction
   verbs:
-  - create        
+  - create
 - apiGroups:
   - ""
   resources:
@@ -72,7 +72,4 @@ rules:
   resources:
   - '*'
   verbs:
-  - '*'   
-
-
-   
+  - '*'

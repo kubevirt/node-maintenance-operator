@@ -15,7 +15,7 @@ CHANNEL="beta"
 
 if [ -x "${BASEPATH}/../operator-sdk" ]; then
        OPERATOR_SDK="${BASEPATH}/../operator-sdk"
-else       
+else
 	which operator-sdk &> /dev/null || {
 		echo "operator-sdk not found (see https://github.com/operator-framework/operator-sdk)"
 		exit 1
@@ -35,7 +35,7 @@ sed -i "s/<IMAGE_VERSION>/${TAG}/g" deploy/operator.yaml
 mkdir -p ${BUNDLE_DIR_VERSION}
 
 # note: this creates under deploy/olm-catalog ...
-${OPERATOR_SDK} olm-catalog gen-csv --csv-version ${VERSION} 
+${OPERATOR_SDK} olm-catalog gen-csv --csv-version ${VERSION}
 
 # move back original operator.yaml file
 mv operator.yaml deploy/operator.yaml
