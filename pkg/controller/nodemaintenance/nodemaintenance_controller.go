@@ -29,6 +29,10 @@ import (
 
 var log = logf.Log.WithName("controller_nodemaintenance")
 
+const(
+	CompletedMaintenance	= "Completed"
+)
+
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -202,6 +206,15 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
 	if err = drainPods(r, node, stop); err != nil {
 		return reconcile.Result{}, err
+	}
+
+	if instance.Status.Phase != CompletedMaintenance {
+		instance.Status.Phase = CompletedMaintenance
+		err := r.client.Status().Update(context.TODO(), instance)
+		if err != nil {
+			reqLogger.Error(err, "Failed to update NodeMaintenance status")
+			return reconcile.Result{}, err
+		}
 	}
 
 	return reconcile.Result{}, nil
