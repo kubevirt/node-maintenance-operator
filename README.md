@@ -11,7 +11,7 @@ Before running the operator, the NodeMaintenance CRD and namespace must be regis
 
 ```sh
 $ kubectl create -f deploy/crds/nodemaintenance_crd.yaml
-$ kubectl create -f deploy/crds/namespace.yaml
+$ kubectl create -f deploy/namespace.yaml
 ```
 
 Once this is done, there are two ways to run the operator:
