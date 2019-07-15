@@ -13,9 +13,8 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1.NodeMaintenance":       schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenance(ref),
-		"kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1.NodeMaintenanceSpec":   schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenanceSpec(ref),
-		"kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1.NodeMaintenanceStatus": schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenanceStatus(ref),
+		"kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1.NodeMaintenance":     schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenance(ref),
+		"kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1.NodeMaintenanceSpec": schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenanceSpec(ref),
 	}
 }
 
@@ -23,7 +22,7 @@ func schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenance(ref common.ReferenceCallb
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NodeMaintenance is the Schema for the nodemaintenances API",
+				Description: "NodeMaintenance is the Schema for the nodemaintenances API kubebuilder:subresource:status",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -84,25 +83,6 @@ func schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenanceSpec(ref common.ReferenceC
 					},
 				},
 				Required: []string{"nodeName"},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
-func schema_pkg_apis_kubevirt_v1alpha1_NodeMaintenanceStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "NodeMaintenanceStatus defines the observed state of NodeMaintenance",
-				Properties: map[string]spec.Schema{
-					"phase": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-				},
 			},
 		},
 		Dependencies: []string{},

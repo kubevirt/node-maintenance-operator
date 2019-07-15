@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,7 +17,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/kubectl/drain"
-
 	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -161,12 +161,22 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	if instance.Status.StartTime == nil {
+		now := time.Now()
+		instance.Status.StartTime = &metav1.Time{Time: now}
+		err = r.client.Status().Update(context.TODO(), instance)
+		if err != nil {
+			reqLogger.Error(err, "Failed to update NodeMaintenance with completed status")
+			return r.reconcileAndError(instance, reconcile.Result{}, err)
+		}
+	}
+
 	// Add finalizer when object is created
 	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
 			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
 			if err := r.client.Update(context.TODO(), instance); err != nil {
-				return reconcile.Result{}, err
+				return r.reconcileAndError(instance, reconcile.Result{}, err)
 			}
 		}
 	} else {
@@ -174,12 +184,21 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		if ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
 			if err := r.stopNodeMaintenance(instance.Spec.NodeName); err != nil {
-				return reconcile.Result{}, err
+				return r.reconcileAndError(instance, reconcile.Result{}, err)
 			}
 			// Remove our finalizer from the list and update it.
 			instance.ObjectMeta.Finalizers = RemoveString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
 			if err := r.client.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{}, err
+				return r.reconcileAndError(instance, reconcile.Result{}, err)
+			}
+		}
+
+		if instance.Status.Failed == true {
+			instance.Status.Failed = false
+			err = r.client.Status().Update(context.TODO(), instance)
+			if err != nil {
+				reqLogger.Error(err, "Failed to update NodeMaintenance with completed status")
+				return r.reconcileAndError(instance, reconcile.Result{}, err)
 			}
 		}
 		return reconcile.Result{}, nil
@@ -191,17 +210,17 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
-		return reconcile.Result{}, err
+		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
 	if err != nil {
-		return reconcile.Result{}, err
+		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
 	if err = runCordonOrUncordon(r, node, true); err != nil {
-		return reconcile.Result{}, err
+		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
 	stop := make(chan struct{})
@@ -209,7 +228,15 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
 	if err = drainPods(r, node, stop); err != nil {
-		return reconcile.Result{}, err
+		return r.reconcileAndError(instance, reconcile.Result{}, err)
+	}
+
+	instance.Status.Completed = true
+	instance.Status.Failed = false
+	err = r.client.Status().Update(context.TODO(), instance)
+	if err != nil {
+		reqLogger.Error(err, "Failed to update NodeMaintenance with completed status")
+		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
 	return reconcile.Result{}, nil
@@ -264,4 +291,24 @@ func (r *ReconcileNodeMaintenance) StartPodInformer(node *corev1.Node, stop <-ch
 	}
 
 	return nil
+}
+
+func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMaintenance, result reconcile.Result, err error) (reconcile.Result, error) {
+	//should always be false by default unless completed
+	nm.Status.Completed = false
+	nm.Status.Failed = true
+	nm.Status.ErrorMessage = err.Error()
+
+	if nm.Spec.NodeName != "" {
+		pendingList, _ := r.drainer.GetPodsForDeletion(nm.Spec.NodeName)
+		if pendingList != nil {
+			nm.Status.PendingPods = pendingList.Pods()
+		}
+	}
+
+	updateErr := r.client.Status().Update(context.TODO(), nm)
+	if updateErr != nil {
+		log.Error(updateErr, "Failed to update NodeMaintenance with failure status")
+	}
+	return result, err
 }
