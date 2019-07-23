@@ -9,7 +9,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -161,16 +160,6 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	if instance.Status.StartTime == nil {
-		now := time.Now()
-		instance.Status.StartTime = &metav1.Time{Time: now}
-		err = r.client.Status().Update(context.TODO(), instance)
-		if err != nil {
-			reqLogger.Error(err, "Failed to update NodeMaintenance with completed status")
-			return r.reconcileAndError(instance, reconcile.Result{}, err)
-		}
-	}
-
 	// Add finalizer when object is created
 	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
@@ -192,16 +181,13 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 				return r.reconcileAndError(instance, reconcile.Result{}, err)
 			}
 		}
-
-		if instance.Status.Failed == true {
-			instance.Status.Failed = false
-			err = r.client.Status().Update(context.TODO(), instance)
-			if err != nil {
-				reqLogger.Error(err, "Failed to update NodeMaintenance with completed status")
-				return r.reconcileAndError(instance, reconcile.Result{}, err)
-			}
-		}
 		return reconcile.Result{}, nil
+	}
+
+	instance.Status.Phase = kubevirtv1alpha1.MaintenanceRunning
+	if err != nil {
+		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Running\" status")
+		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
 	nodeName := instance.Spec.NodeName
@@ -231,11 +217,10 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
-	instance.Status.Completed = true
-	instance.Status.Failed = false
+	instance.Status.Phase = kubevirtv1alpha1.MaintenanceSucceeded
 	err = r.client.Status().Update(context.TODO(), instance)
 	if err != nil {
-		reqLogger.Error(err, "Failed to update NodeMaintenance with completed status")
+		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Succeeded\" status")
 		return r.reconcileAndError(instance, reconcile.Result{}, err)
 	}
 
@@ -295,9 +280,8 @@ func (r *ReconcileNodeMaintenance) StartPodInformer(node *corev1.Node, stop <-ch
 
 func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMaintenance, result reconcile.Result, err error) (reconcile.Result, error) {
 	//should always be false by default unless completed
-	nm.Status.Completed = false
-	nm.Status.Failed = true
-	nm.Status.ErrorMessage = err.Error()
+	nm.Status.Phase = kubevirtv1alpha1.MaintenanceFailed
+	nm.Status.LastError = err.Error()
 
 	if nm.Spec.NodeName != "" {
 		pendingList, _ := r.drainer.GetPodsForDeletion(nm.Spec.NodeName)
@@ -308,7 +292,7 @@ func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMa
 
 	updateErr := r.client.Status().Update(context.TODO(), nm)
 	if updateErr != nil {
-		log.Error(updateErr, "Failed to update NodeMaintenance with failure status")
+		log.Error(updateErr, "Failed to update NodeMaintenance with \"Failed\" status")
 	}
 	return result, err
 }

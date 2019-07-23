@@ -40,27 +40,17 @@ spec:
           type: object
         status:
           properties:
-            completed:
-              description: Completed represents the state of maintenance. True if
-                completed , false otherwise
-              type: boolean
-            errorMessage:
-              description: ErrorMessage represents the latest reason for failed=true
+            lastError:
+              description: LastError represents the latest reason for failed=true
               type: string
-            failed:
-              description: Failed is true if the controller did not complete maintenance
-                during the latest reconciliation, false otherwise
-              type: boolean
             pendingPods:
               description: PendingPods are pods that failed to be evicted in the latest
                 reconciliation
               items:
                 type: object
               type: array
-            startTime:
-              description: StartTime contains the Date and time at which the maintenance
-                CR processing has started
-              format: date-time
+            phase:
+              description: Phase is the represtation of a maintenanace progress (Running,Succeeded,Failed)
               type: string
           type: object
   version: v1alpha1

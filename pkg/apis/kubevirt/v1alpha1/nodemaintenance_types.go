@@ -6,11 +6,23 @@ import (
 )
 
 const (
+	// NodeMaintenanceFinalizer is a finalizer for a NodeMaintenance CR deletion
 	NodeMaintenanceFinalizer string = "foregroundDeleteNodeMaintenance"
 )
 
+// MaintenancePhase contains the phase of maintenance
+type MaintenancePhase string
+
+const (
+	// MaintenanceRunning - maintenance has started its proccessing
+	MaintenanceRunning MaintenancePhase = "Running"
+	// MaintenanceSucceeded - maintenance has finished succesfuly, cordoned the node and evicted all pods (that could be evicted)
+	MaintenanceSucceeded MaintenancePhase = "Succeeded"
+	// MaintenanceFailed - maintenance has failed the last reconciliation cycle and will retry
+	MaintenanceFailed MaintenancePhase = "Failed"
+)
+
 // NodeMaintenanceSpec defines the desired state of NodeMaintenance
-// +k8s:openapi-gen=true
 type NodeMaintenanceSpec struct {
 	// Node name to apply maintanance on/off
 	NodeName string `json:"nodeName"`
@@ -42,15 +54,10 @@ type NodeMaintenanceList struct {
 
 // NodeMaintenanceStatus defines the observed state of NodeMaintenance
 type NodeMaintenanceStatus struct {
-	// StartTime contains the Date and time at which the maintenance CR processing has started
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-	// Completed represents the state of maintenance. True if completed , false otherwise
-	Completed bool `json:"completed,omitempty"`
-	// Failed is true if the controller did not complete maintenance during the latest reconciliation,
-	// false otherwise
-	Failed bool `json:"failed,omitempty"`
-	// ErrorMessage represents the latest reason for failed=true
-	ErrorMessage string `json:"errorMessage,omitempty"`
+	// Phase is the represtation of a maintenanace progress (Running,Succeeded,Failed)
+	Phase MaintenancePhase `json:"phase,omitempty"`
+	// LastError represents the latest reason for failed=true
+	LastError string `json:"lastError,omitempty"`
 	// PendingPods are pods that failed to be evicted in the latest reconciliation
 	PendingPods []corev1.Pod `json:"pendingPods,omitempty"`
 }
