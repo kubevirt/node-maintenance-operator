@@ -19,7 +19,10 @@ TARGETS = \
 
 GINKGO_EXTRA_ARGS ?=
 GINKGO_ARGS ?= --v -r --progress $(GINKGO_EXTRA_ARGS)
-GINKGO ?= go run ./vendor/github.com/onsi/ginkgo/ginkgo
+GINKGO ?= build/_output/bin/ginkgo
+
+$(GINKGO): Gopkg.toml
+	GOBIN=$$(pwd)/build/_output/bin/ go install ./vendor/github.com/onsi/ginkgo/ginkgo
 
 # Make does not offer a recursive wildcard function, so here's one:
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
@@ -39,7 +42,7 @@ goimports: $(cmd_sources) $(pkg_sources)
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
 
-check: whitespace-check vet goimports-check gen-operator-sdk gen-k8s-check
+check: whitespace-check vet goimports-check gen-operator-sdk gen-k8s-check test
 
 whitespace-check: $(all_sources)
 	./hack/whitespace.sh
@@ -50,7 +53,7 @@ vet: $(cmd_sources) $(pkg_sources)
 goimports-check: $(cmd_sources) $(pkg_sources)
 	go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
-test:
+test: $(GINKGO)
 	$(GINKGO) $(GINKGO_ARGS) ./pkg/ ./cmd/
 
 gen-k8s: $(apis_sources)

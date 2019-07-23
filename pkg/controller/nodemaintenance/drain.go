@@ -41,7 +41,7 @@ func drainPods(r *ReconcileNodeMaintenance, node *corev1.Node, stop <-chan struc
 		return utilerrors.NewAggregate(errs)
 	}
 
-	if err := r.startPodInformer(node, stop); err != nil {
+	if err := Reconciler.StartPodInformer(node, stop); err != nil {
 		log.Error(err, fmt.Sprintf("Failed to start pod informer \n"))
 		return err
 	}

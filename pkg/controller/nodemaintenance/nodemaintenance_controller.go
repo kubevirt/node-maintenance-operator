@@ -1,3 +1,5 @@
+//go:generate mockgen -source $GOFILE -package=$GOPACKAGE -destination=generated_mock_$GOFILE
+
 package nodemaintenance
 
 import (
@@ -118,6 +120,10 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
 
+type ReconcileHandler interface {
+	StartPodInformer(node *corev1.Node, stop <-chan struct{}) error
+}
+
 // ReconcileNodeMaintenance reconciles a NodeMaintenance object
 type ReconcileNodeMaintenance struct {
 	// This client, initialized using mgr.Client() above, is a split client
@@ -127,6 +133,8 @@ type ReconcileNodeMaintenance struct {
 	drainer     *drain.Helper
 	podInformer cache.SharedInformer
 }
+
+var Reconciler ReconcileHandler
 
 // Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
 // and what is in the NodeMaintenance.Spec
@@ -239,7 +247,7 @@ func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, err
 	return node, nil
 }
 
-func (r *ReconcileNodeMaintenance) startPodInformer(node *corev1.Node, stop <-chan struct{}) error {
+func (r *ReconcileNodeMaintenance) StartPodInformer(node *corev1.Node, stop <-chan struct{}) error {
 	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name})
 
 	lw := cache.NewListWatchFromClient(
