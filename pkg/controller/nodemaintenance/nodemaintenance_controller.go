@@ -43,6 +43,7 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	Reconciler = r
 	err := initDrainer(r, mgr.GetConfig())
 	return r, err
 }
@@ -185,6 +186,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	instance.Status.Phase = kubevirtv1alpha1.MaintenanceRunning
+	err = r.client.Status().Update(context.TODO(), instance)
 	if err != nil {
 		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Running\" status")
 		return r.reconcileAndError(instance, reconcile.Result{}, err)
