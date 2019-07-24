@@ -1,6 +1,7 @@
 package nodemaintenance
 
 import (
+	"context"
 	reflect "reflect"
 	"time"
 
@@ -32,7 +33,7 @@ var _ = Describe("updateCondition", func() {
 	var cs *k8sfakeclient.Clientset
 	var req reconcile.Request
 
-	SetFakeClients := func() {
+	setFakeClients := func() {
 		nm = &kubevirtv1alpha1.NodeMaintenance{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-maintanance",
@@ -76,7 +77,22 @@ var _ = Describe("updateCondition", func() {
 		cs = k8sfakeclient.NewSimpleClientset(objs...)
 	}
 
-	reconcile := func() {
+	checkSuccesfulReconcile := func() {
+		maintanance := &kubevirtv1alpha1.NodeMaintenance{}
+		err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(maintanance.Status.Phase).To(Equal(kubevirtv1alpha1.MaintenanceSucceeded))
+	}
+
+	checkFailedReconcile := func() {
+		maintanance := &kubevirtv1alpha1.NodeMaintenance{}
+		err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(maintanance.Status.Phase).To(Equal(kubevirtv1alpha1.MaintenanceFailed))
+		Expect(len(maintanance.Status.LastError)).NotTo(Equal(0))
+	}
+
+	reconcileMaintenance := func(nm *kubevirtv1alpha1.NodeMaintenance) {
 		// Mock request to simulate Reconcile() being called on an event for a
 		// watched resource .
 		req = reconcile.Request{
@@ -84,9 +100,7 @@ var _ = Describe("updateCondition", func() {
 				Name: nm.ObjectMeta.Name,
 			},
 		}
-		res, err := r.Reconcile(req)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(res.Requeue).To(Equal(false))
+		r.Reconcile(req)
 	}
 
 	kubevirtTaintExist := func(node *corev1.Node) bool {
@@ -112,7 +126,7 @@ var _ = Describe("updateCondition", func() {
 		s := scheme.Scheme
 		s.AddKnownTypes(kubevirtv1alpha1.SchemeGroupVersion, nm)
 
-		SetFakeClients()
+		setFakeClients()
 
 		kubeSharedInformer := informers.NewSharedInformerFactoryWithOptions(cs, 2*time.Minute)
 		fakePodInformer := kubeSharedInformer.Core().V1().Pods()
@@ -126,19 +140,33 @@ var _ = Describe("updateCondition", func() {
 	Context("Node maintenanace controller reconciles a maintenanace CR for a node in the cluster", func() {
 
 		It("should reconcile once without failing", func() {
-			reconcile()
+			reconcileMaintenance(nm)
+			checkSuccesfulReconcile()
 		})
 		It("should reconcile and cordon node", func() {
-			reconcile()
+			reconcileMaintenance(nm)
+			checkSuccesfulReconcile()
 			node, err := cs.CoreV1().Nodes().Get(nm.Spec.NodeName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(node.Spec.Unschedulable).To(Equal(true))
 		})
 		It("should reconcile and taint node", func() {
-			reconcile()
+			reconcileMaintenance(nm)
+			checkSuccesfulReconcile()
 			node, err := cs.CoreV1().Nodes().Get(nm.Spec.NodeName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(kubevirtTaintExist(node)).To(Equal(true))
 		})
+		It("should fail on non existing node", func() {
+			nmCopy := nm.DeepCopy()
+			nmCopy.Spec.NodeName = "non-existing"
+			err := cl.Delete(context.TODO(), nm)
+			Expect(err).NotTo(HaveOccurred())
+			err = cl.Create(context.TODO(), nmCopy)
+			Expect(err).NotTo(HaveOccurred())
+			reconcileMaintenance(nmCopy)
+			checkFailedReconcile()
+		})
+
 	})
 })
