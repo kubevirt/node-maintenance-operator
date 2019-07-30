@@ -217,15 +217,15 @@ spec:
   nodeName: node02
   reason: "Test node maintenance"
 status:
-  phase: "Failed"
+  phase: "Running"
   lastError: "Last failure message"
   pendingPods: [pod-A,pod-B,pod-C]
 ```
 
-`phase` is the representation of the maintenance progress and can hold a string value of: Running|Succeeded|Failed.
+`phase` is the representation of the maintenance progress and can hold a string value of: Running|Succeeded.
 The phase is updated for each processing attempt on the CR.
 
-`lastError` represents the latest reason for Phase="Failed".
+`lastError` represents the latest error if any for the latest reconciliation.
 
 `pendingPods` is an array of pods that failed to be evicted in the latest reconciliation.
 

@@ -41,7 +41,8 @@ spec:
         status:
           properties:
             lastError:
-              description: LastError represents the latest reason for Phase="Failed"
+              description: LastError represents the latest error if any in the latest
+                reconciliation
               type: string
             pendingPods:
               description: PendingPods are pods that failed to be evicted in the latest
@@ -51,7 +52,7 @@ spec:
               type: array
             phase:
               description: Phase is the represtation of the maintenanace progress
-                (Running,Succeeded,Failed)
+                (Running,Succeeded)
               type: string
           type: object
   version: v1alpha1

@@ -338,8 +338,8 @@ func checkFailureStatus(t *testing.T, f *framework.Framework) {
 	if err != nil {
 		t.Logf("Failed to get %s nodeMaintenance: %v", nm.Name, err)
 	}
-	if nm.Status.Phase != operator.MaintenanceFailed {
-		t.Logf("Status.Phase on %s nodeMaintenance should have been %s", nm.Name, operator.MaintenanceFailed)
+	if nm.Status.Phase != operator.MaintenanceRunning {
+		t.Logf("Status.Phase on %s nodeMaintenance should have been %s", nm.Name, operator.MaintenanceRunning)
 	}
 	if len(nm.Status.LastError) == 0 {
 		t.Logf("Status.LastError on %s nodeMaintenance should have a value", nm.Name)

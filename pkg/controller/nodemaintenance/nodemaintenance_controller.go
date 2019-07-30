@@ -281,8 +281,6 @@ func (r *ReconcileNodeMaintenance) StartPodInformer(node *corev1.Node, stop <-ch
 }
 
 func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMaintenance, result reconcile.Result, err error) (reconcile.Result, error) {
-	//should always be false by default unless completed
-	nm.Status.Phase = kubevirtv1alpha1.MaintenanceFailed
 	nm.Status.LastError = err.Error()
 
 	if nm.Spec.NodeName != "" {

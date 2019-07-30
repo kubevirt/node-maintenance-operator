@@ -18,8 +18,6 @@ const (
 	MaintenanceRunning MaintenancePhase = "Running"
 	// MaintenanceSucceeded - maintenance has finished succesfuly, cordoned the node and evicted all pods (that could be evicted)
 	MaintenanceSucceeded MaintenancePhase = "Succeeded"
-	// MaintenanceFailed - maintenance has failed the last reconciliation cycle and will retry
-	MaintenanceFailed MaintenancePhase = "Failed"
 )
 
 // NodeMaintenanceSpec defines the desired state of NodeMaintenance
@@ -54,9 +52,9 @@ type NodeMaintenanceList struct {
 
 // NodeMaintenanceStatus defines the observed state of NodeMaintenance
 type NodeMaintenanceStatus struct {
-	// Phase is the represtation of the maintenanace progress (Running,Succeeded,Failed)
+	// Phase is the represtation of the maintenanace progress (Running,Succeeded)
 	Phase MaintenancePhase `json:"phase,omitempty"`
-	// LastError represents the latest reason for Phase="Failed"
+	// LastError represents the latest error if any in the latest reconciliation
 	LastError string `json:"lastError,omitempty"`
 	// PendingPods are pods that failed to be evicted in the latest reconciliation
 	PendingPods []corev1.Pod `json:"pendingPods,omitempty"`

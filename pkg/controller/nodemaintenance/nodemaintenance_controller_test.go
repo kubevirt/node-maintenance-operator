@@ -88,7 +88,6 @@ var _ = Describe("updateCondition", func() {
 		maintanance := &kubevirtv1alpha1.NodeMaintenance{}
 		err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(maintanance.Status.Phase).To(Equal(kubevirtv1alpha1.MaintenanceFailed))
 		Expect(len(maintanance.Status.LastError)).NotTo(Equal(0))
 	}
 
