@@ -43,8 +43,8 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
-	Reconciler = r
 	err := initDrainer(r, mgr.GetConfig())
+	Handler = r
 	return r, err
 }
 
@@ -134,7 +134,7 @@ type ReconcileNodeMaintenance struct {
 	podInformer cache.SharedInformer
 }
 
-var Reconciler ReconcileHandler
+var Handler ReconcileHandler
 
 // Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
 // and what is in the NodeMaintenance.Spec

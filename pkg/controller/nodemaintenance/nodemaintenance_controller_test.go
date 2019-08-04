@@ -120,7 +120,7 @@ var _ = Describe("updateCondition", func() {
 
 		ctrl = gomock.NewController(GinkgoT())
 		mockMaintenanceReconcile = NewMockReconcileHandler(ctrl)
-		Reconciler = mockMaintenanceReconcile
+		Handler = mockMaintenanceReconcile
 
 		s := scheme.Scheme
 		s.AddKnownTypes(kubevirtv1alpha1.SchemeGroupVersion, nm)
