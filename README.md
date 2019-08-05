@@ -180,25 +180,8 @@ $ kubectl apply -f deploy/crds/nodemaintenance_cr.yaml
 {"level":"info","ts":1551783365.747241,"logger":"controller_nodemaintenance","msg":"evicting pod \"virt-api-7fcd86776d-652tv\"\n"}
 {"level":"info","ts":1551783365.747243,"logger":"controller_nodemaintenance","msg":"evicting pod \"simple-deployment-1-m5qv9\"\n"}
 {"level":"info","ts":1551783365.7472336,"logger":"controller_nodemaintenance","msg":"evicting pod \"virt-controller-8987cffb8-29w26\"\n"}
-{"level":"info","ts":1551783365.7472618,"logger":"controller_nodemaintenance","msg":"evicting pod \"virt-controller-8987cffb8-jkgwx\"\n"}
-{"level":"info","ts":1551783365.747213,"logger":"controller_nodemaintenance","msg":"evicting pod \"cdi-http-import-server-875858fbd-qh425\"\n"}
-{"level":"info","ts":1551783365.7472284,"logger":"controller_nodemaintenance","msg":"evicting pod \"cdi-apiserver-76f5c57975-4d68g\"\n"}
-{"level":"info","ts":1551783365.7472222,"logger":"controller_nodemaintenance","msg":"evicting pod \"cdi-uploadproxy-5c8cf6d885-gqvf6\"\n"}
-{"level":"info","ts":1551783365.7471826,"logger":"controller_nodemaintenance","msg":"evicting pod \"cdi-deployment-7497dbd678-8ddf7\"\n"}
-{"level":"info","ts":1551783372.3010166,"logger":"controller_nodemaintenance","msg":"evicted Pod: simple-deployment-1-m5qv9"}
-{"level":"info","ts":1551783373.102215,"logger":"controller_nodemaintenance","msg":"evicted Pod: virt-operator-5559b7d86f-2wsnz"}
-{"level":"info","ts":1551783373.7016778,"logger":"controller_nodemaintenance","msg":"evicted Pod: virt-controller-8987cffb8-jkgwx"}
-{"level":"info","ts":1551783374.301048,"logger":"controller_nodemaintenance","msg":"evicted Pod: cdi-uploadproxy-5c8cf6d885-gqvf6"}
-{"level":"info","ts":1551783374.7006464,"logger":"controller_nodemaintenance","msg":"evicted Pod: cdi-apiserver-76f5c57975-4d68g"}
-{"level":"info","ts":1551783375.1010072,"logger":"controller_nodemaintenance","msg":"evicted Pod: virt-controller-8987cffb8-29w26"}
-{"level":"info","ts":1551783375.3010762,"logger":"controller_nodemaintenance","msg":"evicted Pod: virt-api-7fcd86776d-652tv"}
-{"level":"info","ts":1551783375.700461,"logger":"controller_nodemaintenance","msg":"evicted Pod: cdi-operator-55b47b74b5-9v25c"}
-{"level":"info","ts":1551783376.8579638,"logger":"controller_nodemaintenance","msg":"evicted Pod: cdi-deployment-7497dbd678-8ddf7"}
-{"level":"info","ts":1551783397.8587294,"logger":"controller_nodemaintenance","msg":"evicted Pod: cdi-http-import-server-875858fbd-qh425"}
-
-
+...
 ```
-
 
 ### Set Maintenance off - Delete the NodeMaintenance CR
 To remove maintenance from a node a `NodeMaintenance` CR with the node's name  should be deleted.
@@ -221,6 +204,30 @@ $ kubectl delete -f deploy/crds/nodemaintenance_cr.yaml
 {"level":"info","ts":1551794725.0022023,"logger":"controller_nodemaintenance","msg":"uncordon Node: node02"}
 
 ```
+
+## NodeMaintenance Status
+The NodeMaintenance CR can contain the following status fields:
+
+```yaml
+apiVersion: kubevirt.io/v1alpha1
+kind: NodeMaintenance
+metadata:
+  name: nodemaintenance-xyz
+spec:
+  nodeName: node02
+  reason: "Test node maintenance"
+status:
+  phase: "Running"
+  lastError: "Last failure message"
+  pendingPods: [pod-A,pod-B,pod-C]
+```
+
+`phase` is the representation of the maintenance progress and can hold a string value of: Running|Succeeded.
+The phase is updated for each processing attempt on the CR.
+
+`lastError` represents the latest error if any for the latest reconciliation.
+
+`pendingPods` is an array of pods that failed to be evicted in the latest reconciliation.
 
 ## Tests
 

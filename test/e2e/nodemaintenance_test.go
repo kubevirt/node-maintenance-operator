@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -111,7 +112,38 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		t.Fatal(err)
 	}
 
-	time.Sleep(60 * time.Second)
+	// Get Running phase first
+	if err := wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
+		nm := &operator.NodeMaintenance{}
+		err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+		if err != nil {
+			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
+			return false, nil
+		}
+		if nm.Status.Phase != operator.MaintenanceRunning {
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
+	}
+
+	// Wait for the maintanance operation to complete successfuly
+	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
+		nm := &operator.NodeMaintenance{}
+		err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+		if err != nil {
+			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
+			return false, nil
+		}
+		if nm.Status.Phase != operator.MaintenanceSucceeded {
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		checkFailureStatus(t, f)
+		t.Fatal(fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
+	}
 
 	node := &corev1.Node{}
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
@@ -120,10 +152,12 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	}
 
 	if node.Spec.Unschedulable == false {
+		checkFailureStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been unschedulable ", nodeName))
 	}
 
 	if !kubevirtTaintExist(node) {
+		checkFailureStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
@@ -260,18 +294,26 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	return nil
 }
 
-func getCurrentDeploymentHostName(t *testing.T, f *framework.Framework) (string, error) {
+func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.PodList, error) {
 	labelSelector := labels.SelectorFromSet(podLabel)
 	pods := &corev1.PodList{}
 	err := f.Client.List(goctx.TODO(), &client.ListOptions{LabelSelector: labelSelector}, pods)
 	if err != nil {
-		return "", err
+		return pods, err
 	}
 
 	if pods.Size() == 0 {
-		return "", fmt.Errorf("There are no pods deployed in cluster to perform the test")
+		return pods, fmt.Errorf("There are no pods deployed in cluster to perform the test")
 	}
 
+	return pods, nil
+}
+
+func getCurrentDeploymentHostName(t *testing.T, f *framework.Framework) (string, error) {
+	pods, err := getCurrentDeploymentPods(t, f)
+	if err != nil {
+		return "", nil
+	}
 	nodeName := pods.Items[0].Spec.NodeName
 	return nodeName, nil
 }
@@ -288,4 +330,27 @@ func kubevirtTaintExist(node *corev1.Node) bool {
 		}
 	}
 	return false
+}
+
+func checkFailureStatus(t *testing.T, f *framework.Framework) {
+	nm := &operator.NodeMaintenance{}
+	err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+	if err != nil {
+		t.Logf("Failed to get %s nodeMaintenance: %v", nm.Name, err)
+	}
+	if nm.Status.Phase != operator.MaintenanceRunning {
+		t.Logf("Status.Phase on %s nodeMaintenance should have been %s", nm.Name, operator.MaintenanceRunning)
+	}
+	if len(nm.Status.LastError) == 0 {
+		t.Logf("Status.LastError on %s nodeMaintenance should have a value", nm.Name)
+	}
+	if len(nm.Status.PendingPods) > 0 {
+		pods, err := getCurrentDeploymentPods(t, f)
+		if err != nil {
+			t.Logf("Failed to get deployment pods")
+		}
+		if pods.Items[0].Name != nm.Status.PendingPods[0].Name {
+			t.Logf("Status.PendingPods on %s nodeMaintenance does not contain pod %s", nm.Name, pods.Items[0].Name)
+		}
+	}
 }
