@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -56,8 +55,12 @@ type NodeMaintenanceStatus struct {
 	Phase MaintenancePhase `json:"phase,omitempty"`
 	// LastError represents the latest error if any in the latest reconciliation
 	LastError string `json:"lastError,omitempty"`
-	// PendingPods are pods that failed to be evicted in the latest reconciliation
-	PendingPods []corev1.Pod `json:"pendingPods,omitempty"`
+	// PendingPods is a list of pending pods for eviction
+	PendingPods []string `json:"pendingPods,omitempty"`
+	// TotalPods is the total number of all pods on the node from the start
+	TotalPods int `json:"totalpods,omitempty"`
+	// EvictionPods is the total number of pods up for eviction from the start
+	EvictionPods int `json:"evictionPods,omitempty"`
 }
 
 func init() {

@@ -185,8 +185,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, nil
 	}
 
-	instance.Status.Phase = kubevirtv1alpha1.MaintenanceRunning
-	err = r.client.Status().Update(context.TODO(), instance)
+	err = r.initMaintenanceStatus(instance)
 	if err != nil {
 		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Running\" status")
 		return r.reconcileAndError(instance, err)
@@ -280,13 +279,40 @@ func (r *ReconcileNodeMaintenance) StartPodInformer(node *corev1.Node, stop <-ch
 	return nil
 }
 
+func (r *ReconcileNodeMaintenance) initMaintenanceStatus(nm *kubevirtv1alpha1.NodeMaintenance) error {
+	if nm.Status.Phase == "" {
+		nm.Status.Phase = kubevirtv1alpha1.MaintenanceRunning
+		pendingList, errlist := r.drainer.GetPodsForDeletion(nm.Spec.NodeName)
+		if errlist != nil {
+			return fmt.Errorf("Failed to get pods for eviction while initializing status")
+		}
+		if pendingList != nil {
+			nm.Status.PendingPods = GetPodNameList(pendingList.Pods())
+		}
+		nm.Status.EvictionPods = len(nm.Status.PendingPods)
+
+		podlist := &corev1.PodList{}
+		listOps := &client.ListOptions{
+			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nm.Spec.NodeName}),
+		}
+		err := r.client.List(context.TODO(), listOps, podlist)
+		if err != nil {
+			return err
+		}
+		nm.Status.TotalPods = len(podlist.Items)
+		err = r.client.Status().Update(context.TODO(), nm)
+		return err
+	}
+	return nil
+}
+
 func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMaintenance, err error) (reconcile.Result, error) {
 	nm.Status.LastError = err.Error()
 
 	if nm.Spec.NodeName != "" {
 		pendingList, _ := r.drainer.GetPodsForDeletion(nm.Spec.NodeName)
 		if pendingList != nil {
-			nm.Status.PendingPods = pendingList.Pods()
+			nm.Status.PendingPods = GetPodNameList(pendingList.Pods())
 		}
 	}
 
