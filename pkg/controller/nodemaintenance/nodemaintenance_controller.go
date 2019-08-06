@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -219,6 +220,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	instance.Status.Phase = kubevirtv1alpha1.MaintenanceSucceeded
+	instance.Status.PendingPods = nil
 	err = r.client.Status().Update(context.TODO(), instance)
 	if err != nil {
 		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Succeeded\" status")
@@ -291,11 +293,8 @@ func (r *ReconcileNodeMaintenance) initMaintenanceStatus(nm *kubevirtv1alpha1.No
 		}
 		nm.Status.EvictionPods = len(nm.Status.PendingPods)
 
-		podlist := &corev1.PodList{}
-		listOps := &client.ListOptions{
-			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nm.Spec.NodeName}),
-		}
-		err := r.client.List(context.TODO(), listOps, podlist)
+		podlist, err := r.drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nm.Spec.NodeName}).String()})
 		if err != nil {
 			return err
 		}
