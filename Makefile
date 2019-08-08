@@ -64,7 +64,7 @@ gen-k8s-check: $(apis_sources)
 
 container-build: container-build-operator container-build-registry
 
-container-build-operator:
+container-build-operator: csv-generator
 	docker build -f build/Dockerfile -t $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG) .
 
 container-build-registry:
@@ -78,10 +78,13 @@ container-push-operator:
 container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
 
+csv-generator: gen-operator-sdk
+	./build/make-csv-generator.sh
+
 gen-operator-sdk:
 	./hack/gen-operator-sdk.sh ${OPERATOR_SDK_VERSION}
 
-manifests: gen-operator-sdk
+manifests: csv-generator
 	./build/make-manifests.sh ${IMAGE_TAG}
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
@@ -92,12 +95,12 @@ cluster-down:
 	./cluster/down.sh
 
 cluster-sync:
-	./cluster/sync.sh ${IMAGE_TAG}	
+	./cluster/sync.sh
 
 cluster-functest:
 	./cluster/functest.sh
 
 cluster-clean:
-	./cluster/clean.sh		
+	./cluster/clean.sh
 
 .PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean

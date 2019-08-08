@@ -9,8 +9,16 @@ ENV ENTRYPOINT=/entrypoint \
     OPERATOR=/node-maintenance-operator \
     USER_UID=1001 \
     USER_NAME=node-maintenance-operator
+
+LABEL org.kubevirt.hco.csv-generator.v1="/usr/bin/csv-generator"
+
 COPY --from=builder /go/src/kubevirt.io/node-maintenance-operator/build/bin/user_setup /user_setup
 RUN /user_setup
+
+COPY deploy/crds /deploy/crds
+COPY manifests/generated /manifests/generated
+COPY build/csv-generator.sh /usr/bin/csv-generator
+
 COPY --from=builder /node-maintenance-operator ${OPERATOR}
 COPY --from=builder /go/src/kubevirt.io/node-maintenance-operator/build/bin/entrypoint ${ENTRYPOINT}
 ENTRYPOINT ${ENTRYPOINT}
