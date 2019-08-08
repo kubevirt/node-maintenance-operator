@@ -5,8 +5,13 @@ set -ex
 SELF=$( realpath $0 )
 BASEPATH=$( dirname $SELF )
 
-# intentionally "impossible"/obviously wrong version
-TAG="${1:-v0.0.0}"
+TAG="${1:-latest}"
+
+if [ "${TAG}" == "latest" ];  then
+  echo "Manifests generation will not apply on \"latest\" tag"
+  exit 0
+fi
+
 VERSION=${TAG#v}  # prune initial 'v', which should be present
 
 BUNDLE_DIR="${2:-manifests/node-maintenance-operator}"
@@ -40,7 +45,7 @@ ${OPERATOR_SDK} olm-catalog gen-csv --csv-version ${VERSION}
 # move back original operator.yaml file
 mv operator.yaml deploy/operator.yaml
 
-./build/update-olm.py \
+python3 build/update-olm.py \
 	deploy/olm-catalog/node-maintenance-operator/${VERSION}/node-maintenance-operator.${TAG}.clusterserviceversion.yaml > \
 	${BUNDLE_DIR_VERSION}/node-maintenance-operator.${TAG}.clusterserviceversion.yaml
 

@@ -92,7 +92,7 @@ cluster-down:
 	./cluster/down.sh
 
 cluster-sync:
-	./cluster/sync.sh	
+	./cluster/sync.sh ${IMAGE_TAG}	
 
 cluster-functest:
 	./cluster/functest.sh

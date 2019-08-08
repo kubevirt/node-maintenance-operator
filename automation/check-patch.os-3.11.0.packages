@@ -1,2 +1,4 @@
 docker
 make
+python36
+python36-PyYAML
