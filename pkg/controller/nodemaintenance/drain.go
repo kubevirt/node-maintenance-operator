@@ -159,7 +159,7 @@ func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersio
 				errors = append(errors, err)
 			}
 		case <-globalTimeoutCh:
-			return fmt.Errorf("drain did not complete within %v", globalTimeout)
+			return fmt.Errorf("drain did not complete after %v interval. retrying", globalTimeout)
 		}
 	}
 	return utilerrors.NewAggregate(errors)
