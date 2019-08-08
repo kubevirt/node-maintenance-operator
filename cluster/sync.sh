@@ -33,7 +33,7 @@ cat deploy/role_binding.yaml >> _out/namespace-init.yaml
 echo -e "\n---\n" >> _out/namespace-init.yaml
 
 cp deploy/operator.yaml _out/operator.yaml
-sed -i 's,quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>,registry:5000/node-maintenance-operator,g' _out/operator.yaml
+sed -i "s,quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>,registry:5000/node-maintenance-operator:${TAG},g" _out/operator.yaml
 cat _out/operator.yaml >> _out/namespace-init.yaml
 rm _out/operator.yaml
 
