@@ -57,7 +57,23 @@ var _ = Describe("updateCondition", func() {
 			},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pod",
+					Name: "test-pod-1",
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "node01",
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+			},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pod-2",
 				},
 				Spec: corev1.PodSpec{
 					NodeName: "node01",
@@ -136,6 +152,34 @@ var _ = Describe("updateCondition", func() {
 		r.drainer.Client = cs
 		mockMaintenanceReconcile.EXPECT().StartPodInformer(gomock.Any(), gomock.Any()).Return(nil)
 	})
+
+	Context("Node maintenanace controller functions test", func() {
+
+		It("Node maintenanace should be initialized properly", func() {
+			r.initMaintenanceStatus(nm)
+			maintanance := &kubevirtv1alpha1.NodeMaintenance{}
+			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(maintanance.Status.Phase).To(Equal(kubevirtv1alpha1.MaintenanceRunning))
+			Expect(len(maintanance.Status.PendingPods)).To(Equal(2))
+			Expect(maintanance.Status.EvictionPods).To(Equal(2))
+			Expect(maintanance.Status.TotalPods).To(Equal(2))
+		})
+		It("Should not init Node maintenanace if already set", func() {
+			nmCopy := nm.DeepCopy()
+			nmCopy.Status.Phase = kubevirtv1alpha1.MaintenanceRunning
+			r.initMaintenanceStatus(nmCopy)
+			maintanance := &kubevirtv1alpha1.NodeMaintenance{}
+			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(maintanance.Status.Phase).NotTo(Equal(kubevirtv1alpha1.MaintenanceRunning))
+			Expect(len(maintanance.Status.PendingPods)).NotTo(Equal(2))
+			Expect(maintanance.Status.EvictionPods).NotTo(Equal(2))
+			Expect(maintanance.Status.TotalPods).NotTo(Equal(2))
+		})
+
+	})
+
 	Context("Node maintenanace controller reconciles a maintenanace CR for a node in the cluster", func() {
 
 		It("should reconcile once without failing", func() {

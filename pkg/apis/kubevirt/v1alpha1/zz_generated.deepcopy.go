@@ -5,7 +5,6 @@
 package v1alpha1
 
 import (
-	v1 "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -91,10 +90,8 @@ func (in *NodeMaintenanceStatus) DeepCopyInto(out *NodeMaintenanceStatus) {
 	*out = *in
 	if in.PendingPods != nil {
 		in, out := &in.PendingPods, &out.PendingPods
-		*out = make([]v1.Pod, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 	return
 }

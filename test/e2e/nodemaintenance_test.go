@@ -349,7 +349,7 @@ func checkFailureStatus(t *testing.T, f *framework.Framework) {
 		if err != nil {
 			t.Logf("Failed to get deployment pods")
 		}
-		if pods.Items[0].Name != nm.Status.PendingPods[0].Name {
+		if pods.Items[0].Name != nm.Status.PendingPods[0] {
 			t.Logf("Status.PendingPods on %s nodeMaintenance does not contain pod %s", nm.Name, pods.Items[0].Name)
 		}
 	}
