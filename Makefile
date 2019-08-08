@@ -2,7 +2,7 @@ all: fmt check
 
 OPERATOR_SDK_VERSION ?= v0.8.0
 IMAGE_REGISTRY ?= quay.io/kubevirt
-IMAGE_TAG ?= v0.4.0
+IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
@@ -64,7 +64,7 @@ gen-k8s-check: $(apis_sources)
 
 container-build: container-build-operator container-build-registry
 
-container-build-operator: manifests
+container-build-operator:
 	docker build -f build/Dockerfile -t $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG) .
 
 container-build-registry:
