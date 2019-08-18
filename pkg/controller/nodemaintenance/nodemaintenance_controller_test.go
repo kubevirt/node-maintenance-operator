@@ -49,6 +49,12 @@ var _ = Describe("updateCondition", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node01",
 				},
+				Spec: corev1.NodeSpec{
+					Taints: []corev1.Taint{{
+						Key:    "test",
+						Effect: corev1.TaintEffectPreferNoSchedule},
+					},
+				},
 			},
 			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -118,14 +124,14 @@ var _ = Describe("updateCondition", func() {
 		r.Reconcile(req)
 	}
 
-	kubevirtTaintExist := func(node *corev1.Node) bool {
-		kubevirtDrainTaint := corev1.Taint{
-			Key:    "kubevirt.io/drain",
-			Effect: corev1.TaintEffectNoSchedule,
+	taintExist := func(node *corev1.Node, key string, effect corev1.TaintEffect) bool {
+		checkTaint := corev1.Taint{
+			Key:    key,
+			Effect: effect,
 		}
 		taints := node.Spec.Taints
 		for _, taint := range taints {
-			if reflect.DeepEqual(taint, kubevirtDrainTaint) {
+			if reflect.DeepEqual(taint, checkTaint) {
 				return true
 			}
 		}
@@ -153,7 +159,7 @@ var _ = Describe("updateCondition", func() {
 		mockMaintenanceReconcile.EXPECT().StartPodInformer(gomock.Any(), gomock.Any()).Return(nil)
 	})
 
-	Context("Node maintenanace controller functions test", func() {
+	Context("Node maintenanace controller initialization test", func() {
 
 		It("Node maintenanace should be initialized properly", func() {
 			r.initMaintenanceStatus(nm)
@@ -180,6 +186,36 @@ var _ = Describe("updateCondition", func() {
 
 	})
 
+	Context("Node maintenanace controller taint function test", func() {
+		It("should add kubevirt NoSchedule taint and keep other existing taints", func() {
+			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			AddOrRemoveTaint(cs, node, true)
+			taintedNode, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(taintExist(taintedNode, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(true))
+			Expect(taintExist(taintedNode, "node.kubernetes.io/unschedulable", corev1.TaintEffectNoSchedule)).To(Equal(true))
+			Expect(taintExist(taintedNode, "test", corev1.TaintEffectPreferNoSchedule)).To(Equal(true))
+			Expect(len(taintedNode.Spec.Taints)).To(Equal(3))
+		})
+
+		It("should remove kubevirt NoSchedule taint and keep other existing taints", func() {
+			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(taintExist(node, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(false))
+			AddOrRemoveTaint(cs, node, true)
+			taintedNode, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(taintExist(taintedNode, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(true))
+			AddOrRemoveTaint(cs, taintedNode, false)
+			unTaintedNode, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(taintExist(unTaintedNode, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(false))
+			Expect(taintExist(unTaintedNode, "test", corev1.TaintEffectPreferNoSchedule)).To(Equal(true))
+			Expect(len(unTaintedNode.Spec.Taints)).To(Equal(1))
+		})
+	})
+
 	Context("Node maintenanace controller reconciles a maintenanace CR for a node in the cluster", func() {
 
 		It("should reconcile once without failing", func() {
@@ -198,7 +234,7 @@ var _ = Describe("updateCondition", func() {
 			checkSuccesfulReconcile()
 			node, err := cs.CoreV1().Nodes().Get(nm.Spec.NodeName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(kubevirtTaintExist(node)).To(Equal(true))
+			Expect(taintExist(node, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(true))
 		})
 		It("should fail on non existing node", func() {
 			nmCopy := nm.DeepCopy()
