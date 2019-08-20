@@ -18,6 +18,7 @@ var NodeUnschedulableTaint = &corev1.Taint{
 	Key:    "node.kubernetes.io/unschedulable",
 	Effect: corev1.TaintEffectNoSchedule,
 }
+var MaintenanceTaints = []corev1.Taint{*NodeUnschedulableTaint, *KubevirtDrainTaint}
 
 func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add bool) error {
 
@@ -30,19 +31,26 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 		return err
 	}
 
-	newTaints, err := json.Marshal([]corev1.Taint{*NodeUnschedulableTaint, *KubevirtDrainTaint})
-	if err != nil {
-		return err
-	}
-
 	if add {
+		newTaints := append([]corev1.Taint{}, MaintenanceTaints...)
+		addTaints(node.Spec.Taints, &newTaints)
+		addTaints, err := json.Marshal(newTaints)
+		if err != nil {
+			return err
+		}
 		taintStr = "add"
-		log.Info(fmt.Sprintf("Taints: %s will be added to node %s", string(newTaints), node.Name))
-		patch = fmt.Sprintf(`{ "op": "add", "path": "/spec/taints", "value": %s }`, string(newTaints))
+		log.Info(fmt.Sprintf("Maintenance taints will be added to node %s", node.Name))
+		patch = fmt.Sprintf(`{ "op": "add", "path": "/spec/taints", "value": %s }`, string(addTaints))
 	} else {
+		newTaints := append([]corev1.Taint{}, node.Spec.Taints...)
+		deleteTaints(MaintenanceTaints, &newTaints)
+		removeTaints, err := json.Marshal(newTaints)
+		if err != nil {
+			return err
+		}
 		taintStr = "remove"
-		log.Info(fmt.Sprintf("Taints: %s will be removed from node %s", string(newTaints), node.Name))
-		patch = fmt.Sprintf(`{ "op": "remove", "path": "/spec/taints", "value": %s }`, string(newTaints))
+		log.Info(fmt.Sprintf("Maintenance taints  will be removed from node %s", node.Name))
+		patch = fmt.Sprintf(`{ "op": "replace", "path": "/spec/taints", "value": %s }`, string(removeTaints))
 	}
 
 	log.Info(fmt.Sprintf("Applying %s taint %s on Node: %s", KubevirtDrainTaint.Key, taintStr, node.Name))
@@ -55,4 +63,39 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 	}
 
 	return nil
+}
+
+// addTaints adds the newTaints list to existing ones and updates the newTaints List.
+func addTaints(oldTaints []corev1.Taint, newTaints *[]corev1.Taint) {
+	for _, oldTaint := range oldTaints {
+		existsInNew := false
+		for _, taint := range *newTaints {
+			if taint.MatchTaint(&oldTaint) {
+				existsInNew = true
+				break
+			}
+		}
+		if !existsInNew {
+			*newTaints = append(*newTaints, oldTaint)
+		}
+	}
+}
+
+// deleteTaint removes all the taints that have the same key and effect to given taintToDelete.
+func deleteTaint(taints []corev1.Taint, taintToDelete *corev1.Taint) []corev1.Taint {
+	newTaints := []corev1.Taint{}
+	for i := range taints {
+		if taintToDelete.MatchTaint(&taints[i]) {
+			continue
+		}
+		newTaints = append(newTaints, taints[i])
+	}
+	return newTaints
+}
+
+// deleteTaints deletes the given taints from the node's taintlist.
+func deleteTaints(taintsToRemove []corev1.Taint, newTaints *[]corev1.Taint) {
+	for _, taintToRemove := range taintsToRemove {
+		*newTaints = deleteTaint(*newTaints, &taintToRemove)
+	}
 }
