@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,11 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
-
-var log = logf.Log.WithName("controller_nodemaintenance")
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -143,7 +141,7 @@ var Handler ReconcileHandler
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	reqLogger := log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name})
 	reqLogger.Info("Reconciling NodeMaintenance")
 
 	// Fetch the NodeMaintenance instance
@@ -154,7 +152,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.Info(fmt.Sprintf("NodeMaintenance Object: %s Deleted ", request.NamespacedName))
+			reqLogger.Infof("NodeMaintenance Object: %s Deleted ", request.NamespacedName)
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -188,14 +186,13 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	err = r.initMaintenanceStatus(instance)
 	if err != nil {
-		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Running\" status")
+		reqLogger.Errorf("Failed to update NodeMaintenance with \"Running\" status. Error: %v", err)
 		return r.reconcileAndError(instance, err)
 	}
 
 	nodeName := instance.Spec.NodeName
 
-	reqLogger.Info(fmt.Sprintf("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason))
-
+	reqLogger.Infof("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason)
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
 		return r.reconcileAndError(instance, err)
@@ -214,7 +211,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	stop := make(chan struct{})
 	defer close(stop)
 
-	reqLogger.Info(fmt.Sprintf("Evict all Pods from Node: %s", nodeName))
+	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
 	if err = drainPods(r, node, stop); err != nil {
 		return r.reconcileAndError(instance, err)
 	}
@@ -223,7 +220,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	instance.Status.PendingPods = nil
 	err = r.client.Status().Update(context.TODO(), instance)
 	if err != nil {
-		reqLogger.Error(err, "Failed to update NodeMaintenance with \"Succeeded\" status")
+		reqLogger.Errorf("Failed to update NodeMaintenance with \"Succeeded\" status. Error: %v", err)
 		return r.reconcileAndError(instance, err)
 	}
 
@@ -253,10 +250,10 @@ func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, err
 	node := &corev1.Node{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node)
 	if err != nil && errors.IsNotFound(err) {
-		log.Error(err, fmt.Sprintf("Node: %s cannot be found", nodeName))
+		log.Errorf("Node: %s cannot be found. Error: %v", nodeName, err)
 		return nil, err
 	} else if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to get Node %s: %v\n", nodeName, err))
+		log.Errorf("Failed to get Node %s: %v\n", nodeName, err)
 		return nil, err
 	}
 	return node, nil
@@ -317,7 +314,7 @@ func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMa
 
 	updateErr := r.client.Status().Update(context.TODO(), nm)
 	if updateErr != nil {
-		log.Error(updateErr, "Failed to update NodeMaintenance with \"Failed\" status")
+		log.Errorf("Failed to update NodeMaintenance with \"Failed\" status. Error: %v", updateErr)
 	}
 	return reconcile.Result{}, err
 }
