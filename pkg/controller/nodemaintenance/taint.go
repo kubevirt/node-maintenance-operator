@@ -3,6 +3,7 @@ package nodemaintenance
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -39,7 +40,7 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 			return err
 		}
 		taintStr = "add"
-		log.Info(fmt.Sprintf("Maintenance taints will be added to node %s", node.Name))
+		log.Infof("Maintenance taints will be added to node %s", node.Name)
 		patch = fmt.Sprintf(`{ "op": "add", "path": "/spec/taints", "value": %s }`, string(addTaints))
 	} else {
 		newTaints := append([]corev1.Taint{}, node.Spec.Taints...)
@@ -49,14 +50,14 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 			return err
 		}
 		taintStr = "remove"
-		log.Info(fmt.Sprintf("Maintenance taints  will be removed from node %s", node.Name))
+		log.Infof("Maintenance taints  will be removed from node %s", node.Name)
 		patch = fmt.Sprintf(`{ "op": "replace", "path": "/spec/taints", "value": %s }`, string(removeTaints))
 	}
 
-	log.Info(fmt.Sprintf("Applying %s taint %s on Node: %s", KubevirtDrainTaint.Key, taintStr, node.Name))
+	log.Infof("Applying %s taint %s on Node: %s", KubevirtDrainTaint.Key, taintStr, node.Name)
 
 	test := fmt.Sprintf(`{ "op": "test", "path": "/spec/taints", "value": %s }`, string(oldTaints))
-	log.Info(fmt.Sprintf("Patching taints on Node: %s", node.Name))
+	log.Infof("Patching taints on Node: %s", node.Name)
 	_, err = client.Patch(node.Name, types.JSONPatchType, []byte(fmt.Sprintf("[ %s, %s ]", test, patch)))
 	if err != nil {
 		return fmt.Errorf("patching node taints failed: %v", err)

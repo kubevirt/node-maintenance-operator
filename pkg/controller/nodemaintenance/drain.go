@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -18,13 +19,13 @@ func runCordonOrUncordon(r *ReconcileNodeMaintenance, node *corev1.Node, desired
 		cordonOrUncordon = "un" + cordonOrUncordon
 	}
 
-	log.Info(fmt.Sprintf("%s Node: %s", cordonOrUncordon, node.Name))
+	log.Infof("%s Node: %s", cordonOrUncordon, node.Name)
 
 	c := drain.NewCordonHelper(node)
 	if updateRequired := c.UpdateIfRequired(desired); updateRequired {
 		err, patchErr := c.PatchOrReplace(r.drainer.Client)
 		if patchErr != nil {
-			log.Error(err, fmt.Sprintf("Unable to %s Node %s \n", cordonOrUncordon, node.Name))
+			log.Errorf("Unable to %s Node %s \n Error: %v", cordonOrUncordon, node.Name, err)
 		}
 		if err != nil {
 			return err
@@ -42,23 +43,23 @@ func drainPods(r *ReconcileNodeMaintenance, node *corev1.Node, stop <-chan struc
 	}
 
 	if err := Handler.StartPodInformer(node, stop); err != nil {
-		log.Error(err, fmt.Sprintf("Failed to start pod informer \n"))
+		log.Errorf("Failed to start pod informer \n Error: %v", err)
 		return err
 	}
 
 	if warnings := list.Warnings(); warnings != "" {
-		log.Info(fmt.Sprintf("WARNING: %s\n", warnings))
+		log.Warnf("WARNING: %s\n", warnings)
 	}
 
 	if err := deleteOrEvictPods(r, list.Pods()); err != nil {
 		pendingList, newErrs := r.drainer.GetPodsForDeletion(nodeName)
-		log.Error(err, fmt.Sprintf("There are pending pods in node %q when an error occurred: \n", nodeName))
+		log.Errorf("There are pending pods in node %q when an error occurred: \n Error: %v", nodeName, err)
 
 		for _, pendingPod := range pendingList.Pods() {
-			log.Error(err, fmt.Sprintf("%s/%s\n", "pod", pendingPod.Name))
+			log.Errorf("%s/%s\n Error: %v", "pod", pendingPod.Name, err)
 		}
 		if newErrs != nil {
-			log.Error(err, fmt.Sprintf("following errors also occurred:\n%s", utilerrors.NewAggregate(newErrs)))
+			log.Errorf("following errors also occurred:\n%s \n Error: %v", utilerrors.NewAggregate(newErrs), err)
 		}
 		return err
 	}
@@ -115,7 +116,7 @@ func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersio
 	for _, pod := range pods {
 		go func(pod corev1.Pod, returnCh chan error) {
 			for {
-				log.Info(fmt.Sprintf("evicting pod %q\n", pod.Name))
+				log.Infof("evicting pod %q\n", pod.Name)
 				err := r.drainer.EvictPod(pod, policyGroupVersion)
 				if err == nil {
 					break
@@ -123,7 +124,7 @@ func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersio
 					returnCh <- nil
 					return
 				} else if apierrors.IsTooManyRequests(err) {
-					log.Error(err, fmt.Sprintf("error when evicting pod %q (will retry after 5s)\n", pod.Name))
+					log.Errorf("error when evicting pod %q (will retry after 5s)\n Error: %v", pod.Name, err)
 					time.Sleep(5 * time.Second)
 				} else {
 					returnCh <- fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
@@ -180,7 +181,7 @@ func waitForDelete(pods []corev1.Pod, interval, timeout time.Duration, usingEvic
 			if err != nil {
 				return false, err
 			} else if !exists {
-				log.Info(fmt.Sprintf("%s Pod: %s", verbStr, pod.Name))
+				log.Infof("%s Pod: %s", verbStr, pod.Name)
 				continue
 			} else {
 				pendingPods = append(pendingPods, pods[i])
