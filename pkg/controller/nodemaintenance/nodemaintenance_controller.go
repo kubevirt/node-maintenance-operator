@@ -160,12 +160,6 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	nodeName := instance.Spec.NodeName
-	node, err := r.fetchNode(nodeName)
-	if err != nil {
-		return r.reconcileAndError(instance, err)
-	}
-
 	// Add finalizer when object is created
 	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
@@ -178,8 +172,10 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		// The object is being deleted
 		if ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
-			if err := r.stopNodeMaintenance(nodeName); err != nil {
-				return r.reconcileAndError(instance, err)
+			if err := r.stopNodeMaintenance(instance.Spec.NodeName); err != nil {
+				if errors.IsNotFound(err) == false {
+					return r.reconcileAndError(instance, err)
+				}
 			}
 			// Remove our finalizer from the list and update it.
 			instance.ObjectMeta.Finalizers = RemoveString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
@@ -190,10 +186,17 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Infof("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason)
 	err = r.initMaintenanceStatus(instance)
 	if err != nil {
 		reqLogger.Errorf("Failed to update NodeMaintenance with \"Running\" status. Error: %v", err)
+		return r.reconcileAndError(instance, err)
+	}
+
+	nodeName := instance.Spec.NodeName
+
+	reqLogger.Infof("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason)
+	node, err := r.fetchNode(nodeName)
+	if err != nil {
 		return r.reconcileAndError(instance, err)
 	}
 
