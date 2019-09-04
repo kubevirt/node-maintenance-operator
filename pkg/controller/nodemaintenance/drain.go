@@ -51,7 +51,7 @@ func drainPods(r *ReconcileNodeMaintenance, node *corev1.Node, stop <-chan struc
 		log.Warnf("WARNING: %s\n", warnings)
 	}
 
-	if err := deleteOrEvictPods(r, list.Pods()); err != nil {
+	if err := deleteOrEvictPods(r, list.Pods(), stop); err != nil {
 		pendingList, newErrs := r.drainer.GetPodsForDeletion(nodeName)
 		log.Errorf("There are pending pods in node %q when an error occurred: \n Error: %v", nodeName, err)
 
@@ -67,7 +67,7 @@ func drainPods(r *ReconcileNodeMaintenance, node *corev1.Node, stop <-chan struc
 }
 
 // deleteOrEvictPods deletes or evicts the pods on the api server
-func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod) error {
+func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, stop <-chan struct{}) error {
 	if len(pods) == 0 {
 		return nil
 	}
@@ -86,7 +86,7 @@ func deleteOrEvictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod) error {
 	}
 
 	if len(policyGroupVersion) > 0 {
-		return evictPods(r, pods, policyGroupVersion, getPodFn)
+		return evictPods(r, pods, policyGroupVersion, getPodFn, stop)
 	}
 	return deletePods(r, pods, getPodFn)
 
@@ -110,32 +110,39 @@ func deletePods(r *ReconcileNodeMaintenance, pods []corev1.Pod, getPodFn func(na
 	return err
 }
 
-func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersion string, getPodFn func(namespacedName string) (bool, error)) error {
+func evictPods(r *ReconcileNodeMaintenance, pods []corev1.Pod, policyGroupVersion string,
+	getPodFn func(namespacedName string) (bool, error), stop <-chan struct{}) error {
+
 	returnCh := make(chan error, 1)
 
 	for _, pod := range pods {
 		go func(pod corev1.Pod, returnCh chan error) {
 			for {
-				log.Infof("evicting pod %q\n", pod.Name)
-				err := r.drainer.EvictPod(pod, policyGroupVersion)
-				if err == nil {
-					break
-				} else if apierrors.IsNotFound(err) {
-					returnCh <- nil
-					return
-				} else if apierrors.IsTooManyRequests(err) {
-					log.Errorf("error when evicting pod %q (will retry after 5s)\n Error: %v", pod.Name, err)
-					time.Sleep(5 * time.Second)
-				} else {
-					returnCh <- fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
+				select {
+				default:
+					log.Infof("evicting pod %q\n", pod.Name)
+					err := r.drainer.EvictPod(pod, policyGroupVersion)
+					if err == nil {
+						_, err := waitForDelete([]corev1.Pod{pod}, 1*time.Second, time.Duration(math.MaxInt64), true, getPodFn)
+						if err == nil {
+							returnCh <- nil
+						} else {
+							returnCh <- fmt.Errorf("error when waiting for pod %q terminating: %v", pod.Name, err)
+						}
+						break
+					} else if apierrors.IsNotFound(err) {
+						returnCh <- nil
+						return
+					} else if apierrors.IsTooManyRequests(err) {
+						log.Errorf("error when evicting pod %q (will retry after 5s)\n Error: %v", pod.Name, err)
+						time.Sleep(5 * time.Second)
+					} else {
+						returnCh <- fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
+						return
+					}
+				case <-stop:
 					return
 				}
-			}
-			_, err := waitForDelete([]corev1.Pod{pod}, 1*time.Second, time.Duration(math.MaxInt64), true, getPodFn)
-			if err == nil {
-				returnCh <- nil
-			} else {
-				returnCh <- fmt.Errorf("error when waiting for pod %q terminating: %v", pod.Name, err)
 			}
 		}(pod, returnCh)
 	}
