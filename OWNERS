@@ -1,0 +1,8 @@
+filters:
+  ".*":
+    reviewers:
+      - yanirq
+      - ksimon1
+    approvers:
+      - yanirq
+      - ksimon1
