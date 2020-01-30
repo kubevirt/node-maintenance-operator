@@ -21,6 +21,26 @@ var NodeUnschedulableTaint = &corev1.Taint{
 }
 var MaintenanceTaints = []corev1.Taint{*NodeUnschedulableTaint, *KubevirtDrainTaint}
 
+// compute size of intersection between MaintenanceTaints and taints on node
+func CountDesiredTaintOnNode(node *corev1.Node) (int, int) {
+	numTaints := 0
+
+	for _, taint := range node.Spec.Taints {
+		hasTaint := false
+		for _, desiredTaint := range MaintenanceTaints {
+			if taint.MatchTaint(&desiredTaint) {
+				hasTaint = true
+				break
+			}
+		}
+		if hasTaint {
+			numTaints += 1
+		}
+	}
+	return numTaints, len(MaintenanceTaints)
+
+}
+
 func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add bool) error {
 
 	taintStr := ""
