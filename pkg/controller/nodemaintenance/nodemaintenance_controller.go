@@ -4,33 +4,140 @@ package nodemaintenance
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"net"
+	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	coordv1beta1 "k8s.io/api/coordination/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	kubernetes "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubernetes/pkg/kubectl/drain"
-	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog"
+
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	drain "k8s.io/kubectl/pkg/drain"
 )
 
-// Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
+var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
+
+const (
+	NodeMaintenanceSpecAnnotation   = "lifecycle.openshift.io/maintenance"
+	NodeMaintenanceStatusAnnotation = "lifecycle.openshift.io/maintenance-status"
+	LeaseHolderIdentity             = "node-maintenance"
+	LeasePaddingSeconds             = 30
+	WaitForLeasePeriod              = 10 * time.Second
+)
+
+const (
+	MinMaintenenceWindowSeconds = 300              // minimum maintenance window size. (must be bigger than LeasePaddingSeconds)
+	EvictionTimeSlice           = 20 * time.Second // max. time in seconds that eviction may block.
+	RequeuDrainingWaitTime      = 10 * time.Second // time to reqeueu draining if not completed.
+)
+
+type LeaseStatus int
+
+const (
+	LeaseStatusNotFound               LeaseStatus = -1 // currently not active lease
+	LeaseStatusOwnedByMe              LeaseStatus = 1  // there is a lease active right now
+	LeaseStatusOwnedByDifferentHolder LeaseStatus = 3
+	LeaseStatusFail                   LeaseStatus = 6
+)
+
+type NodeMaintenanceStatusType string
+
+const (
+	NodeStateWaiting     NodeMaintenanceStatusType = "waiting"
+	NodeStateNew         NodeMaintenanceStatusType = "new"
+	NodeStateNewCreate   NodeMaintenanceStatusType = "new,create"
+	NodeStateNewAcquired NodeMaintenanceStatusType = "new,acquired"
+	NodeStateNewStale    NodeMaintenanceStatusType = "new,stale"
+	NodeStateNewRecreate NodeMaintenanceStatusType = "new,recreate"
+	NodeStateUpdated     NodeMaintenanceStatusType = "updated"
+	NodeStateActive      NodeMaintenanceStatusType = "active"
+	NodeStateEnded       NodeMaintenanceStatusType = "ended"
+
+	NodeStateNone NodeMaintenanceStatusType = "" // placeholder
+)
+
+type TransitionAction int
+
+const (
+	TransitionSet      TransitionAction = 0
+	TransitionInc      TransitionAction = 1
+	TransitionNoChange TransitionAction = 2
+)
+
+// parse this out of NodeMaintenanceSpecAnnotation annotation
+type ReconcileNodeMaintenanceSpecInfo int32
+
+// parse this out of NodeMaintenanceStatusAnnotation annotation
+type ReconcileNodeMaintenanceStatusInfo string
+
+type ClientFactory interface {
+	createClient(config *rest.Config) (kubernetes.Interface, error)
+}
+
+type ClientFactoryTest struct {
+	client kubernetes.Interface
+}
+
+func (r *ClientFactoryTest) createClient(config *rest.Config) (kubernetes.Interface, error) {
+	return r.client, nil
+}
+
+// ReconcileNodeMaintenance reconciles a node object
+type ReconcileNodeMaintenance struct {
+	clientFactory ClientFactory
+	client        client.Client
+	config        *rest.Config
+
+	clientset kubernetes.Interface
+	drainer   *drain.Helper
+
+	// used only for the duration of one reconcile call. transient value.
+	// That's ok as there is one go routine that handles reconciles (here)
+	reqLogger      *log.Entry
+	node           *corev1.Node
+	specAnnoData   *ReconcileNodeMaintenanceSpecInfo
+	statusAnnoData *ReconcileNodeMaintenanceStatusInfo
+}
+
+type DeadlineCheck struct {
+	isSet    bool
+	deadline time.Time
+}
+
+func (exp DeadlineCheck) isExpired() bool {
+	return exp.isSet && exp.deadline.After(time.Now())
+}
+func (exp DeadlineCheck) DurationUntilExpiration() time.Duration {
+	if exp.isSet {
+		exp.deadline.Sub(time.Now())
+	}
+	return time.Duration(math.MaxInt64)
+}
+
+var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
+
+// Add creates a new NodeMaintenance Controller and adds it to the Manager.
+// The Manager will set fields on the Controller and start it when the Manager is started.
 func Add(mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
@@ -39,12 +146,44 @@ func Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-// newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
-	err := initDrainer(r, mgr.GetConfig())
-	Handler = r
-	return r, err
+
+	reconciler := &ReconcileNodeMaintenance{
+		client: mgr.GetClient(),
+		config: mgr.GetConfig(),
+	}
+	if err := reconciler.initDrainer(); err != nil {
+		return nil, fmt.Errorf("failed to init reconciler %v", err)
+	}
+
+	return reconciler, nil
+}
+
+func (r *ReconcileNodeMaintenance) createClient(config *rest.Config) (kubernetes.Interface, error) {
+
+	cs, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	/*
+		fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name})
+
+		lw := cache.NewListWatchFromClient(
+			r.drainer.Client.CoreV1().RESTClient(),
+			"pods",
+			corev1.NamespaceAll,
+			fieldSelector)
+
+		r.podInformer = cache.NewSharedInformer(lw, &corev1.Pod{}, 30*time.Minute)
+
+		go r.podInformer.Run(stop)
+		if !cache.WaitForCacheSync(stop, r.podInformer.HasSynced) {
+			return fmt.Errorf("Timed out waiting for caches to sync")
+		}
+	*/
+
+	return cs, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -55,268 +194,615 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	pred := predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			newObj := e.ObjectNew.(*kubevirtv1alpha1.NodeMaintenance)
-			return !newObj.DeletionTimestamp.IsZero()
-		},
-	}
-
-	// Create a source for watching noe maintenance events.
-	src := &source.Kind{Type: &kubevirtv1alpha1.NodeMaintenance{}}
-
-	// Watch for changes to primary resource NodeMaintenance
-	err = c.Watch(src, &handler.EnqueueRequestForObject{}, pred)
-	if err != nil {
-		return err
-	}
-	return nil
+	return c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 }
 
-func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
-
-	r.drainer = &drain.Helper{}
-
-	//Continue even if there are pods not managed by a ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet.
-	//This is required because VirtualMachineInstance pods are not owned by a ReplicaSet or DaemonSet controller.
-	//This means that the drain operation can’t guarantee that the pods being terminated on the target node will get
-	//re-scheduled replacements placed else where in the cluster after the pods are evicted.
-	//KubeVirt has its own controllers which manage the underlying VirtualMachineInstance pods.
-	//Each controller behaves differently to a VirtualMachineInstance being evicted.
-	r.drainer.Force = true
-
-	//Continue even if there are pods using emptyDir (local data that will be deleted when the node is drained).
-	//This is necessary for removing any pod that utilizes an emptyDir volume.
-	//The VirtualMachineInstance Pod does use emptryDir volumes,
-	//however the data in those volumes are ephemeral which means it is safe to delete after termination.
-	r.drainer.DeleteLocalData = true
-
-	//Ignore DaemonSet-managed pods.
-	//This is required because every node running a VirtualMachineInstance will also be running our helper DaemonSet called virt-handler.
-	//This flag indicates that it is safe to proceed with the eviction and to just ignore DaemonSets.
-	r.drainer.IgnoreAllDaemonSets = true
-
-	//Period of time in seconds given to each pod to terminate gracefully. If negative, the default value specified in the pod will be used.
-	r.drainer.GracePeriodSeconds = -1
-
-	// TODO - add logical value or attach from the maintancene CR
-	//The length of time to wait before giving up, zero means infinite
-	r.drainer.Timeout = time.Minute
-
-	// TODO - consider pod selectors (only for VMIs + others ?)
-	//Label selector to filter pods on the node
-	//r.drainer.PodSelector = "kubevirt.io=virt-launcher"
-
-	cs, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-	r.drainer.Client = cs
-	r.drainer.DryRun = false
-
-	return nil
-}
-
-var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
-
-type ReconcileHandler interface {
-	StartPodInformer(node *corev1.Node, stop <-chan struct{}) error
-}
-
-// ReconcileNodeMaintenance reconciles a NodeMaintenance object
-type ReconcileNodeMaintenance struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client      client.Client
-	scheme      *runtime.Scheme
-	drainer     *drain.Helper
-	podInformer cache.SharedInformer
-}
-
-var Handler ReconcileHandler
-
-// Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
-// and what is in the NodeMaintenance.Spec
+// Reconcile monitors Nodes and creates the MachineRemediation object when the node has reboot annotation.
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name})
-	reqLogger.Info("Reconciling NodeMaintenance")
 
-	// Fetch the NodeMaintenance instance
-	instance := &kubevirtv1alpha1.NodeMaintenance{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
-	if err != nil {
+	r.reqLogger = log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name})
+	r.reqLogger.Debug("Reconciling node ", request.Name)
+
+	// Get node from request
+	r.node = &corev1.Node{}
+
+	if err := r.client.Get(context.TODO(), request.NamespacedName, r.node); err != nil {
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Infof("NodeMaintenance Object: %s Deleted ", request.NamespacedName)
+			r.reqLogger.Info("node not found")
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
-		reqLogger.Info("Error reading the request object, requeuing.")
+		r.reqLogger.Errorf("node not found. name %s error %v", request.Name, err)
 		return reconcile.Result{}, err
 	}
 
-	// Add finalizer when object is created
-	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
-			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
-			if err := r.client.Update(context.TODO(), instance); err != nil {
-				return r.reconcileAndError(instance, err)
-			}
+	// parse status & spec, create initial status object on first call
+	err := r.parseAnnotations()
+	if err != nil {
+		r.reqLogger.Errorf("request parsing error. error %v", err)
+		return reconcile.Result{}, err
+	}
+
+	if r.specAnnoData == nil && r.statusAnnoData == nil {
+		// nothing to do here.
+		return reconcile.Result{}, err
+	}
+
+	if r.specAnnoData != nil {
+		return r.processMaintModeOn()
+	}
+	return r.processMaintModeOff()
+
+	/*
+		if isTimeoutError(err) {
+			r.reqLogger.Infof("timeout error. name %s state %s error %v", request.Name, statusAnnoData.Status, err)
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		} else if err != nil {
+			r.reqLogger.Errorf("error. name %s state %s error %v", request.Name, statusAnnoData.Status, err)
 		}
+
+		// nothin to do on the node, no relevent annotations have been set
+		return reconcile.Result{}, err
+	*/
+}
+
+func (r *ReconcileNodeMaintenance) parseAnnotations() error {
+
+	r.specAnnoData = nil
+	r.statusAnnoData = nil
+
+	if r.node.ObjectMeta.Annotations == nil {
+		// no annotations on node, nothing to do here.
+		return nil
+	}
+
+	val, exists := r.node.ObjectMeta.Annotations[NodeMaintenanceSpecAnnotation]
+	if exists {
+		nval, err := strconv.ParseInt(val, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid integer value annotation: %s value: %s err: %v", NodeMaintenanceSpecAnnotation, val, err)
+		}
+
+		ret := ReconcileNodeMaintenanceSpecInfo(int32(nval))
+		r.specAnnoData = &ret
+
+		if ret < MinMaintenenceWindowSeconds {
+			err := fmt.Errorf("maintenance window size too small annotation: %s currentValue: %d minValue: %d", NodeMaintenanceSpecAnnotation, ret, MinMaintenenceWindowSeconds)
+			return err
+		}
+		return nil
+	}
+
+	val, exists = r.node.ObjectMeta.Annotations[NodeMaintenanceStatusAnnotation]
+	if exists {
+		ret := ReconcileNodeMaintenanceStatusInfo(val)
+		r.statusAnnoData = &ret
+	}
+
+	return nil
+}
+
+func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error) {
+
+	// handling of lease as a prerequisite to state transitions.
+	leaseStatus, _, lease := r.doesLeaseExist()
+
+	if leaseStatus == LeaseStatusFail || (leaseStatus == LeaseStatusOwnedByDifferentHolder && isLeaseValid(lease) && !isLeaseExpired(lease, false)) {
+		r.reqLogger.Debugf("no lease available, wait")
+		r.setAnnotations(NodeStateWaiting, false)
+		return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+	}
+
+	var err error
+
+	if leaseStatus == LeaseStatusNotFound {
+		r.reqLogger.Debugf("create new lease - not found")
+
+		if lease, err = r.createOrUpdateLease(nil, TransitionSet, NodeStateNewCreate); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+	}
+
+	if leaseStatus == LeaseStatusOwnedByDifferentHolder {
+		r.reqLogger.Debugf("update lease - invalid/different owner ")
+
+		if _, err = r.createOrUpdateLease(lease, TransitionInc, NodeStateNewAcquired); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+
+	}
+
+	if !isLeaseValid(lease) || isLeaseDurationZero(lease) {
+		r.reqLogger.Debugf("update lease - not valid or zero duration")
+
+		if _, err = r.createOrUpdateLease(lease, TransitionInc, NodeStateNew); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+
+	}
+
+	if r.isLeaseDurationChanged(lease) {
+		r.reqLogger.Debugf("update lease - lease duration change requested")
+
+		if _, err = r.createOrUpdateLease(lease, TransitionNoChange, NodeStateUpdated); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+
+	}
+
+	if isLeaseExpired(lease, false) {
+		r.reqLogger.Debugf("update lease - lease expired")
+
+		if _, err = r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNewStale); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+	}
+
+	if r.statusAnnoData != nil && *r.statusAnnoData == ReconcileNodeMaintenanceStatusInfo(NodeStateEnded) {
+		r.reqLogger.Debugf("update lease - lease ended")
+
+		if _, err = r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNewRecreate); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+	}
+
+	dcheck := DeadlineCheck{}
+
+	//if  leaseOverdue {
+	if isLeaseExpired(lease, true) {
+		r.reqLogger.Debugf("lease deadline + padding is expired. do actions")
+
+		r.setAnnotations(NodeStateEnded, true)
+
+		dcheck = DeadlineCheck{isSet: true, deadline: leaseDeadline(lease)}
+
+		if err := r.runCordonOrUncordon(true, dcheck); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+
+		if err := r.cancelEviction(dcheck); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+		if !dcheck.isExpired() {
+			r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone) // set lease duration to 0
+		}
+
 	} else {
-		// The object is being deleted
-		if ContainsString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer) {
-			// Stop node maintenance - uncordon and remove live migration taint from the node.
-			if err := r.stopNodeMaintenance(instance.Spec.NodeName); err != nil {
-				if errors.IsNotFound(err) == false {
-					return r.reconcileAndError(instance, err)
-				}
-			}
-			// Remove our finalizer from the list and update it.
-			instance.ObjectMeta.Finalizers = RemoveString(instance.ObjectMeta.Finalizers, kubevirtv1alpha1.NodeMaintenanceFinalizer)
-			if err := r.client.Update(context.Background(), instance); err != nil {
-				return r.reconcileAndError(instance, err)
-			}
+		r.reqLogger.Debugf("lease ok. do actions")
+
+		if err := r.runCordonOrUncordon(true, dcheck); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 		}
-		return reconcile.Result{}, nil
+
+		if err := r.evictPods(dcheck); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
+
+		r.setAnnotations(NodeStateActive, false)
+
 	}
-
-	err = r.initMaintenanceStatus(instance)
-	if err != nil {
-		reqLogger.Errorf("Failed to update NodeMaintenance with \"Running\" status. Error: %v", err)
-		return r.reconcileAndError(instance, err)
-	}
-
-	nodeName := instance.Spec.NodeName
-
-	reqLogger.Infof("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason)
-	node, err := r.fetchNode(nodeName)
-	if err != nil {
-		return r.reconcileAndError(instance, err)
-	}
-
-	// Cordon node
-	err = AddOrRemoveTaint(r.drainer.Client, node, true)
-	if err != nil {
-		return r.reconcileAndError(instance, err)
-	}
-
-	if err = runCordonOrUncordon(r, node, true); err != nil {
-		return r.reconcileAndError(instance, err)
-	}
-
-	stop := make(chan struct{})
-	defer close(stop)
-
-	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
-	if err = drainPods(r, node, stop); err != nil {
-		return r.reconcileAndError(instance, err)
-	}
-
-	instance.Status.Phase = kubevirtv1alpha1.MaintenanceSucceeded
-	instance.Status.PendingPods = nil
-	err = r.client.Status().Update(context.TODO(), instance)
-	if err != nil {
-		reqLogger.Errorf("Failed to update NodeMaintenance with \"Succeeded\" status. Error: %v", err)
-		return r.reconcileAndError(instance, err)
-	}
-
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
-	node, err := r.fetchNode(nodeName)
-	if err != nil {
-		return err
+func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, error) {
+
+	leaseStatus, _, lease := r.doesLeaseExist()
+	if leaseStatus == LeaseStatusOwnedByMe {
+		dcheck := DeadlineCheck{isSet: true, deadline: leaseDeadline(lease)}
+
+		if !isLeaseExpired(lease, false) {
+
+			r.setAnnotations(NodeStateEnded, false)
+
+			if err := r.runCordonOrUncordon(false, dcheck); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+
+			if err := r.cancelEviction(dcheck); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+
+		} else if !isLeaseDurationZero(lease) {
+
+			tmpDurationInSeconds := int32(LeasePaddingSeconds)
+			lease.Spec.LeaseDurationSeconds = &tmpDurationInSeconds
+			lease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now()}
+
+			if err := r.client.Update(context.TODO(), lease); err != nil {
+				r.reqLogger.Errorf("Failed to update the lease. error: %v", err)
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+
+			if err := r.runCordonOrUncordon(false, dcheck); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+
+		}
+		if !dcheck.isExpired() {
+			r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone) // set lease duration to 0.
+		}
+
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileNodeMaintenance) isLeaseDurationChanged(lease *coordv1beta1.Lease) bool {
+	if lease.Spec.LeaseDurationSeconds != nil {
+		value := int32(*r.specAnnoData)
+		return *lease.Spec.LeaseDurationSeconds != value+LeasePaddingSeconds
+	}
+	return false
+}
+
+func leaseDeadline(lease *coordv1beta1.Lease) time.Time {
+
+	if lease.Spec.AcquireTime != nil {
+		leaseDeadline := (*lease.Spec.AcquireTime).Time
+
+		if lease.Spec.LeaseDurationSeconds != nil {
+			leaseDeadline.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
+		}
+		return leaseDeadline
+	}
+	return time.Now()
+}
+
+func isLeaseDurationZero(lease *coordv1beta1.Lease) bool {
+
+	return lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds == 0
+}
+
+func isLeaseValid(lease *coordv1beta1.Lease) bool {
+	return lease.Spec.AcquireTime != nil && lease.Spec.LeaseDurationSeconds != nil
+}
+
+func isLeaseExpired(lease *coordv1beta1.Lease, addPaddingToCurrent bool) bool {
+
+	if lease.Spec.AcquireTime == nil {
+		// can this happen?
+		return false
 	}
 
-	// Uncordon the node
-	err = AddOrRemoveTaint(r.drainer.Client, node, false)
-	if err != nil {
-		return err
+	leaseDeadline := (*lease.Spec.AcquireTime).Time
+	if lease.Spec.LeaseDurationSeconds != nil {
+		leaseDeadline = leaseDeadline.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
 	}
 
-	if err = runCordonOrUncordon(r, node, false); err != nil {
-		return err
+	timeNow := time.Now()
+
+	if addPaddingToCurrent {
+		timeNow = timeNow.Add(time.Duration(int64(LeasePaddingSeconds) * int64(time.Second)))
 	}
+	return timeNow.After(leaseDeadline)
+}
+
+func (r *ReconcileNodeMaintenance) doesLeaseExist() (LeaseStatus, error, *coordv1beta1.Lease) {
+	lease := &coordv1beta1.Lease{}
+
+	nodeName := r.node.ObjectMeta.Name
+	nName := apitypes.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: nodeName}
+
+	if err := r.client.Get(context.TODO(), nName, lease); err != nil {
+		if errors.IsNotFound(err) {
+			return LeaseStatusNotFound, nil, nil
+		}
+
+		r.reqLogger.Errorf("failed to get lease object. node: %s error: %v", nodeName, err)
+		return LeaseStatusFail, err, nil
+	}
+
+	r.reqLogger.Debugf("got lease leaseName: %s nodeName %s", lease.ObjectMeta.Name, nodeName)
+
+	if lease.Spec.HolderIdentity != nil && LeaseHolderIdentity == *lease.Spec.HolderIdentity {
+		return LeaseStatusOwnedByMe, nil, lease
+	}
+	return LeaseStatusOwnedByDifferentHolder, nil, lease
+}
+
+func (r *ReconcileNodeMaintenance) createOrUpdateLease(lease *coordv1beta1.Lease, transitions TransitionAction, nextState NodeMaintenanceStatusType) (*coordv1beta1.Lease, error) {
+
+	nodeName := r.node.ObjectMeta.Name
+	tmpDurationInSeconds := int32(0)
+	if nextState != NodeStateNone {
+		if r.specAnnoData == nil {
+			panic("no spec")
+		}
+		tmpDurationInSeconds = int32(*r.specAnnoData) + LeasePaddingSeconds
+	}
+
+	holderIdentity := LeaseHolderIdentity
+
+	owner := &metav1.OwnerReference{
+		APIVersion: "v1",
+		Kind:       "Node",
+		Name:       nodeName,
+		UID:        r.node.ObjectMeta.UID,
+	}
+	if lease == nil {
+		leaseTransitions := int32(1)
+		microTimeNow := metav1.NewMicroTime(time.Now())
+
+		lease = &coordv1beta1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            nodeName,
+				Namespace:       corev1.NamespaceNodeLease,
+				OwnerReferences: []metav1.OwnerReference{*owner},
+			},
+			Spec: coordv1beta1.LeaseSpec{
+				HolderIdentity:       &holderIdentity,
+				LeaseDurationSeconds: &tmpDurationInSeconds,
+				AcquireTime:          &microTimeNow,
+				LeaseTransitions:     &leaseTransitions,
+			},
+		}
+
+		if err := r.client.Create(context.TODO(), lease); err != nil {
+			r.reqLogger.Errorf("Failed to create lease. node %s error: %v", nodeName, err)
+			return lease, err
+		}
+		r.reqLogger.Debugf("lease created. duration: %d sec", tmpDurationInSeconds)
+	} else {
+		lease.ObjectMeta.Name = nodeName
+		lease.ObjectMeta.OwnerReferences = []metav1.OwnerReference{*owner}
+		lease.Spec.HolderIdentity = &holderIdentity
+		lease.Spec.LeaseDurationSeconds = &tmpDurationInSeconds
+		lease.Spec.AcquireTime = &metav1.MicroTime{Time: time.Now()}
+
+		timeNow := metav1.MicroTime{Time: time.Now()}
+		lease.Spec.RenewTime = &timeNow
+
+		if transitions == TransitionInc && lease.Spec.LeaseTransitions != nil {
+			*lease.Spec.LeaseTransitions += int32(1)
+		} else if transitions != TransitionNoChange {
+			leaseTransitions := int32(1)
+			lease.Spec.LeaseTransitions = &leaseTransitions
+		}
+
+		if err := r.client.Update(context.TODO(), lease); err != nil {
+			r.reqLogger.Errorf("Failed to update the lease. node %s error: %v", nodeName, err)
+			return lease, err
+		}
+		r.reqLogger.Debugf("lease updated: duration: %d sec", tmpDurationInSeconds)
+	}
+
+	if nextState != NodeStateNone {
+		r.setAnnotations(nextState, false)
+	}
+	return lease, nil
+}
+
+// writer implements io.Writer interface as a pass-through for klog.
+type writer struct {
+	logFunc func(args ...interface{})
+}
+
+// Write passes string(p) into writer's logFunc and always returns len(p)
+func (w writer) Write(p []byte) (n int, err error) {
+	w.logFunc(string(p))
+	return len(p), nil
+}
+
+func (obj *ReconcileNodeMaintenance) initDrainer() error {
+
+	factory := obj.clientFactory
+	if factory == nil {
+		factory = obj
+	}
+
+	cs, err := factory.createClient(obj.config)
+	if err != nil {
+		return fmt.Errorf("failed to init clientset %v", err)
+	}
+	obj.clientset = cs
+
+	obj.drainer = &drain.Helper{
+		Client:              obj.clientset,
+		Force:               true,
+		IgnoreAllDaemonSets: true,
+		DisableEviction:     false,
+		GracePeriodSeconds:  -1,
+		// If a pod is not evicted in 20 seconds, retry the eviction next time the
+		// machine gets reconciled again (to allow other machines to be reconciled).
+		Timeout: EvictionTimeSlice,
+		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
+			verbStr := "Deleted"
+			if usingEviction {
+				verbStr = "Evicted"
+			}
+			klog.Info(fmt.Sprintf("%s pod from Node", verbStr),
+				"pod", fmt.Sprintf("%s/%s", pod.Name, pod.Namespace))
+		},
+		Out:    writer{klog.Info},
+		ErrOut: writer{klog.Error},
+		DryRun: false,
+	}
+	return nil
+}
+
+func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck DeadlineCheck) error {
+
+	countTaint, numDesiredTaints := CountDesiredTaintOnNode(r.node)
+        if (cordonOn && countTaint != numDesiredTaints) || (!cordonOn && countTaint != 0) {
+                if !dcheck.isExpired() {
+                        if err := AddOrRemoveTaint(r.drainer.Client, r.node, cordonOn); err != nil {
+                                r.reqLogger.Errorf("failed to set tain (action-set: %t) error: %v", cordonOn, err)
+                                return err
+                        }
+                        r.reqLogger.Debugf("completed add/remove taint set=%t", cordonOn)
+                } else {
+                        r.reqLogger.Info("skipped remove taint; time expired taintOn=", cordonOn)
+                }
+
+        } else {
+                r.reqLogger.Debugf("no change of taint required. set=%t", cordonOn)
+        }
+
+        if r.node.Spec.Unschedulable != cordonOn {
+                if !dcheck.isExpired() {
+	
+			/*
+                        r.node.Spec.Unschedulable = cordonOn
+                        if err := r.updateNode(r.node); err != nil {
+                                r.reqLogger.Errorf("failed to cordon. action: %t %v", cordonOn, err)
+                                return err
+                        }
+			*/
+                        if err := drain.RunCordonOrUncordon(r.drainer, r.node, cordonOn); err != nil {
+                                r.reqLogger.Errorf("failed to cordon. action: %t %v", cordonOn, err)
+                                return err
+                        }
+                        r.reqLogger.Debugf("completed cordon/uncordon action-set=%t", cordonOn)
+                } else {
+                        r.reqLogger.Info("skipped cordon/uncordon; time expired cordonOn=", cordonOn)
+                }
+        } else {
+                r.reqLogger.Debugf("no change of cordon required. set=%t", cordonOn)
+        }
 
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, error) {
-	node := &corev1.Node{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node)
-	if err != nil && errors.IsNotFound(err) {
-		log.Errorf("Node: %s cannot be found. Error: %v", nodeName, err)
-		return nil, err
-	} else if err != nil {
-		log.Errorf("Failed to get Node %s: %v\n", nodeName, err)
-		return nil, err
-	}
-	return node, nil
-}
+func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 
-func (r *ReconcileNodeMaintenance) StartPodInformer(node *corev1.Node, stop <-chan struct{}) error {
-	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name})
-
-	lw := cache.NewListWatchFromClient(
-		r.drainer.Client.CoreV1().RESTClient(),
-		"pods",
-		corev1.NamespaceAll,
-		fieldSelector)
-
-	r.podInformer = cache.NewSharedInformer(lw, &corev1.Pod{}, 30*time.Minute)
-
-	go r.podInformer.Run(stop)
-	if !cache.WaitForCacheSync(stop, r.podInformer.HasSynced) {
-		return fmt.Errorf("Timed out waiting for caches to sync")
-	}
-
-	return nil
-}
-
-func (r *ReconcileNodeMaintenance) initMaintenanceStatus(nm *kubevirtv1alpha1.NodeMaintenance) error {
-	if nm.Status.Phase == "" {
-		nm.Status.Phase = kubevirtv1alpha1.MaintenanceRunning
-		pendingList, errlist := r.drainer.GetPodsForDeletion(nm.Spec.NodeName)
-		if errlist != nil {
-			return fmt.Errorf("Failed to get pods for eviction while initializing status")
-		}
-		if pendingList != nil {
-			nm.Status.PendingPods = GetPodNameList(pendingList.Pods())
-		}
-		nm.Status.EvictionPods = len(nm.Status.PendingPods)
-
-		podlist, err := r.drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
-			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nm.Spec.NodeName}).String()})
-		if err != nil {
+	if !dcheck.isExpired() {
+		nodeName := r.node.ObjectMeta.Name
+		list, errs := r.drainer.GetPodsForDeletion(nodeName)
+		if errs != nil {
+			err := utilerrors.NewAggregate(errs)
+			r.reqLogger.Errorf("failed got get pod for eviction %v", err)
 			return err
 		}
-		nm.Status.TotalPods = len(podlist.Items)
-		err = r.client.Status().Update(context.TODO(), nm)
+
+		if !dcheck.isExpired() && len(list.Pods()) != 0 {
+
+			r.drainer.Timeout = dcheck.DurationUntilExpiration()
+
+			// indicate to the user that it is evicting pods.
+			if err := r.drainer.DeleteOrEvictPods(list.Pods()); err != nil {
+				r.reqLogger.Infof("Not all pods evicted %v", err)
+				return err
+			}
+		}
+		r.reqLogger.Debugf("completed evicting pods")
+
+	}
+
+	return nil
+}
+func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
+
+	if dcheck.isExpired() {
+		return nil
+	}
+
+	nodeName := r.node.ObjectMeta.Name
+	list, errs := r.drainer.GetPodsForDeletion(nodeName)
+	if errs != nil {
+		err := utilerrors.NewAggregate(errs)
+		r.reqLogger.Errorf("failed got get pod for cancelEviction %v", err)
 		return err
+	}
+
+	pods := list.Pods()
+	if len(pods) != 0 {
+
+		// cancel the move
+		for _, pod := range pods {
+			if !dcheck.isExpired() {
+				err := r.drainer.Client.PolicyV1beta1().Evictions(pod.Namespace).Evict(nil)
+				if err != nil {
+					r.reqLogger.Errorf("failed cancel eviction %v", err)
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMaintenance, err error) (reconcile.Result, error) {
-	nm.Status.LastError = err.Error()
+func (r *ReconcileNodeMaintenance) setAnnotations(statusInfo NodeMaintenanceStatusType, deleteSpec bool) error {
 
-	if nm.Spec.NodeName != "" {
-		pendingList, _ := r.drainer.GetPodsForDeletion(nm.Spec.NodeName)
-		if pendingList != nil {
-			nm.Status.PendingPods = GetPodNameList(pendingList.Pods())
+	newNode := r.node.DeepCopy()
+
+	newNode.ObjectMeta.Annotations[NodeMaintenanceStatusAnnotation] = string(statusInfo)
+	if deleteSpec {
+		delete(newNode.ObjectMeta.Annotations, NodeMaintenanceSpecAnnotation)
+	}
+
+	err := r.patchNodes(r.node, newNode, deleteSpec) // for whatever reasons: when deleting an annotation value - patch didn't work, have to update the whole thing.
+	if err != nil {
+		log.Error("Can't set status annotation of node", err)
+	}
+	r.node = newNode
+
+	st := ReconcileNodeMaintenanceStatusInfo(string(statusInfo))
+	r.statusAnnoData = &st
+	if deleteSpec {
+		r.specAnnoData = nil
+	}
+
+	return err
+}
+
+func (r *ReconcileNodeMaintenance) updateNode(node *corev1.Node) error {
+    client := r.clientset.Core().Nodes()
+    _, err := client.Update(node)
+    if err != nil {
+            r.reqLogger.Errorf("update (force) failed %v", err)
+    }
+    return err
+}
+
+func (r *ReconcileNodeMaintenance) patchNodes(oldNode *corev1.Node, newNode *corev1.Node, forceUpdate bool) error {
+
+	if forceUpdate {
+               return r.updateNode(newNode)
+	}
+
+        oldData, err := json.Marshal(oldNode)
+        if err != nil {
+                r.reqLogger.Errorf("failed to marshal oldNode  %v", err)
+                return err
+        }
+	newData, err := json.Marshal(newNode)
+	if err != nil {
+		r.reqLogger.Errorf("failed to marshal newNode %v", err)
+		return err
+	}
+
+	client := r.clientset.Core().Nodes()
+
+	patchBytes, patchErr := strategicpatch.CreateTwoWayMergePatch(oldData, newData, oldNode)
+	if patchErr == nil && !forceUpdate {
+		_, err = client.Patch(oldNode.Name, types.StrategicMergePatchType, patchBytes)
+	} else {
+		r.reqLogger.Infof("failed to create patch. using update %v", err)
+		_, err = client.Update(newNode)
+	}
+	if err != nil {
+		r.reqLogger.Errorf("Failed to patch/update error=%v", err)
+	}
+	return err
+}
+
+type errorarray []error
+
+// return error if any one of the errors is a timeout
+func isTimeoutError(err error) bool {
+
+	if aerr, ok := err.(utilerrors.Aggregate); ok {
+		for _, err := range aerr.Errors() {
+			if isTimeoutError(err) { // lets hope they are not doing loops in the graph ;-)
+				return true
+			}
 		}
+		return false
 	}
 
-	updateErr := r.client.Status().Update(context.TODO(), nm)
-	if updateErr != nil {
-		log.Errorf("Failed to update NodeMaintenance with \"Failed\" status. Error: %v", updateErr)
+	if err, ok := err.(net.Error); ok && err.Timeout() {
+		return true
 	}
-	return reconcile.Result{}, err
+	return false
 }
