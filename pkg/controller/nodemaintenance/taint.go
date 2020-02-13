@@ -21,7 +21,6 @@ var NodeUnschedulableTaint = &corev1.Taint{
 }
 var MaintenanceTaints = []corev1.Taint{*NodeUnschedulableTaint, *KubevirtDrainTaint}
 
-
 // compute size of intersection between MaintenanceTaints and taints on node
 func CountDesiredTaintOnNode(node *corev1.Node) (int, int) {
 	numTaints := 0
@@ -38,7 +37,7 @@ func CountDesiredTaintOnNode(node *corev1.Node) (int, int) {
 			numTaints += 1
 		}
 	}
-        return numTaints, len(MaintenanceTaints)
+	return numTaints, len(MaintenanceTaints)
 
 }
 

@@ -1,8 +1,10 @@
 package nodemaintenance
 
 import (
-	"fmt"
 	"context"
+	"fmt"
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
@@ -11,7 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"time"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	coordv1beta1 "k8s.io/api/coordination/v1beta1"
 	k8sfakeclient "k8s.io/client-go/kubernetes/fake"
@@ -19,6 +22,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+type ClientFactoryTest struct {
+	client kubernetes.Interface
+}
+
+func (r *ClientFactoryTest) createClient(config *rest.Config) (kubernetes.Interface, error) {
+	return r.client, nil
+}
 
 var _ = Describe("updateCondition", func() {
 
@@ -59,16 +70,27 @@ var _ = Describe("updateCondition", func() {
 		return exists
 	}
 
-	checkTaintOk := func(name  types.NamespacedName,setOnOff bool) bool {
+	checkTaintOk := func(name types.NamespacedName, setOnOff bool) bool {
 		client := cs.Core().Nodes()
 		node1, err := client.Get(name.Name, metav1.GetOptions{})
 		if err != nil {
-		   panic("failed with client for get taint")
+			panic("failed with client for get taint")
 		}
-                taintCount, taintSize := CountDesiredTaintOnNode(node1)
+		taintCount, taintSize := CountDesiredTaintOnNode(node1)
 		fmt.Printf("taintCount %d taintSize %d", taintCount, taintSize)
 		return (taintCount == taintSize && setOnOff) || (taintCount == 0 && !setOnOff)
 	}
+	getCordon := func(name types.NamespacedName) bool {
+		client := cs.Core().Nodes()
+		node1, err := client.Get(name.Name, metav1.GetOptions{})
+		if err != nil {
+			panic("failed with client for get taint")
+		}
+		cordon := node1.Spec.Unschedulable
+		fmt.Printf("cordon %t", cordon)
+		return cordon
+	}
+
 
 	getLeaseDuration := func(nodeName string) int32 {
 		lease := &coordv1beta1.Lease{}
@@ -79,10 +101,9 @@ var _ = Describe("updateCondition", func() {
 
 		duration := *lease.Spec.LeaseDurationSeconds
 
-		fmt.Printf("node: %s leaseDuration: %d\n", nodeName, duration )
+		fmt.Printf("node: %s leaseDuration: %d\n", nodeName, duration)
 		return duration
 	}
-
 
 	setFakeClients := func() {
 
@@ -122,8 +143,7 @@ var _ = Describe("updateCondition", func() {
 					Name:        "node-without-illegal-maint-to-small",
 					Annotations: map[string]string{"lifecycle.openshift.io/maintenance": "1"},
 				},
-				Spec: corev1.NodeSpec{
-				},
+				Spec: corev1.NodeSpec{},
 			},
 			// ReconcileToMaintStateActive test 6
 			&corev1.Node{
@@ -180,7 +200,7 @@ var _ = Describe("updateCondition", func() {
 					Name:        "stat-active-valid-lease-me-owner",
 					Annotations: map[string]string{"lifecycle.openshift.io/maintenance-status": "active"},
 				},
-				Spec:  corev1.NodeSpec {
+				Spec: corev1.NodeSpec{
 
 					Taints: []corev1.Taint{
 						corev1.Taint{
@@ -215,9 +235,9 @@ var _ = Describe("updateCondition", func() {
 					Name:        "stat-active-expired-lease-me-owner",
 					Annotations: map[string]string{"lifecycle.openshift.io/maintenance-status": "active"},
 				},
-				Spec:  corev1.NodeSpec {
+				Spec: corev1.NodeSpec{
 
-					Taints: []corev1.Taint {
+					Taints: []corev1.Taint{
 						corev1.Taint{
 							Key:    "kubevirt.io/drain",
 							Effect: corev1.TaintEffectNoSchedule,
@@ -239,10 +259,9 @@ var _ = Describe("updateCondition", func() {
 					Namespace: corev1.NamespaceNodeLease,
 				},
 				Spec: coordv1beta1.LeaseSpec{
-					AcquireTime:          &metav1.MicroTime{Time: time.Now().Add( time.Duration( (-1 * int64(timeDurationInSeconds301WithPadding) - 10) *  int64(time.Second)  ) ) },
+					AcquireTime:          &metav1.MicroTime{Time: time.Now().Add(time.Duration((-1*int64(timeDurationInSeconds301WithPadding) - 10) * int64(time.Second)))},
 					LeaseDurationSeconds: &timeDurationInSeconds301WithPadding,
 					HolderIdentity:       &leaseHolderMe,
-
 				},
 			},
 		}
@@ -335,6 +354,7 @@ var _ = Describe("updateCondition", func() {
 			hasSpec := checkSpecExists(req.NamespacedName)
 			Expect(hasSpec).To(Equal(true))
 
+
 		})
 		It("valid maintenance window, lease not found", func() {
 			req := reconcile.Request{
@@ -351,6 +371,10 @@ var _ = Describe("updateCondition", func() {
 
 			hasSpec := checkSpecExists(req.NamespacedName)
 			Expect(hasSpec).To(Equal(true))
+
+			Expect(checkTaintOk(req.NamespacedName, true)).To(Equal(true))
+			Expect(getCordon(req.NamespacedName)).To(Equal(true))
+
 		})
 		It("valid maintenance window, right holder, lease expired within padding", func() {
 			req := reconcile.Request{
@@ -367,6 +391,9 @@ var _ = Describe("updateCondition", func() {
 
 			hasSpec := checkSpecExists(req.NamespacedName)
 			Expect(hasSpec).To(Equal(false))
+
+			Expect(getCordon(req.NamespacedName)).To(Equal(false))
+
 		})
 
 	})

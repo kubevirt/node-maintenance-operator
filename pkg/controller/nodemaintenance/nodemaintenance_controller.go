@@ -47,7 +47,7 @@ const (
 
 const (
 	MinMaintenenceWindowSeconds = 300              // minimum maintenance window size. (must be bigger than LeasePaddingSeconds)
-	EvictionTimeSlice           = 20 * time.Second // max. time in seconds that eviction may block.
+	EvictionTimeSlice           = 10 * time.Second // max. time in seconds that eviction may block.
 	RequeuDrainingWaitTime      = 10 * time.Second // time to reqeueu draining if not completed.
 )
 
@@ -94,14 +94,6 @@ type ClientFactory interface {
 	createClient(config *rest.Config) (kubernetes.Interface, error)
 }
 
-type ClientFactoryTest struct {
-	client kubernetes.Interface
-}
-
-func (r *ClientFactoryTest) createClient(config *rest.Config) (kubernetes.Interface, error) {
-	return r.client, nil
-}
-
 // ReconcileNodeMaintenance reconciles a node object
 type ReconcileNodeMaintenance struct {
 	clientFactory ClientFactory
@@ -129,8 +121,9 @@ func (exp DeadlineCheck) isExpired() bool {
 }
 func (exp DeadlineCheck) DurationUntilExpiration() time.Duration {
 	if exp.isSet {
-		exp.deadline.Sub(time.Now())
+		return exp.deadline.Sub(time.Now())
 	}
+    // better not be here, better check if the deadline has been set.
 	return time.Duration(math.MaxInt64)
 }
 
@@ -211,17 +204,17 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	if err := r.client.Get(context.TODO(), request.NamespacedName, r.node); err != nil {
 		if errors.IsNotFound(err) {
-			r.reqLogger.Info("node not found")
+			r.reqLogger.Info("Node not found")
 			return reconcile.Result{}, nil
 		}
-		r.reqLogger.Errorf("node not found. name %s error %v", request.Name, err)
+		r.reqLogger.Infof("cannot retrieve node. error: %v", err)
 		return reconcile.Result{}, err
 	}
 
 	// parse status & spec, create initial status object on first call
 	err := r.parseAnnotations()
 	if err != nil {
-		r.reqLogger.Errorf("request parsing error. error %v", err)
+		r.reqLogger.Errorf("request parsing error. error: %v", err)
 		return reconcile.Result{}, err
 	}
 
@@ -289,7 +282,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error
 	// handling of lease as a prerequisite to state transitions.
 	leaseStatus, _, lease := r.doesLeaseExist()
 
-	if leaseStatus == LeaseStatusFail || (leaseStatus == LeaseStatusOwnedByDifferentHolder && isLeaseValid(lease) && !isLeaseExpired(lease, false)) {
+	if leaseStatus == LeaseStatusFail || (leaseStatus == LeaseStatusOwnedByDifferentHolder && isLeasePeriodSpecified(lease) && isLeaseValid(lease, false)) {
 		r.reqLogger.Debugf("no lease available, wait")
 		r.setAnnotations(NodeStateWaiting, false)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
@@ -314,7 +307,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error
 
 	}
 
-	if !isLeaseValid(lease) || isLeaseDurationZero(lease) {
+	if !isLeasePeriodSpecified(lease) || isLeaseDurationZero(lease) {
 		r.reqLogger.Debugf("update lease - not valid or zero duration")
 
 		if _, err = r.createOrUpdateLease(lease, TransitionInc, NodeStateNew); err != nil {
@@ -332,7 +325,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error
 
 	}
 
-	if isLeaseExpired(lease, false) {
+	if !isLeaseValid(lease, false) {
 		r.reqLogger.Debugf("update lease - lease expired")
 
 		if _, err = r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNewStale); err != nil {
@@ -348,17 +341,22 @@ func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error
 		}
 	}
 
+	return r.handleMaintModeTransition(lease)
+}
+
+func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1.Lease) (reconcile.Result, error) {
+
 	dcheck := DeadlineCheck{}
 
 	//if  leaseOverdue {
-	if isLeaseExpired(lease, true) {
+	if !isLeaseValid(lease, true) {
 		r.reqLogger.Debugf("lease deadline + padding is expired. do actions")
 
 		r.setAnnotations(NodeStateEnded, true)
 
-		dcheck = DeadlineCheck{isSet: true, deadline: leaseDeadline(lease)}
+		dcheck = DeadlineCheck{isSet: true, deadline: leasePeriodEnd(lease)}
 
-		if err := r.runCordonOrUncordon(true, dcheck); err != nil {
+		if err := r.runCordonOrUncordon(false, dcheck); err != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 		}
 
@@ -390,9 +388,9 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 
 	leaseStatus, _, lease := r.doesLeaseExist()
 	if leaseStatus == LeaseStatusOwnedByMe {
-		dcheck := DeadlineCheck{isSet: true, deadline: leaseDeadline(lease)}
+		dcheck := DeadlineCheck{isSet: true, deadline: leasePeriodEnd(lease)}
 
-		if !isLeaseExpired(lease, false) {
+		if isLeaseValid(lease, false) {
 
 			r.setAnnotations(NodeStateEnded, false)
 
@@ -428,46 +426,49 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 	return reconcile.Result{}, nil
 }
 
+// returns true if lease duration differs from node annotation value
 func (r *ReconcileNodeMaintenance) isLeaseDurationChanged(lease *coordv1beta1.Lease) bool {
 	if lease.Spec.LeaseDurationSeconds != nil {
 		value := int32(*r.specAnnoData)
-		return *lease.Spec.LeaseDurationSeconds != value+LeasePaddingSeconds
+		return *lease.Spec.LeaseDurationSeconds != value + LeasePaddingSeconds
 	}
 	return false
 }
 
-func leaseDeadline(lease *coordv1beta1.Lease) time.Time {
-
-	if lease.Spec.AcquireTime != nil {
-		leaseDeadline := (*lease.Spec.AcquireTime).Time
-
-		if lease.Spec.LeaseDurationSeconds != nil {
-			leaseDeadline.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
-		}
-		return leaseDeadline
-	}
-	return time.Now()
-}
 
 func isLeaseDurationZero(lease *coordv1beta1.Lease) bool {
 
 	return lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds == 0
 }
 
-func isLeaseValid(lease *coordv1beta1.Lease) bool {
+func leasePeriodEnd(lease *coordv1beta1.Lease) time.Time {
+
+	if lease.Spec.AcquireTime != nil {
+		leasePeriodEnd := (*lease.Spec.AcquireTime).Time
+
+		if lease.Spec.LeaseDurationSeconds != nil {
+			leasePeriodEnd.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
+		}
+		return leasePeriodEnd
+	}
+	return time.Now()
+}
+
+func isLeasePeriodSpecified(lease *coordv1beta1.Lease) bool {
 	return lease.Spec.AcquireTime != nil && lease.Spec.LeaseDurationSeconds != nil
 }
 
-func isLeaseExpired(lease *coordv1beta1.Lease, addPaddingToCurrent bool) bool {
+// check if lease is not expired (precondition that both AcquireTime and LeaseDuration are not nil)
+func isLeaseValid(lease *coordv1beta1.Lease, addPaddingToCurrent bool) bool {
 
 	if lease.Spec.AcquireTime == nil {
 		// can this happen?
 		return false
 	}
 
-	leaseDeadline := (*lease.Spec.AcquireTime).Time
+	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
 	if lease.Spec.LeaseDurationSeconds != nil {
-		leaseDeadline = leaseDeadline.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
+		leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
 	}
 
 	timeNow := time.Now()
@@ -475,7 +476,7 @@ func isLeaseExpired(lease *coordv1beta1.Lease, addPaddingToCurrent bool) bool {
 	if addPaddingToCurrent {
 		timeNow = timeNow.Add(time.Duration(int64(LeasePaddingSeconds) * int64(time.Second)))
 	}
-	return timeNow.After(leaseDeadline)
+	return !timeNow.After(leasePeriodEnd)
 }
 
 func (r *ReconcileNodeMaintenance) doesLeaseExist() (LeaseStatus, error, *coordv1beta1.Lease) {
@@ -486,16 +487,18 @@ func (r *ReconcileNodeMaintenance) doesLeaseExist() (LeaseStatus, error, *coordv
 
 	if err := r.client.Get(context.TODO(), nName, lease); err != nil {
 		if errors.IsNotFound(err) {
+			r.reqLogger.Infof("Lease object not found name=%s ns=%s", nName.Name, nName.Namespace)
 			return LeaseStatusNotFound, nil, nil
 		}
 
-		r.reqLogger.Errorf("failed to get lease object. node: %s error: %v", nodeName, err)
+		r.reqLogger.Errorf("failed to get lease object. name=%s ns=%s", nName.Name, nName.Namespace)
 		return LeaseStatusFail, err, nil
 	}
 
-	r.reqLogger.Debugf("got lease leaseName: %s nodeName %s", lease.ObjectMeta.Name, nodeName)
+	heldByMe := lease.Spec.HolderIdentity != nil && LeaseHolderIdentity == *lease.Spec.HolderIdentity
+	r.reqLogger.Debugf("got lease name=%s ns=%s heldByMe=%t", nName.Name, nName.Namespace, heldByMe)
 
-	if lease.Spec.HolderIdentity != nil && LeaseHolderIdentity == *lease.Spec.HolderIdentity {
+	if  heldByMe {
 		return LeaseStatusOwnedByMe, nil, lease
 	}
 	return LeaseStatusOwnedByDifferentHolder, nil, lease
@@ -603,8 +606,10 @@ func (obj *ReconcileNodeMaintenance) initDrainer() error {
 		IgnoreAllDaemonSets: true,
 		DisableEviction:     false,
 		GracePeriodSeconds:  -1,
-		// If a pod is not evicted in 20 seconds, retry the eviction next time the
-		// machine gets reconciled again (to allow other machines to be reconciled).
+		// If a pod is not evicted in ``EvictionTimeSlice`` seconds, stop waiting and
+		// allow it to (hopefully) complete while we process other nodes
+		// Pending evictions will be checked and reattempted when the Reconcile()
+		// loop gets called again
 		Timeout: EvictionTimeSlice,
 		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
 			verbStr := "Deleted"
@@ -624,42 +629,41 @@ func (obj *ReconcileNodeMaintenance) initDrainer() error {
 func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck DeadlineCheck) error {
 
 	countTaint, numDesiredTaints := CountDesiredTaintOnNode(r.node)
-        if (cordonOn && countTaint != numDesiredTaints) || (!cordonOn && countTaint != 0) {
-                if !dcheck.isExpired() {
-                        if err := AddOrRemoveTaint(r.drainer.Client, r.node, cordonOn); err != nil {
-                                r.reqLogger.Errorf("failed to set tain (action-set: %t) error: %v", cordonOn, err)
-                                return err
-                        }
-                        r.reqLogger.Debugf("completed add/remove taint set=%t", cordonOn)
-                } else {
-                        r.reqLogger.Info("skipped remove taint; time expired taintOn=", cordonOn)
-                }
+	if (cordonOn && countTaint != numDesiredTaints) || (!cordonOn && countTaint != 0) {
+		if !dcheck.isExpired() {
+			if err := AddOrRemoveTaint(r.drainer.Client, r.node, cordonOn); err != nil {
+				r.reqLogger.Errorf("failed to set tain (action-set: %t) error: %v", cordonOn, err)
+				return err
+			}
+			r.reqLogger.Debugf("completed add/remove taint set=%t", cordonOn)
+		} else {
+			r.reqLogger.Info("skipped remove taint; time expired taintOn=", cordonOn)
+		}
 
-        } else {
-                r.reqLogger.Debugf("no change of taint required. set=%t", cordonOn)
-        }
+	} else {
+		r.reqLogger.Debugf("no change of taint required. set=%t", cordonOn)
+	}
 
-        if r.node.Spec.Unschedulable != cordonOn {
-                if !dcheck.isExpired() {
-	
-			/*
-                        r.node.Spec.Unschedulable = cordonOn
-                        if err := r.updateNode(r.node); err != nil {
-                                r.reqLogger.Errorf("failed to cordon. action: %t %v", cordonOn, err)
-                                return err
-                        }
-			*/
-                        if err := drain.RunCordonOrUncordon(r.drainer, r.node, cordonOn); err != nil {
-                                r.reqLogger.Errorf("failed to cordon. action: %t %v", cordonOn, err)
-                                return err
-                        }
-                        r.reqLogger.Debugf("completed cordon/uncordon action-set=%t", cordonOn)
-                } else {
-                        r.reqLogger.Info("skipped cordon/uncordon; time expired cordonOn=", cordonOn)
-                }
-        } else {
-                r.reqLogger.Debugf("no change of cordon required. set=%t", cordonOn)
-        }
+	if r.node.Spec.Unschedulable != cordonOn {
+		if !dcheck.isExpired() {
+                        /*
+			   r.node.Spec.Unschedulable = cordonOn
+			   if err := r.updateNode(r.node); err != nil {
+			           r.reqLogger.Errorf("failed to cordon. action: %t %v", cordonOn, err)
+			           return err
+			   }
+                        */
+			if err := drain.RunCordonOrUncordon(r.drainer, r.node, cordonOn); err != nil {
+				r.reqLogger.Errorf("failed to cordon. action: %t %v", cordonOn, err)
+				return err
+			}
+			r.reqLogger.Debugf("completed cordon/uncordon action-set=%t", cordonOn)
+		} else {
+			r.reqLogger.Info("skipped cordon/uncordon; time expired cordonOn=", cordonOn)
+		}
+	} else {
+		r.reqLogger.Debugf("no change of cordon required. set=%t", cordonOn)
+	}
 
 	return nil
 }
@@ -677,7 +681,9 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 
 		if !dcheck.isExpired() && len(list.Pods()) != 0 {
 
-			r.drainer.Timeout = dcheck.DurationUntilExpiration()
+			if dcheck.isSet && r.drainer.Timeout > dcheck.DurationUntilExpiration() {
+				r.drainer.Timeout = dcheck.DurationUntilExpiration()
+			}
 
 			// indicate to the user that it is evicting pods.
 			if err := r.drainer.DeleteOrEvictPods(list.Pods()); err != nil {
@@ -747,25 +753,25 @@ func (r *ReconcileNodeMaintenance) setAnnotations(statusInfo NodeMaintenanceStat
 }
 
 func (r *ReconcileNodeMaintenance) updateNode(node *corev1.Node) error {
-    client := r.clientset.Core().Nodes()
-    _, err := client.Update(node)
-    if err != nil {
-            r.reqLogger.Errorf("update (force) failed %v", err)
-    }
-    return err
+	client := r.clientset.Core().Nodes()
+	_, err := client.Update(node)
+	if err != nil {
+		r.reqLogger.Errorf("update (force) failed %v", err)
+	}
+	return err
 }
 
 func (r *ReconcileNodeMaintenance) patchNodes(oldNode *corev1.Node, newNode *corev1.Node, forceUpdate bool) error {
 
 	if forceUpdate {
-               return r.updateNode(newNode)
+		return r.updateNode(newNode)
 	}
 
-        oldData, err := json.Marshal(oldNode)
-        if err != nil {
-                r.reqLogger.Errorf("failed to marshal oldNode  %v", err)
-                return err
-        }
+	oldData, err := json.Marshal(oldNode)
+	if err != nil {
+		r.reqLogger.Errorf("failed to marshal oldNode  %v", err)
+		return err
+	}
 	newData, err := json.Marshal(newNode)
 	if err != nil {
 		r.reqLogger.Errorf("failed to marshal newNode %v", err)
@@ -776,6 +782,7 @@ func (r *ReconcileNodeMaintenance) patchNodes(oldNode *corev1.Node, newNode *cor
 
 	patchBytes, patchErr := strategicpatch.CreateTwoWayMergePatch(oldData, newData, oldNode)
 	if patchErr == nil && !forceUpdate {
+		r.reqLogger.Infof("failed to create patch; err=%v", patchErr)
 		_, err = client.Patch(oldNode.Name, types.StrategicMergePatchType, patchBytes)
 	} else {
 		r.reqLogger.Infof("failed to create patch. using update %v", err)
