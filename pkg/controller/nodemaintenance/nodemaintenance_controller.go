@@ -704,9 +704,11 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 
 		if !dcheck.isExpired() && len(list.Pods()) != 0 {
 
-			if dcheck.isSet && r.drainer.Timeout > dcheck.DurationUntilExpiration() {
+			if dcheck.isSet && EvictionTimeSlice > dcheck.DurationUntilExpiration() {
 				r.drainer.Timeout = dcheck.DurationUntilExpiration()
-			}
+			} else {
+                r.drainer.Timeout = EvictionTimeSlice
+            }
 
 			// indicate to the user that it is evicting pods.
 			if err := r.drainer.DeleteOrEvictPods(list.Pods()); err != nil {
