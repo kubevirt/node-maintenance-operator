@@ -56,8 +56,8 @@ type LeaseStatus int
 const (
 	LeaseStatusNotFound               LeaseStatus = -1 // currently not active lease
 	LeaseStatusOwnedByMe              LeaseStatus = 1  // there is a lease active right now
-	LeaseStatusOwnedByDifferentHolder LeaseStatus = 3
-	LeaseStatusFail                   LeaseStatus = 6
+	LeaseStatusOwnedByDifferentHolder LeaseStatus = 2
+	LeaseStatusFail                   LeaseStatus = 3
 )
 
 type NodeMaintenanceStatusType string
@@ -219,9 +219,8 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	if r.specAnnoData == nil && r.statusAnnoData == nil {
-		// nothing to do here.
-		return reconcile.Result{}, err
-	}
+	    return r.processNoAnnotations()
+    }
 
 	if r.specAnnoData != nil {
 		return r.processMaintModeOn()
@@ -364,8 +363,10 @@ func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1
 			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 		}
 		if !dcheck.isExpired() {
-			r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone) // set lease duration to 0
-		}
+            if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+        }
 
 	} else {
 		r.reqLogger.Debugf("lease ok. do actions")
@@ -382,6 +383,26 @@ func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1
 
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileNodeMaintenance) processNoAnnotations() (reconcile.Result, error) {
+
+    dcheck := DeadlineCheck{}
+
+	leaseStatus, _, lease := r.doesLeaseExist()
+	if leaseStatus == LeaseStatusOwnedByMe && isLeaseValid(lease, false) {
+			if err := r.runCordonOrUncordon(false, dcheck); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+
+			if err := r.cancelEviction(dcheck); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+            if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
+    }
+    return reconcile.Result{}, nil
 }
 
 func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, error) {
@@ -419,7 +440,9 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 
 		}
 		if !dcheck.isExpired() {
-			r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone) // set lease duration to 0.
+            if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
+				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+			}
 		}
 
 	}
@@ -510,7 +533,7 @@ func (r *ReconcileNodeMaintenance) createOrUpdateLease(lease *coordv1beta1.Lease
 	tmpDurationInSeconds := int32(0)
 	if nextState != NodeStateNone {
 		if r.specAnnoData == nil {
-			panic("no spec")
+            return nil, fmt.Errorf("annotation is empty, unexpected state")
 		}
 		tmpDurationInSeconds = int32(*r.specAnnoData) + LeasePaddingSeconds
 	}
