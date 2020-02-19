@@ -12,8 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 
 	coordv1beta1 "k8s.io/api/coordination/v1beta1"
@@ -91,7 +91,6 @@ var _ = Describe("updateCondition", func() {
 		return cordon
 	}
 
-
 	getLeaseDuration := func(nodeName string) int32 {
 		lease := &coordv1beta1.Lease{}
 
@@ -99,7 +98,10 @@ var _ = Describe("updateCondition", func() {
 
 		cl.Get(context.TODO(), nName, lease)
 
-		duration := *lease.Spec.LeaseDurationSeconds
+		var duration int32 = 0
+		if lease.Spec.LeaseDurationSeconds != nil {
+			duration = *lease.Spec.LeaseDurationSeconds
+		}
 
 		fmt.Printf("node: %s leaseDuration: %d\n", nodeName, duration)
 		return duration
@@ -353,7 +355,6 @@ var _ = Describe("updateCondition", func() {
 
 			hasSpec := checkSpecExists(req.NamespacedName)
 			Expect(hasSpec).To(Equal(true))
-
 
 		})
 		It("valid maintenance window, lease not found", func() {
