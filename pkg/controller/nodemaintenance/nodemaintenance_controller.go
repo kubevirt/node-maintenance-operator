@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	coordv1beta1 "k8s.io/api/coordination/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -27,6 +28,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+)
+
+const (
+ 	LeaseHolderIdentity    = "node-maintenance"
+	LeasePaddingSeconds    = int32(30)
+	RequeuDrainingWaitTime = 10 * time.Second 
 )
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -200,6 +207,21 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
+	lease, err := r.getLease(node)
+	if err != nil {
+		return r.reconcileAndError(instance, err)
+	}
+
+	if !leaseExpired(lease) && *lease.Spec.HolderIdentity != LeaseHolderIdentity {
+	   	return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+	}
+
+	if leaseExpired(lease) {
+		if _, err := r.updateLease(lease, node, 60*60); err != nil {
+			return r.reconcileAndError(instance, err)
+		}
+	}
+
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
 	if err != nil {
@@ -234,6 +256,13 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 	if err != nil {
 		return err
 	}
+
+	lease, err := r.getLease(node)
+	if err != nil || leaseExpired(lease) {
+		return nil
+	}
+
+	r.updateLease(lease, node, 0)
 
 	// Uncordon the node
 	err = AddOrRemoveTaint(r.drainer.Client, node, false)
@@ -320,3 +349,109 @@ func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMa
 	}
 	return reconcile.Result{}, err
 }
+
+func (r *ReconcileNodeMaintenance) getLease(node *corev1.Node) (*coordv1beta1.Lease, error) {
+
+	one := int32(1)
+	identity := LeaseHolderIdentity
+	owner := &metav1.OwnerReference{
+		APIVersion: "v1",
+		Kind:       "Node",
+		Name:       node.Name,
+		UID:        node.ObjectMeta.UID,
+	}
+
+	lease := &coordv1beta1.Lease{}
+	leaseName := types.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: node.Name}
+
+	if err := r.client.Get(context.TODO(), leaseName, lease); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+
+		microTimeNow := metav1.NewMicroTime(time.Now())
+		lease = &coordv1beta1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            node.Name,
+				Namespace:       corev1.NamespaceNodeLease,
+				OwnerReferences: []metav1.OwnerReference{*owner},
+			},
+			Spec: coordv1beta1.LeaseSpec{
+				HolderIdentity:       &identity,
+				LeaseDurationSeconds: &one,
+				AcquireTime:          &microTimeNow,
+				LeaseTransitions:     &one,
+			},
+		}
+
+		if err := r.client.Create(context.TODO(), lease); err != nil {
+			log.Errorf("Failed to create lease. node %s error: %v", node.Name, err)
+			return lease, err
+		}
+		log.Debugf("lease created")
+	}
+
+	return lease, nil
+}
+
+func (r *ReconcileNodeMaintenance) updateLease(lease *coordv1beta1.Lease, node *corev1.Node, interval int32) (*coordv1beta1.Lease, error) {
+
+	one := int32(1)
+	identity := LeaseHolderIdentity
+	owner := &metav1.OwnerReference{
+		APIVersion: "v1",
+		Kind:       "Node",
+		Name:       node.Name,
+		UID:        node.ObjectMeta.UID,
+	}
+
+	if interval < 1 {
+		lease.Spec.AcquireTime = nil
+		// lease.Spec.HolderIdentity = nil
+		lease.Spec.LeaseDurationSeconds = nil
+
+	} else {
+		lease.Spec.HolderIdentity = &identity
+		duration := int32(interval + LeasePaddingSeconds)
+
+		if lease.Spec.LeaseTransitions == nil {
+			lease.Spec.LeaseTransitions = &one
+		} else if *lease.Spec.HolderIdentity != LeaseHolderIdentity {
+			transitions := *lease.Spec.LeaseTransitions + one
+			lease.Spec.LeaseTransitions = &transitions
+		}
+
+		if lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds != duration {
+			lease.Spec.AcquireTime = &metav1.MicroTime{Time: time.Now()}
+		}
+
+		lease.ObjectMeta.OwnerReferences = []metav1.OwnerReference{*owner}
+		lease.Spec.LeaseDurationSeconds = &duration
+	}
+	
+	timeNow := metav1.MicroTime{Time: time.Now()}
+	lease.Spec.RenewTime = &timeNow
+
+	if err := r.client.Update(context.TODO(), lease); err != nil {
+		log.Errorf("Failed to update the lease. node %s error: %v", node.Name, err)
+		return lease, err
+	}
+
+	log.Debugf("lease updated: duration: %d sec", lease.Spec.LeaseDurationSeconds)
+	return lease, nil
+}
+
+func leaseExpired(lease *coordv1beta1.Lease) bool {
+
+ 	if lease.Spec.AcquireTime == nil {
+  		return false
+ 	}
+
+ 	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
+ 	if lease.Spec.LeaseDurationSeconds != nil {
+ 		leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
+ 	}
+
+ 	timeNow := time.Now()
+ 	return !timeNow.After(leasePeriodEnd)
+ }
