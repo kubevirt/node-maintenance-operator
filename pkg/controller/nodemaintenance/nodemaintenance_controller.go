@@ -8,8 +8,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	coordv1beta1 "k8s.io/api/coordination/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -31,9 +31,9 @@ import (
 )
 
 const (
- 	LeaseHolderIdentity    = "node-maintenance"
+	LeaseHolderIdentity    = "node-maintenance"
 	LeasePaddingSeconds    = int32(30)
-	RequeuDrainingWaitTime = 10 * time.Second 
+	RequeuDrainingWaitTime = 10 * time.Second
 )
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -213,7 +213,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	if !leaseExpired(lease) && *lease.Spec.HolderIdentity != LeaseHolderIdentity {
-	   	return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 	}
 
 	if leaseExpired(lease) {
@@ -428,7 +428,7 @@ func (r *ReconcileNodeMaintenance) updateLease(lease *coordv1beta1.Lease, node *
 		lease.ObjectMeta.OwnerReferences = []metav1.OwnerReference{*owner}
 		lease.Spec.LeaseDurationSeconds = &duration
 	}
-	
+
 	timeNow := metav1.MicroTime{Time: time.Now()}
 	lease.Spec.RenewTime = &timeNow
 
@@ -443,15 +443,15 @@ func (r *ReconcileNodeMaintenance) updateLease(lease *coordv1beta1.Lease, node *
 
 func leaseExpired(lease *coordv1beta1.Lease) bool {
 
- 	if lease.Spec.AcquireTime == nil {
-  		return false
- 	}
+	if lease.Spec.AcquireTime == nil {
+		return false
+	}
 
- 	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
- 	if lease.Spec.LeaseDurationSeconds != nil {
- 		leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
- 	}
+	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
+	if lease.Spec.LeaseDurationSeconds != nil {
+		leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
+	}
 
- 	timeNow := time.Now()
- 	return !timeNow.After(leasePeriodEnd)
- }
+	timeNow := time.Now()
+	return !timeNow.After(leasePeriodEnd)
+}
