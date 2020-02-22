@@ -9,7 +9,7 @@ import (
 	"math"
 	"net"
 	"strconv"
-    "strings"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -495,6 +495,12 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 		}
 
 		for !dcheck.isExpired() {
+			// check if we are still the current owner. Otherwise it is not possible to set the lease duration to zero (the next step)
+			leaseStatus, _, lease := r.doesLeaseExist()
+			if leaseStatus != LeaseStatusOwnedByMe {
+				log.Errorf("MaintOff: no longer the current owner, can't proceed to set lease duration to zero")
+				break
+			}
 			if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
 				log.Errorf("MaintOff: retry loop: update lease failed: err=%v", err)
 			} else {
@@ -787,7 +793,7 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 				if hasAllTimeout {
 					r.reqLogger.Infof("all pod evictions errors were timeout errors")
 				} else {
-                    r.reqLogger.Errorf("non timeout errors during eviction: %v", errorNoTimeout)
+					r.reqLogger.Errorf("non timeout errors during eviction: %v", errorNoTimeout)
 				}
 				return err // return original error to indicate that the call has failed.
 			}
@@ -899,12 +905,12 @@ func isEvictTimeoutError(err error) bool {
 		return true
 	}
 
-    // very ugly check: check if string conforms to pattern produced by eviction library.
-    //error when evicting pod %q: global timeout reached: %v", pod.Name, globalTimeout)
-    msg :=  err.Error()
-    if strings.Index( msg, "error when evicting pod ") != 0 && strings.Index( msg, "global timeout reached: ") != 0 {
-        return true
-    }
+	// very ugly check: check if string conforms to pattern produced by eviction library.
+	//error when evicting pod %q: global timeout reached: %v", pod.Name, globalTimeout)
+	msg := err.Error()
+	if strings.Index(msg, "error when evicting pod ") != 0 && strings.Index(msg, "global timeout reached: ") != 0 {
+		return true
+	}
 	return false
 }
 
