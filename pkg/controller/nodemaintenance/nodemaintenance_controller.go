@@ -9,6 +9,7 @@ import (
 	"math"
 	"net"
 	"strconv"
+    "strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -413,19 +414,19 @@ func (r *ReconcileNodeMaintenance) processNoAnnotations() (reconcile.Result, err
 	if leaseStatus == LeaseStatusOwnedByMe && isLeaseValid(lease, false) {
 		r.reqLogger.Info("NoAnnotation: valid lease exists. cleaning up")
 
-        if err := r.runCordonOrUncordon(false, dcheck); err != nil {
-            return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		if err := r.runCordonOrUncordon(false, dcheck); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 		}
 
 		if err := r.cancelEviction(dcheck); err != nil {
 			r.reqLogger.Errorf("NoAnnotation: cancelEviction failed %v", err)
-            return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
-	    }
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
 
-        if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
-            r.reqLogger.Errorf("NoAnnotation: update lease failed %v", err)
-            return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
-        }
+		if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
+			r.reqLogger.Errorf("NoAnnotation: update lease failed %v", err)
+			return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
+		}
 	} else {
 		r.reqLogger.Debug("NoAnnotation: no annotations and no lease.")
 	}
@@ -439,7 +440,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 		dcheck := DeadlineCheck{isSet: true, deadline: leasePeriodEnd(lease)}
 
 		if isLeaseValid(lease, false) {
-			r.reqLogger.Info("MaintOff: lease expired. cleaning up")
+			r.reqLogger.Info("MaintOff: lease owned by me & valid")
 
 			// ? why isn't that supposed to be in a 'retry loop?'
 			if err := r.setAnnotations(NodeStateEnded, false); err != nil {
@@ -467,7 +468,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 			}
 
 		} else if !isLeaseDurationZero(lease) {
-			r.reqLogger.Info("MaintOff: duration positive (regular mode)")
+			r.reqLogger.Info("MaintOff: lease owned by me & duration positive but lease expired (not valid)")
 
 			tmpDurationInSeconds := int32(LeasePaddingSeconds)
 			lease.Spec.LeaseDurationSeconds = &tmpDurationInSeconds
@@ -490,8 +491,8 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 			}
 
 		} else {
-            return reconcile.Result{}, nil
-        }
+			return reconcile.Result{}, nil
+		}
 
 		for !dcheck.isExpired() {
 			if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.
@@ -502,7 +503,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 			}
 			time.Sleep(50 * time.Millisecond)
 		}
-        log.Infof("MaintOff: eof")
+		log.Infof("MaintOff: eof")
 	}
 	return reconcile.Result{}, nil
 }
@@ -777,14 +778,21 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 				r.drainer.Timeout = EvictionTimeSlice
 			}
 
-            r.reqLogger.Infof("start evicting pods, timeout: %d ", r.drainer.Timeout / time.Second )
+			r.reqLogger.Infof("start evicting pods, timeout: %d ", r.drainer.Timeout/time.Second)
 
 			// indicate to the user that it is evicting pods.
 			if err := r.drainer.DeleteOrEvictPods(list.Pods()); err != nil {
-				r.reqLogger.Infof("Not all pods evicted %v", err)
-				return err
+				hasAllTimeout, errorNoTimeout := checkEvictPodsErrorNonTimeoutErrors(err)
+
+				if hasAllTimeout {
+					r.reqLogger.Infof("all pod evictions errors were timeout errors")
+				} else {
+                    r.reqLogger.Errorf("non timeout errors during eviction: %v", errorNoTimeout)
+				}
+				return err // return original error to indicate that the call has failed.
 			}
-            r.reqLogger.Infof("completed evicting pods")
+
+			r.reqLogger.Infof("completed evicting pods")
 		}
 	}
 	return nil
@@ -886,22 +894,40 @@ func (r *ReconcileNodeMaintenance) patchNodes(oldNode *corev1.Node, newNode *cor
 	return err
 }
 
-type errorarray []error
-
-// return error if any one of the errors is a timeout
-func isTimeoutError(err error) bool {
-
-	if aerr, ok := err.(utilerrors.Aggregate); ok {
-		for _, err := range aerr.Errors() {
-			if isTimeoutError(err) { // lets hope they are not doing loops in the graph ;-)
-				return true
-			}
-		}
-		return false
-	}
-
+func isEvictTimeoutError(err error) bool {
 	if err, ok := err.(net.Error); ok && err.Timeout() {
 		return true
 	}
+
+    // very ugly check: check if string conforms to pattern produced by eviction library.
+    //error when evicting pod %q: global timeout reached: %v", pod.Name, globalTimeout)
+    msg :=  err.Error()
+    if strings.Index( msg, "error when evicting pod ") != 0 && strings.Index( msg, "global timeout reached: ") != 0 {
+        return true
+    }
 	return false
+}
+
+// treatment of aggregate errors;
+// if there were non timeout errors in the composite: return a new composite with only non timeout errors.
+// return true if all errors were timeout errors
+//
+func checkEvictPodsErrorNonTimeoutErrors(err error) (bool, error) {
+	var errors []error
+
+	if aerr, ok := err.(utilerrors.Aggregate); ok {
+		for _, err := range aerr.Errors() {
+			if !isEvictTimeoutError(err) {
+				errors = append(errors, err)
+			}
+		}
+	} else {
+		if !isEvictTimeoutError(err) {
+			errors = append(errors, err)
+		}
+	}
+	if len(errors) == 0 {
+		return true, nil
+	}
+	return false, utilerrors.NewAggregate(errors)
 }
