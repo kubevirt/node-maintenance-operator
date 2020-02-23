@@ -119,7 +119,18 @@ type DeadlineCheck struct {
 	deadline time.Time
 }
 
-func (exp DeadlineCheck) isExpired() bool {
+func NewDeadlineInSeconds(seconds int64) DeadlineCheck {
+	tm := time.Now()
+	tm.Add(time.Duration(seconds) * time.Second)
+
+	return DeadlineCheck{isSet: true, deadline: tm}
+}
+
+func NewDeadlineAt(atTime time.Time) DeadlineCheck {
+	return DeadlineCheck{isSet: true, deadline: atTime}
+}
+
+func (exp DeadlineCheck) IsExpired() bool {
 	return exp.isSet && exp.deadline.After(time.Now())
 }
 func (exp DeadlineCheck) DurationUntilExpiration() time.Duration {
@@ -357,9 +368,9 @@ func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1
 
 		r.setAnnotations(NodeStateEnded, true)
 
-		dcheck = DeadlineCheck{isSet: true, deadline: leasePeriodEnd(lease)}
+		dcheck = NewDeadlineAt(leasePeriodEnd(lease))
 
-		for !dcheck.isExpired() {
+		for !dcheck.IsExpired() {
 			if err := r.runCordonOrUncordon(false, dcheck); err != nil {
 				log.Errorf("MaintOn: retry loop: Uncordon failed err=%v", err)
 			} else {
@@ -369,7 +380,7 @@ func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1
 			time.Sleep(50 * time.Millisecond)
 		}
 
-		for !dcheck.isExpired() {
+		for !dcheck.IsExpired() {
 			if err := r.cancelEviction(dcheck); err != nil {
 				log.Errorf("MaintOn: retry loop: cancelEviction failed: err=%v", err)
 			} else {
@@ -379,7 +390,7 @@ func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1
 			time.Sleep(50 * time.Millisecond)
 		}
 
-		for !dcheck.isExpired() {
+		for !dcheck.IsExpired() {
 			if _, err := r.createOrUpdateLease(lease, TransitionNoChange, NodeStateNone); err != nil { // set lease duration to 0.a
 				log.Errorf("MaintOn: retry loop: updateLease failed: err=%v", err)
 			} else {
@@ -449,7 +460,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 			}
 
-			for !dcheck.isExpired() {
+			for !dcheck.IsExpired() {
 				if err := r.runCordonOrUncordon(false, dcheck); err != nil {
 					log.Infof("MaintOff: cleanup: retry loop: uncordon failed: err=%v", err)
 				} else {
@@ -459,7 +470,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 				time.Sleep(50 * time.Millisecond)
 			}
 
-			for !dcheck.isExpired() {
+			for !dcheck.IsExpired() {
 				if err := r.cancelEviction(dcheck); err != nil {
 					log.Infof("MaintOff: cleanup: cancelEviction failed. err=%v", err)
 				} else {
@@ -482,7 +493,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 				return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 			}
 
-			for !dcheck.isExpired() {
+			for !dcheck.IsExpired() {
 				if err := r.runCordonOrUncordon(false, dcheck); err != nil {
 					log.Errorf("MaintOff: retry loop: uncordon failed: err=%v", err)
 				} else {
@@ -496,7 +507,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 			return reconcile.Result{}, nil
 		}
 
-		for !dcheck.isExpired() {
+		for !dcheck.IsExpired() {
 			// check if we are still the current owner. Otherwise it is not possible to set the lease duration to zero (the next step)
 			leaseStatus, _, lease := r.doesLeaseExist()
 			if leaseStatus != LeaseStatusOwnedByMe {
@@ -730,7 +741,7 @@ func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck Dea
 
 	countTaint, numDesiredTaints := CountDesiredTaintOnNode(r.node)
 	if (cordonOn && countTaint != numDesiredTaints) || (!cordonOn && countTaint != 0) {
-		if !dcheck.isExpired() {
+		if !dcheck.IsExpired() {
 			if err := AddOrRemoveTaint(r.drainer.Client, r.node, cordonOn); err != nil {
 				r.reqLogger.Errorf("failed to set tain (action-set: %t) error: %v", cordonOn, err)
 				return err
@@ -745,7 +756,7 @@ func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck Dea
 	}
 
 	if r.node.Spec.Unschedulable != cordonOn {
-		if !dcheck.isExpired() {
+		if !dcheck.IsExpired() {
 			/*
 			   r.node.Spec.Unschedulable = cordonOn
 			   if err := r.updateNode(r.node); err != nil {
@@ -769,7 +780,7 @@ func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck Dea
 
 func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 
-	if !dcheck.isExpired() {
+	if !dcheck.IsExpired() {
 		nodeName := r.node.ObjectMeta.Name
 		list, errs := r.drainer.GetPodsForDeletion(nodeName)
 		if errs != nil {
@@ -778,7 +789,7 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 			return err
 		}
 
-		if !dcheck.isExpired() && len(list.Pods()) != 0 {
+		if !dcheck.IsExpired() && len(list.Pods()) != 0 {
 
 			if dcheck.isSet && EvictionTimeSlice > dcheck.DurationUntilExpiration() {
 				r.drainer.Timeout = dcheck.DurationUntilExpiration()
@@ -811,68 +822,81 @@ type ListenerResult struct {
 	podList *corev1.PodList
 }
 
-func getListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck DeadlineCheck) ([]corev1.Pod, error) {
+func GetListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck DeadlineCheck) ([]corev1.Pod, error) {
 
 	returnCh := make(chan ListenerResult, 1)
-	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName, "status.phase": "Failed", "status.reason": "Evicted"})
+	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName, "status.phase": "Failed"})
 
 	go func() {
 		podList, err := drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
 			FieldSelector: fieldSelector.String()})
 
 		if err != nil {
-            retErr := fmt.Errorf("getListOfEvictedPods: error while listing pods: %f", err)
+			retErr := fmt.Errorf("GetListOfEvictedPods: error while listing pods: %f", err)
 			returnCh <- ListenerResult{err: retErr}
 		} else {
 			returnCh <- ListenerResult{nil, podList}
 		}
 	}()
 
-	for !dcheck.isExpired() {
+	for !dcheck.IsExpired() {
 		select {
-        case res := <-returnCh:
-			return res.podList.Items, res.err
+		case res := <-returnCh:
+            if res.err != nil {
+                return nil, res.err
+            }
+           
+          	evictedPods := []corev1.Pod{}
+			if res.podList != nil {
+                for _, pod := range res.podList.Items {
+                    if pod.Status.Reason == "Evicted" {
+                        evictedPods = append(evictedPods,pod)
+                    }
+                }
+			}
+			return evictedPods, nil
+
 		default:
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
-    return []corev1.Pod{}, fmt.Errorf("getListOfEvictedPods: timed out")
+	return []corev1.Pod{}, fmt.Errorf("GetListOfEvictedPods: timed out")
 }
 
 func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
 
-	if dcheck.isExpired() {
+	if dcheck.IsExpired() {
 		return fmt.Errorf("cancelEviction timed out")
 	}
 
-    nodeName := r.node.ObjectMeta.Name
-    podList, err :=  getListOfEvictedPods(r.drainer, nodeName, dcheck)
+	nodeName := r.node.ObjectMeta.Name
+	podList, err := GetListOfEvictedPods(r.drainer, nodeName, dcheck)
 
-    if err != nil {
-        return fmt.Errorf("cancelEviction: failed to enumerate pods in evicted state err=%v", err)
-    }
+	if err != nil {
+		return fmt.Errorf("cancelEviction: failed to enumerate pods in evicted state err=%v", err)
+	}
 
-    if len(podList) == 0 {
-        return nil
-    }
+	if len(podList) == 0 {
+		return nil
+	}
 
-    if dcheck.isExpired() {
-        return fmt.Errorf("cancelEviction timed out after enumerting pods")
-    }
+	if dcheck.IsExpired() {
+		return fmt.Errorf("cancelEviction timed out after enumerting pods")
+	}
 
-    r.drainer.Timeout = dcheck.DurationUntilExpiration()
-    r.drainer.DisableEviction  = true
+	r.drainer.Timeout = dcheck.DurationUntilExpiration()
+	r.drainer.DisableEviction = true
 	err = r.drainer.DeleteOrEvictPods(podList)
-    r.drainer.DisableEviction  = false
+	r.drainer.DisableEviction = false
 
-    r.reqLogger.Infof("start deleting evicted pods, timeout: %d sec podsToDelete: %d ", r.drainer.Timeout/time.Second, len(podList))
+	r.reqLogger.Infof("start deleting evicted pods, timeout: %d sec podsToDelete: %d ", r.drainer.Timeout/time.Second, len(podList))
 
-    if err != nil {
-        return fmt.Errorf("cancelEviction: Failed to delete pods in evicted state err=%v", err)
-    } else {
-       r.reqLogger.Infof("finshed deleting evicted pods")
-    }
+	if err != nil {
+		return fmt.Errorf("cancelEviction: Failed to delete pods in evicted state err=%v", err)
+	} else {
+		r.reqLogger.Infof("finshed deleting evicted pods")
+	}
 
 	return nil
 }
