@@ -26,6 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"k8s.io/apimachinery/pkg/fields"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
@@ -804,34 +806,74 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 	return nil
 }
 
+type ListenerResult struct {
+	err     error
+	podList *corev1.PodList
+}
+
+func getListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck DeadlineCheck) ([]corev1.Pod, error) {
+
+	returnCh := make(chan ListenerResult, 1)
+	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName, "status.phase": "Failed", "status.reason": "Evicted"})
+
+	go func() {
+		podList, err := drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+			FieldSelector: fieldSelector.String()})
+
+		if err != nil {
+            retErr := fmt.Errorf("getListOfEvictedPods: error while listing pods: %f", err)
+			returnCh <- ListenerResult{err: retErr}
+		} else {
+			returnCh <- ListenerResult{nil, podList}
+		}
+	}()
+
+	for !dcheck.isExpired() {
+		select {
+        case res := <-returnCh:
+			return res.podList.Items, res.err
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+    return []corev1.Pod{}, fmt.Errorf("getListOfEvictedPods: timed out")
+}
+
 func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
 
 	if dcheck.isExpired() {
-		return nil
+		return fmt.Errorf("cancelEviction timed out")
 	}
 
-	nodeName := r.node.ObjectMeta.Name
-	list, errs := r.drainer.GetPodsForDeletion(nodeName)
-	if errs != nil {
-		err := utilerrors.NewAggregate(errs)
-		r.reqLogger.Errorf("failed got get pod for cancelEviction %v", err)
-		return err
-	}
+    nodeName := r.node.ObjectMeta.Name
+    podList, err :=  getListOfEvictedPods(r.drainer, nodeName, dcheck)
 
-	pods := list.Pods()
-	if len(pods) != 0 {
+    if err != nil {
+        return fmt.Errorf("cancelEviction: failed to enumerate pods in evicted state err=%v", err)
+    }
 
-		// cancel the move
-		for _, pod := range pods {
-			if !dcheck.isExpired() {
-				err := r.drainer.Client.PolicyV1beta1().Evictions(pod.Namespace).Evict(nil)
-				if err != nil {
-					r.reqLogger.Errorf("failed cancel eviction %v", err)
-					return err
-				}
-			}
-		}
-	}
+    if len(podList) == 0 {
+        return nil
+    }
+
+    if dcheck.isExpired() {
+        return fmt.Errorf("cancelEviction timed out after enumerting pods")
+    }
+
+    r.drainer.Timeout = dcheck.DurationUntilExpiration()
+    r.drainer.DisableEviction  = true
+	err = r.drainer.DeleteOrEvictPods(podList)
+    r.drainer.DisableEviction  = false
+
+    r.reqLogger.Infof("start deleting evicted pods, timeout: %d sec podsToDelete: %d ", r.drainer.Timeout/time.Second, len(podList))
+
+    if err != nil {
+        return fmt.Errorf("cancelEviction: Failed to delete pods in evicted state err=%v", err)
+    } else {
+       r.reqLogger.Infof("finshed deleting evicted pods")
+    }
+
 	return nil
 }
 
