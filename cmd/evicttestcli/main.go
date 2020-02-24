@@ -11,8 +11,11 @@ import (
 	nmc "kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"strconv"
 	"time"
+)
+
+const (
+	DrainerTimeout = 10
 )
 
 var drainer *drain.Helper
@@ -28,7 +31,7 @@ func (w writer) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func initDrainer(timeout time.Duration) {
+func initDrainer() {
 
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -51,7 +54,7 @@ func initDrainer(timeout time.Duration) {
 		// allow it to (hopefully) complete while we process other nodes
 		// Pending evictions will be checked and reattempted when the Reconcile()
 		// loop gets called again
-		Timeout: timeout,
+		Timeout: time.Duration(DrainerTimeout),
 		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
 			verbStr := "Deleted"
 			if usingEviction {
@@ -66,9 +69,9 @@ func initDrainer(timeout time.Duration) {
 	}
 }
 
-func drainIt(nodeName string, timeoutInSeconds int64) {
+func drainIt(nodeName string) {
 
-	initDrainer(time.Duration(timeoutInSeconds) * time.Second)
+	initDrainer()
 
 	node, err := drainer.Client.Core().Nodes().Get(nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -104,9 +107,9 @@ func drainIt(nodeName string, timeoutInSeconds int64) {
 
 }
 
-func uncordonIt(nodeName string, timeoutInSeconds int64) {
+func uncordonIt(nodeName string) {
 
-	initDrainer(time.Duration(timeoutInSeconds) * time.Second)
+	initDrainer() //time.Duration(timeoutInSeconds) * time.Second)
 
 	node, err := drainer.Client.Core().Nodes().Get(nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -127,11 +130,7 @@ func deadlineInSecs(seconds int64) time.Time {
 	return tm
 }
 
-func cancelIt(nodeName string, timeoutInSeconds int64) {
-
-	initDrainer(time.Duration(timeoutInSeconds) * time.Second)
-
-	dcheck := nmc.NewDeadlineInSeconds(timeoutInSeconds)
+func cleanUpExpiredPods(nodeName string, dcheck nmc.DeadlineCheck) {
 
 	if dcheck.IsExpired() {
 		fmt.Printf("cancelEviction timed out\n")
@@ -165,15 +164,47 @@ func cancelIt(nodeName string, timeoutInSeconds int64) {
 	if err != nil {
 		fmt.Printf("cancelEviction: Failed to delete pods in evicted state err=%v\n", err)
 		os.Exit(1)
-	} else {
-		fmt.Printf("finshed deleting evicted pods\n")
 	}
+}
+
+func cancelEviction(nodeName string, dcheck nmc.DeadlineCheck) {
+	list, errs := drainer.GetPodsForDeletion(nodeName)
+	if errs != nil {
+		fmt.Printf("failed to get pod list %v", errs)
+		return
+	}
+
+	pods := list.Pods()
+	if len(pods) != 0 {
+
+		// cancel the move
+		for _, pod := range pods {
+			if !dcheck.IsExpired() {
+				err := drainer.Client.PolicyV1beta1().Evictions(pod.Namespace).Evict(nil)
+				if err != nil {
+					fmt.Printf("failed cancel eviction %v", err)
+					return
+				}
+			}
+		}
+	}
+}
+
+func cancelIt(nodeName string) {
+
+	initDrainer()
+
+	dcheck := nmc.NewDeadlineInSeconds(3)
+
+	cancelEviction(nodeName, dcheck)
+	//cleanUpExpiredPods(nodeName, dcheck)
+	fmt.Printf("finshed deleting evicted pods\n")
 
 }
 
 func showHelp() {
 
-	fmt.Printf("drain <nodeName> [<timeout>] | cancel <nodeName> | uncordon <nodeName> [<timeout>]\n")
+	fmt.Printf("drain <nodeName> | cancel <nodeName> | uncordon <nodeName>\n")
 	os.Exit(1)
 }
 
@@ -185,23 +216,12 @@ func main() {
 	action := os.Args[1]
 	nodeName := os.Args[2]
 
-	var timeOut int64 = 0
-	if len(os.Args) > 3 {
-		var perr error
-
-		timeOut, perr = strconv.ParseInt(os.Args[3], 10, 32)
-		if perr != nil {
-			fmt.Printf("failed to parse timeout param. error: %v\n", perr)
-			showHelp()
-		}
-	}
-
 	if action == "drain" {
-		drainIt(nodeName, timeOut) // * time.Second) )
+		drainIt(nodeName) // * time.Second) )
 	} else if action == "cancel" {
-		cancelIt(nodeName, timeOut)
+		cancelIt(nodeName)
 	} else if action == "uncordon" {
-		uncordonIt(nodeName, 0)
+		uncordonIt(nodeName)
 	} else {
 		showHelp()
 	}
