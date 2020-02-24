@@ -948,9 +948,11 @@ func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
 	if err := r.cancelPendingEvictions(dcheck); err != nil {
 		return err
 	}
+    /*
 	if err := r.cleanPodInEvictedState(dcheck); err != nil {
 		return err
 	}
+    */
 	return nil
 }
 
