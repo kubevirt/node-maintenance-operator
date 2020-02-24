@@ -520,6 +520,9 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 				log.Infof("MaintOff: retry loop: update lease ok")
 				break
 			}
+			if r.statusAnnoData != nil && *r.statusAnnoData != ReconcileNodeMaintenanceStatusInfo(string(NodeStateEnded)) {
+				r.setAnnotations(NodeStateEnded, false)
+			}
 			time.Sleep(50 * time.Millisecond)
 		}
 		log.Infof("MaintOff: eof")
@@ -817,51 +820,64 @@ func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
 	return nil
 }
 
-type ListenerResult struct {
-	err     error
-	podList *corev1.PodList
+type ClientGoCallResult struct {
+	err          error
+	callerResult interface{}
 }
 
-func GetListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck DeadlineCheck) ([]corev1.Pod, error) {
+func CallClientGoWithTimeout(client kubernetes.Interface, caller func(client kubernetes.Interface) (error, interface{}), dcheck DeadlineCheck) (interface{}, error) {
 
-	returnCh := make(chan ListenerResult, 1)
-	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName, "status.phase": "Failed"})
+	returnCh := make(chan ClientGoCallResult, 1)
 
 	go func() {
-		podList, err := drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
-			FieldSelector: fieldSelector.String()})
+		callerResult, err := caller(client)
 
 		if err != nil {
 			retErr := fmt.Errorf("GetListOfEvictedPods: error while listing pods: %f", err)
-			returnCh <- ListenerResult{err: retErr}
+			returnCh <- ClientGoCallResult{err: retErr}
 		} else {
-			returnCh <- ListenerResult{nil, podList}
+			returnCh <- ClientGoCallResult{nil, callerResult}
 		}
 	}()
 
 	for !dcheck.IsExpired() {
 		select {
 		case res := <-returnCh:
-            if res.err != nil {
-                return nil, res.err
-            }
-           
-          	evictedPods := []corev1.Pod{}
-			if res.podList != nil {
-                for _, pod := range res.podList.Items {
-                    if pod.Status.Reason == "Evicted" {
-                        evictedPods = append(evictedPods,pod)
-                    }
-                }
-			}
-			return evictedPods, nil
-
+			return res, res.err
 		default:
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
 	return []corev1.Pod{}, fmt.Errorf("GetListOfEvictedPods: timed out")
+}
+
+func GetListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck DeadlineCheck) ([]corev1.Pod, error) {
+
+	cgo := func(client kubernetes.Interface) (error, interface{}) {
+		fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName, "status.phase": "Failed"})
+		podList, err := client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
+			FieldSelector: fieldSelector.String()})
+		return err, podList
+
+	}
+	val, err := CallClientGoWithTimeout(drainer.Client, cgo, dcheck)
+
+	if err != nil {
+		return nil, err
+	}
+
+	evictedPods := []corev1.Pod{}
+	podList, _ := val.(corev1.PodList)
+
+	if podList.Items != nil {
+		for _, pod := range podList.Items {
+			if pod.Status.Reason == "Evicted" {
+				evictedPods = append(evictedPods, pod)
+			}
+		}
+	}
+	return evictedPods, nil
 }
 
 func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
