@@ -880,8 +880,33 @@ func GetListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck Deadlin
 	return evictedPods, nil
 }
 
-func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
+func (r *ReconcileNodeMaintenance) cancelPendingEvictions(dcheck DeadlineCheck) error {
+	nodeName := r.node.ObjectMeta.Name
+	list, errs := r.drainer.GetPodsForDeletion(nodeName)
+	if errs != nil {
+		err := utilerrors.NewAggregate(errs)
+		r.reqLogger.Errorf("failed got get pod for cancelEviction %v", err)
+		return err
+	}
 
+	pods := list.Pods()
+	if len(pods) != 0 {
+
+		// cancel the move
+		for _, pod := range pods {
+			if !dcheck.IsExpired() {
+				err := r.drainer.Client.PolicyV1beta1().Evictions(pod.Namespace).Evict(nil)
+				if err != nil {
+					r.reqLogger.Errorf("failed cancel eviction %v", err)
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (r *ReconcileNodeMaintenance) cleanPodInEvictedState(dcheck DeadlineCheck) error {
 	if dcheck.IsExpired() {
 		return fmt.Errorf("cancelEviction timed out")
 	}
@@ -914,6 +939,18 @@ func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
 		r.reqLogger.Infof("finshed deleting evicted pods")
 	}
 
+	return nil
+
+}
+
+func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
+
+	if err := r.cancelPendingEvictions(dcheck); err != nil {
+		return err
+	}
+	if err := r.cleanPodInEvictedState(dcheck); err != nil {
+		return err
+	}
 	return nil
 }
 
