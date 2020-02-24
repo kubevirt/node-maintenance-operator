@@ -830,7 +830,7 @@ func CallClientGoWithTimeout(client kubernetes.Interface, caller func(client kub
 	returnCh := make(chan ClientGoCallResult, 1)
 
 	go func() {
-		callerResult, err := caller(client)
+		err, callerResult := caller(client)
 
 		if err != nil {
 			retErr := fmt.Errorf("GetListOfEvictedPods: error while listing pods: %f", err)
