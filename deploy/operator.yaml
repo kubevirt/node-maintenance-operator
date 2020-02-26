@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: node-maintenance-operator
   namespace: node-maintenance-operator
+  labels:
+    name: node-maintenance-operator
 spec:
   replicas: 1
   selector:

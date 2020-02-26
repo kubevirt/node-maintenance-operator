@@ -89,18 +89,23 @@ manifests: csv-generator
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:
-	CLUSTER_NUM_NODES=3 ./cluster/up.sh
+	./cluster-up/up.sh
 
 cluster-down:
-	./cluster/down.sh
+	./cluster-up/down.sh
 
-cluster-sync:
-	./cluster/sync.sh
+cluster-build: cluster-clean
+	./hack/cluster-build.sh $(IMAGE_TAG)
+
+cluster-deploy: cluster-clean
+	./hack/cluster-deploy.sh
+
+cluster-sync: cluster-build cluster-deploy
 
 cluster-functest:
-	./cluster/functest.sh
+	./cluster-up/functest.sh
 
 cluster-clean:
-	./cluster/clean.sh
+	./hack/cluster-clean.sh
 
 .PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean

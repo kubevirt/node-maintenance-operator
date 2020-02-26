@@ -1,10 +1,10 @@
-binaries="cmd/virt-operator cmd/virt-controller cmd/virt-launcher cmd/virt-handler cmd/virtctl cmd/fake-qemu-process cmd/virt-api cmd/subresource-access-test cmd/example-hook-sidecar cmd/example-cloudinit-hook-sidecar"
+binaries="cmd/virt-operator"
 docker_images="node-maintenance-operator"
 docker_tag=${DOCKER_TAG:-latest}
 docker_tag_alt=${DOCKER_TAG_ALT}
 image_prefix=${IMAGE_PREFIX}
 image_prefix_alt=${IMAGE_PREFIX_ALT}
-namespace=kubevirt
+namespace=node-maintenance-operator
 deploy_testing_infra=${DEPLOY_TESTING_INFRA:-false}
 csv_namespace=placeholder
 cdi_namespace=cdi
