@@ -207,22 +207,28 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
+	reqLogger.Debugf("Retrieving lease for Node: %s", nodeName)
 	lease, err := r.getLease(node)
 	if err != nil {
 		return r.reconcileAndError(instance, err)
 	}
 
-	if !leaseExpired(lease) && *lease.Spec.HolderIdentity != LeaseHolderIdentity {
+	reqLogger.Debugf("Checking lease holder for Node: %s", nodeName)
+	if !leaseExpired(lease) && lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != LeaseHolderIdentity {
+		reqLogger.Infof("Waiting for lease held by %v", *lease.Spec.HolderIdentity)
 		return reconcile.Result{Requeue: true, RequeueAfter: RequeuDrainingWaitTime}, nil
 	}
 
+	reqLogger.Debugf("Checking lease expiry for Node: %s", nodeName)
 	if leaseExpired(lease) {
+		reqLogger.Infof("Updating lease expiry for Node: %s", nodeName)
 		if _, err := r.updateLease(lease, node, 60*60); err != nil {
 			return r.reconcileAndError(instance, err)
 		}
 	}
 
 	// Cordon node
+	reqLogger.Infof("Cordoning Node: %s", nodeName)
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
 	if err != nil {
 		return r.reconcileAndError(instance, err)
@@ -257,22 +263,29 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 		return err
 	}
 
+	reqLogger := log.WithFields(log.Fields{"Node": node.Name, "Action": "release"})
+	reqLogger.Debug("Obtaining lease")
+
 	lease, err := r.getLease(node)
 	if err != nil || leaseExpired(lease) {
+		reqLogger.Infof("Lease expired: %v", err)
 		return nil
 	}
 
-	r.updateLease(lease, node, 0)
-
 	// Uncordon the node
+	reqLogger.Debug("Removing taint")
 	err = AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
 		return err
 	}
 
+	reqLogger.Debug("Uncordoning node")
 	if err = runCordonOrUncordon(r, node, false); err != nil {
 		return err
 	}
+
+	reqLogger.Info("Releasing lease")
+	r.updateLease(lease, node, 0)
 
 	return nil
 }
@@ -351,9 +364,9 @@ func (r *ReconcileNodeMaintenance) reconcileAndError(nm *kubevirtv1alpha1.NodeMa
 }
 
 func (r *ReconcileNodeMaintenance) getLease(node *corev1.Node) (*coordv1beta1.Lease, error) {
-
-	one := int32(1)
 	identity := LeaseHolderIdentity
+        leaseNamespace := "node-maintenance-operator"
+
 	owner := &metav1.OwnerReference{
 		APIVersion: "v1",
 		Kind:       "Node",
@@ -362,25 +375,21 @@ func (r *ReconcileNodeMaintenance) getLease(node *corev1.Node) (*coordv1beta1.Le
 	}
 
 	lease := &coordv1beta1.Lease{}
-	leaseName := types.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: node.Name}
+	leaseName := types.NamespacedName{Namespace: leaseNamespace, Name: node.Name}
 
 	if err := r.client.Get(context.TODO(), leaseName, lease); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
 
-		microTimeNow := metav1.NewMicroTime(time.Now())
 		lease = &coordv1beta1.Lease{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            node.Name,
-				Namespace:       corev1.NamespaceNodeLease,
+				Namespace:       leaseNamespace,
 				OwnerReferences: []metav1.OwnerReference{*owner},
 			},
 			Spec: coordv1beta1.LeaseSpec{
 				HolderIdentity:       &identity,
-				LeaseDurationSeconds: &one,
-				AcquireTime:          &microTimeNow,
-				LeaseTransitions:     &one,
 			},
 		}
 
@@ -398,6 +407,7 @@ func (r *ReconcileNodeMaintenance) updateLease(lease *coordv1beta1.Lease, node *
 
 	one := int32(1)
 	identity := LeaseHolderIdentity
+	duration := int32(interval + LeasePaddingSeconds)
 	owner := &metav1.OwnerReference{
 		APIVersion: "v1",
 		Kind:       "Node",
@@ -412,7 +422,6 @@ func (r *ReconcileNodeMaintenance) updateLease(lease *coordv1beta1.Lease, node *
 
 	} else {
 		lease.Spec.HolderIdentity = &identity
-		duration := int32(interval + LeasePaddingSeconds)
 
 		if lease.Spec.LeaseTransitions == nil {
 			lease.Spec.LeaseTransitions = &one
@@ -437,14 +446,23 @@ func (r *ReconcileNodeMaintenance) updateLease(lease *coordv1beta1.Lease, node *
 		return lease, err
 	}
 
-	log.Debugf("lease updated: duration: %d sec", lease.Spec.LeaseDurationSeconds)
+	if lease.Spec.LeaseDurationSeconds != nil {
+		log.Infof("lease updated: duration: %d sec", *lease.Spec.LeaseDurationSeconds)
+	} else {
+		log.Infof("lease released")
+	}
 	return lease, nil
 }
 
 func leaseExpired(lease *coordv1beta1.Lease) bool {
 
 	if lease.Spec.AcquireTime == nil {
-		return false
+		log.Debugf("The lease for %v has expired: empty acquire time", lease.Name)
+		return true
+	}
+	if lease.Spec.LeaseDurationSeconds == nil {
+		log.Debugf("The lease for %v has expired: empty duration", lease.Name)
+		return true
 	}
 
 	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
@@ -453,5 +471,8 @@ func leaseExpired(lease *coordv1beta1.Lease) bool {
 	}
 
 	timeNow := time.Now()
-	return !timeNow.After(leasePeriodEnd)
+	if timeNow.After(leasePeriodEnd) {
+		log.Debugf("The lease for %v has expired: now=%v, start=%v, duration=%v, end=%v", lease.Name, timeNow, (*lease.Spec.AcquireTime).Time, *lease.Spec.LeaseDurationSeconds, leasePeriodEnd)
+	}
+	return timeNow.After(leasePeriodEnd)
 }
