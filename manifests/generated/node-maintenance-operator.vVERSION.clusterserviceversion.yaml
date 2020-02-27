@@ -103,7 +103,7 @@ spec:
         - apiGroups:
           - coordination.k8s.io
           resources:
-          - lease
+          - leases
           verbs:
           - '*'
         serviceAccountName: node-maintenance-operator
