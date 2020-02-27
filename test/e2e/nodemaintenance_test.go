@@ -4,6 +4,7 @@ import (
 	goctx "context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,9 @@ import (
 	framework "github.com/operator-framework/operator-sdk/pkg/test"
 	"github.com/operator-framework/operator-sdk/pkg/test/e2eutil"
 	appsv1 "k8s.io/api/apps/v1"
+	coordv1beta1 "k8s.io/api/coordination/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +31,12 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
+)
+
+const (
+	NodeMaintenanceSpecAnnotation   = "lifecycle.openshift.io/maintenance"
+	NodeMaintenanceStatusAnnotation = "lifecycle.openshift.io/maintenance-status"
+	LeaseHolderIdentity             = "node-maintenance"
 )
 
 func TestNodeMainenance(t *testing.T) {
@@ -73,6 +82,83 @@ func ClusterTest(t *testing.T) {
 	}
 }
 
+func setSpecAnnotation(node *corev1.Node, newValue string) error {
+
+	if newValue != "" {
+		node.ObjectMeta.Annotations[NodeMaintenanceSpecAnnotation] = newValue
+	} else {
+		delete(node.ObjectMeta.Annotations, NodeMaintenanceSpecAnnotation)
+	}
+
+	f := framework.Global
+	client := f.KubeClient.Core().Nodes()
+
+	_, err := client.Update(node)
+	if err != nil {
+		return fmt.Errorf("setAnnotation: update node failed. error: %v", err)
+	}
+	return nil
+}
+
+func isLeasePeriodSpecified(lease *coordv1beta1.Lease) bool {
+	return lease.Spec.AcquireTime != nil && lease.Spec.LeaseDurationSeconds != nil
+}
+
+// check if lease is not expired (precondition that both AcquireTime and LeaseDuration are not nil)
+func isLeaseValid(lease *coordv1beta1.Lease) bool {
+
+	if lease.Spec.AcquireTime == nil {
+		// can this happen?
+		return false
+	}
+
+	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
+	if lease.Spec.LeaseDurationSeconds != nil {
+		leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
+	}
+
+	timeNow := time.Now()
+
+	return !timeNow.After(leasePeriodEnd)
+}
+
+func checkHasLease(t *testing.T, nodeName string, durationValid bool) {
+
+	lease := &coordv1beta1.Lease{}
+	nName := types.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: nodeName}
+
+	f := framework.Global
+
+	if err := f.Client.Get(goctx.TODO(), nName, lease); err != nil {
+		if errors.IsNotFound(err) {
+			t.Fatal(fmt.Errorf("Lease object not found name=%s ns=%s", nName.Name, nName.Namespace))
+			return
+		}
+
+		t.Fatal(fmt.Errorf("failed to get lease object. name=%s ns=%s error=%v", nName.Name, nName.Namespace, err))
+		return
+	}
+
+	heldByMe := lease.Spec.HolderIdentity != nil && LeaseHolderIdentity == *lease.Spec.HolderIdentity
+
+	if durationValid {
+		if !heldByMe {
+			t.Fatal(fmt.Errorf("lease not held by me"))
+			return
+		}
+		if !isLeasePeriodSpecified(lease) || !isLeaseValid(lease) {
+			t.Fatal(fmt.Errorf("lease not valid."))
+		}
+
+	} else {
+
+		if heldByMe && isLeasePeriodSpecified(lease) && isLeaseValid(lease) {
+			t.Fatal(fmt.Errorf("lease still valid."))
+		}
+	}
+
+}
+
 func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
@@ -91,61 +177,77 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	t.Logf("Putting node %s into maintanance", nodeName)
 
-	// Create node maintenance custom resource
-	nodeMaintenance := &operator.NodeMaintenance{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "nodemaintenance-xyz",
-		},
-		Spec: operator.NodeMaintenanceSpec{
-			NodeName: nodeName,
-			Reason:   "Set maintenance on node for e2e testing",
-		},
+	// get the node object.
+	node, errn := f.KubeClient.Core().Nodes().Get(nodeName, metav1.GetOptions{})
+	if errn != nil {
+		t.Fatal(fmt.Errorf("Failed to get node. error: %v", errn))
 	}
 
-	// Create node maintenance CR
-	err = f.Client.Create(goctx.TODO(), nodeMaintenance, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
-	if err != nil {
-		t.Fatal(err)
+	errn = setSpecAnnotation(node, "3600")
+	if errn != nil {
+		t.Fatal(fmt.Errorf("Failed to set maint. mode annotation. error: %v", errn))
 	}
 
 	// Get Running phase first
 	if err := wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
-		nm := &operator.NodeMaintenance{}
-		err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+
+		node, err := f.KubeClient.Core().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
-			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
+			t.Logf("Failed to get node %s error: %v", nodeName, err)
 			return false, nil
 		}
-		if nm.Status.Phase != operator.MaintenanceRunning {
-			return false, nil
+
+		val, hasAnnotation := node.ObjectMeta.Annotations[NodeMaintenanceSpecAnnotation]
+		if hasAnnotation {
+			t.Logf("spec annotation %s", val)
+		} else {
+			t.Logf("no spec annotation yet")
 		}
-		return true, nil
+
+		val, hasAnnotation = node.ObjectMeta.Annotations[NodeMaintenanceStatusAnnotation]
+
+		if hasAnnotation {
+			t.Logf("status annotation %s", val)
+			if strings.HasPrefix(val, "new") {
+				return true, nil
+			}
+		} else {
+			t.Logf("no status annotation yet")
+		}
+		return false, nil
 	}); err != nil {
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
-	// Wait for the maintanance operation to complete successfuly
+	t.Logf("node %s transition to maintenance mode ongoing", nodeName)
+
+	checkHasLease(t, nodeName, true)
+
+	// Get Running phase first
 	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
-		nm := &operator.NodeMaintenance{}
-		err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+
+		node, err := f.KubeClient.Core().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
-			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
+			t.Logf("Failed to get node %s error: %v", nodeName, err)
 			return false, nil
 		}
-		if nm.Status.Phase != operator.MaintenanceSucceeded {
-			return false, nil
+
+		val, hasAnnotation := node.ObjectMeta.Annotations[NodeMaintenanceStatusAnnotation]
+
+		if hasAnnotation && val == "active" {
+			return true, nil
 		}
-		return true, nil
+
+		return false, nil
 	}); err != nil {
-		checkFailureStatus(t, f)
-		t.Fatal(fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
+		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
-	node := &corev1.Node{}
+	t.Logf("node %s maintenance mode active", nodeName)
+
+	checkHasLease(t, nodeName, true)
+
+	node = &corev1.Node{}
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
 	if err != nil {
 		t.Fatal(err)
@@ -194,40 +296,47 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	t.Logf("Setting node %s out of maintanance", nodeName)
 
-	nodeMaintenanceDelete := &operator.NodeMaintenance{}
-
-	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: nodeMaintenance.Namespace, Name: nodeMaintenance.Name}, nodeMaintenanceDelete)
-	if err != nil {
-		t.Fatal(err)
+	// get the node object.
+	node, errn = f.KubeClient.Core().Nodes().Get(nodeName, metav1.GetOptions{})
+	if errn != nil {
+		t.Fatal(fmt.Errorf("Failed to get node. error: %v", errn))
 	}
 
-	// Delete the node maintenance custom resource
-	err = f.Client.Delete(goctx.TODO(), nodeMaintenanceDelete)
-	if err != nil {
-		t.Fatalf("Could not delete node maintenance CR : %v", err)
+	errn = setSpecAnnotation(node, "")
+	if errn != nil {
+		t.Fatal(fmt.Errorf("Failed to set maint. mode annotation. error: %v", errn))
 	}
 
-	time.Sleep(60 * time.Second)
+	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
 
-	node = &corev1.Node{}
-	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
-	if err != nil {
-		t.Fatal(err)
+		node, err := f.KubeClient.Core().Nodes().Get(nodeName, metav1.GetOptions{})
+		if err != nil {
+			t.Logf("Failed to get node %s error: %v", nodeName, err)
+			return false, nil
+		}
+
+		val, hasAnnotation := node.ObjectMeta.Annotations[NodeMaintenanceStatusAnnotation]
+
+		if hasAnnotation && val == "ended" {
+			return true, nil
+		}
+
+		return false, nil
+	}); err != nil {
+		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
-	if node.Spec.Unschedulable == true {
+	if node.Spec.Unschedulable == false {
 		t.Fatal(fmt.Errorf("Node %s should have been schedulable", nodeName))
 	}
 
-	if kubevirtTaintExist(node) {
+	if !kubevirtTaintExist(node) {
 		t.Fatal(fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName))
 	}
 
-	// Check that the deployment has 1 replica running after maintenance is removed.
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
-	if err != nil {
-		t.Fatal(err)
-	}
+	checkHasLease(t, nodeName, false)
+
+	t.Logf("node %s is operational again", nodeName)
 
 	return nil
 }

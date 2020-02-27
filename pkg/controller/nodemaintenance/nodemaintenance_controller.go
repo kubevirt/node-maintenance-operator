@@ -105,9 +105,12 @@ type ReconcileNodeMaintenance struct {
 
 	clientset kubernetes.Interface
 	drainer   *drain.Helper
+}
 
-	// used only for the duration of one reconcile call. transient value.
-	// That's ok as there is one go routine that handles reconciles (here)
+type ReconcileCall struct {
+	drainer        *drain.Helper
+	client         client.Client
+	clientset      kubernetes.Interface
 	reqLogger      *log.Entry
 	node           *corev1.Node
 	specAnnoData   *ReconcileNodeMaintenanceSpecInfo
@@ -211,37 +214,43 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	rc := &ReconcileCall{
+		drainer:   r.drainer,
+		reqLogger: log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name}),
+		client:    r.client,
+		clientset: r.clientset,
+	}
 
-	r.reqLogger = log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name})
-	r.reqLogger.Debug("Reconciling node ", request.Name)
+	rc.reqLogger = log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name})
+	rc.reqLogger.Debug("Reconciling node ", request.Name)
 
 	// Get node from request
-	r.node = &corev1.Node{}
+	rc.node = &corev1.Node{}
 
-	if err := r.client.Get(context.TODO(), request.NamespacedName, r.node); err != nil {
+	if err := rc.client.Get(context.TODO(), request.NamespacedName, rc.node); err != nil {
 		if errors.IsNotFound(err) {
-			r.reqLogger.Info("cannot retrieve nod. not found")
+			rc.reqLogger.Info("cannot retrieve nod. not found")
 			return reconcile.Result{}, nil
 		}
-		r.reqLogger.Infof("cannot retrieve node. error: %v", err)
+		rc.reqLogger.Infof("cannot retrieve node. error: %v", err)
 		return reconcile.Result{}, err
 	}
 
 	// parse status & spec, create initial status object on first call
-	err := r.parseAnnotations()
+	err := rc.parseAnnotations()
 	if err != nil {
-		r.reqLogger.Errorf("request parsing error. error: %v", err)
+		rc.reqLogger.Errorf("request parsing error. error: %v", err)
 		return reconcile.Result{}, err
 	}
 
-	if r.specAnnoData == nil && r.statusAnnoData == nil {
-		return r.processNoAnnotations()
+	if rc.specAnnoData == nil && rc.statusAnnoData == nil {
+		return rc.processNoAnnotations()
 	}
 
-	if r.specAnnoData != nil {
-		return r.processMaintModeOn()
+	if rc.specAnnoData != nil {
+		return rc.processMaintModeOn()
 	}
-	return r.processMaintModeOff()
+	return rc.processMaintModeOff()
 
 	/*
 		if isTimeoutError(err) {
@@ -256,7 +265,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	*/
 }
 
-func (r *ReconcileNodeMaintenance) parseAnnotations() error {
+func (r *ReconcileCall) parseAnnotations() error {
 
 	r.specAnnoData = nil
 	r.statusAnnoData = nil
@@ -292,7 +301,7 @@ func (r *ReconcileNodeMaintenance) parseAnnotations() error {
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error) {
+func (r *ReconcileCall) processMaintModeOn() (reconcile.Result, error) {
 
 	// handling of lease as a prerequisite to state transitions.
 	leaseStatus, _, lease := r.doesLeaseExist()
@@ -359,7 +368,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOn() (reconcile.Result, error
 	return r.handleMaintModeTransition(lease)
 }
 
-func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1.Lease) (reconcile.Result, error) {
+func (r *ReconcileCall) handleMaintModeTransition(lease *coordv1beta1.Lease) (reconcile.Result, error) {
 
 	dcheck := DeadlineCheck{}
 
@@ -419,7 +428,7 @@ func (r *ReconcileNodeMaintenance) handleMaintModeTransition(lease *coordv1beta1
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileNodeMaintenance) processNoAnnotations() (reconcile.Result, error) {
+func (r *ReconcileCall) processNoAnnotations() (reconcile.Result, error) {
 
 	dcheck := DeadlineCheck{}
 
@@ -446,7 +455,7 @@ func (r *ReconcileNodeMaintenance) processNoAnnotations() (reconcile.Result, err
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, error) {
+func (r *ReconcileCall) processMaintModeOff() (reconcile.Result, error) {
 
 	leaseStatus, _, lease := r.doesLeaseExist()
 	if leaseStatus == LeaseStatusOwnedByMe {
@@ -531,7 +540,7 @@ func (r *ReconcileNodeMaintenance) processMaintModeOff() (reconcile.Result, erro
 }
 
 // returns true if lease duration differs from node annotation value
-func (r *ReconcileNodeMaintenance) isLeaseDurationChanged(lease *coordv1beta1.Lease) bool {
+func (r *ReconcileCall) isLeaseDurationChanged(lease *coordv1beta1.Lease) bool {
 	if lease.Spec.LeaseDurationSeconds != nil {
 		value := int32(*r.specAnnoData)
 		return *lease.Spec.LeaseDurationSeconds != value+LeasePaddingSeconds
@@ -582,7 +591,7 @@ func isLeaseValid(lease *coordv1beta1.Lease, addPaddingToCurrent bool) bool {
 	return !timeNow.After(leasePeriodEnd)
 }
 
-func (r *ReconcileNodeMaintenance) doesLeaseExist() (LeaseStatus, error, *coordv1beta1.Lease) {
+func (r *ReconcileCall) doesLeaseExist() (LeaseStatus, error, *coordv1beta1.Lease) {
 	lease := &coordv1beta1.Lease{}
 
 	nodeName := r.node.ObjectMeta.Name
@@ -607,7 +616,7 @@ func (r *ReconcileNodeMaintenance) doesLeaseExist() (LeaseStatus, error, *coordv
 	return LeaseStatusOwnedByDifferentHolder, nil, lease
 }
 
-func (r *ReconcileNodeMaintenance) createOrUpdateLease(lease *coordv1beta1.Lease, transitions TransitionAction, nextState NodeMaintenanceStatusType) (*coordv1beta1.Lease, error) {
+func (r *ReconcileCall) createOrUpdateLease(lease *coordv1beta1.Lease, transitions TransitionAction, nextState NodeMaintenanceStatusType) (*coordv1beta1.Lease, error) {
 
 	nodeName := r.node.ObjectMeta.Name
 	tmpDurationInSeconds := int32(0)
@@ -740,7 +749,7 @@ func (obj *ReconcileNodeMaintenance) initDrainer() error {
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck DeadlineCheck) error {
+func (r *ReconcileCall) runCordonOrUncordon(cordonOn bool, dcheck DeadlineCheck) error {
 
 	countTaint, numDesiredTaints := CountDesiredTaintOnNode(r.node)
 	if (cordonOn && countTaint != numDesiredTaints) || (!cordonOn && countTaint != 0) {
@@ -781,7 +790,7 @@ func (r *ReconcileNodeMaintenance) runCordonOrUncordon(cordonOn bool, dcheck Dea
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) evictPods(dcheck DeadlineCheck) error {
+func (r *ReconcileCall) evictPods(dcheck DeadlineCheck) error {
 
 	if !dcheck.IsExpired() {
 		nodeName := r.node.ObjectMeta.Name
@@ -880,7 +889,7 @@ func GetListOfEvictedPods(drainer *drain.Helper, nodeName string, dcheck Deadlin
 	return evictedPods, nil
 }
 
-func (r *ReconcileNodeMaintenance) cancelPendingEvictions(dcheck DeadlineCheck) error {
+func (r *ReconcileCall) cancelPendingEvictions(dcheck DeadlineCheck) error {
 	nodeName := r.node.ObjectMeta.Name
 	list, errs := r.drainer.GetPodsForDeletion(nodeName)
 	if errs != nil {
@@ -906,7 +915,7 @@ func (r *ReconcileNodeMaintenance) cancelPendingEvictions(dcheck DeadlineCheck) 
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) cleanPodInEvictedState(dcheck DeadlineCheck) error {
+func (r *ReconcileCall) cleanPodInEvictedState(dcheck DeadlineCheck) error {
 	if dcheck.IsExpired() {
 		return fmt.Errorf("cancelEviction timed out")
 	}
@@ -943,7 +952,7 @@ func (r *ReconcileNodeMaintenance) cleanPodInEvictedState(dcheck DeadlineCheck) 
 
 }
 
-func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
+func (r *ReconcileCall) cancelEviction(dcheck DeadlineCheck) error {
 
 	/*
 		if err := r.cancelPendingEvictions(dcheck); err != nil {
@@ -958,7 +967,7 @@ func (r *ReconcileNodeMaintenance) cancelEviction(dcheck DeadlineCheck) error {
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) setAnnotations(statusInfo NodeMaintenanceStatusType, deleteSpec bool) error {
+func (r *ReconcileCall) setAnnotations(statusInfo NodeMaintenanceStatusType, deleteSpec bool) error {
 
 	newNode := r.node.DeepCopy()
 
@@ -982,7 +991,7 @@ func (r *ReconcileNodeMaintenance) setAnnotations(statusInfo NodeMaintenanceStat
 	return err
 }
 
-func (r *ReconcileNodeMaintenance) updateNode(node *corev1.Node) error {
+func (r *ReconcileCall) updateNode(node *corev1.Node) error {
 	client := r.clientset.Core().Nodes()
 	_, err := client.Update(node)
 	if err != nil {
@@ -991,7 +1000,7 @@ func (r *ReconcileNodeMaintenance) updateNode(node *corev1.Node) error {
 	return err
 }
 
-func (r *ReconcileNodeMaintenance) patchNodes(oldNode *corev1.Node, newNode *corev1.Node, forceUpdate bool) error {
+func (r *ReconcileCall) patchNodes(oldNode *corev1.Node, newNode *corev1.Node, forceUpdate bool) error {
 
 	if forceUpdate {
 		return r.updateNode(newNode)
