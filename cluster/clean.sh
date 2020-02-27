@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash 
 
 echo 'Cleaning up ...'
 
