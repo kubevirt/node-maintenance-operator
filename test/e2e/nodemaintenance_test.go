@@ -3,6 +3,9 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
+	"os"
+	"os/exec"
+    "io/ioutil"
 	"reflect"
 	"strings"
 	"testing"
@@ -159,6 +162,48 @@ func checkHasLease(t *testing.T, nodeName string, durationValid bool) {
 
 }
 
+const ( scriptGetStatus = `#!/bin/bash -x
+
+OC="./cluster/kubectl.sh"
+
+pwd
+ls .
+
+echo "*** dump operator status & logs ***"
+
+$OC get pods -n node-maintenance-operator
+
+POD_NAME=$($OC get pods -n node-maintenance-operator  | grep node-maintenance-operator | awk '{print $1}')
+
+echo "pod name: ${POD_NAME}"
+
+$OC describe pod -n node-maintenance-operator  $POD_NAME
+
+$OC logs -n node-maintenance-operator ${POD_NAME} -c node-maintenance-operator
+`)
+
+func showDeploymtentStatus(t *testing.T) {
+	mydir, _ := os.Getwd()
+	t.Logf("directory: %s", mydir)
+
+    scriptName := "./opstat.sh"
+    ferr := ioutil.WriteFile( scriptName, []byte(scriptGetStatus),0755)
+    if ferr != nil {
+        t.Logf("can't write script. err=%v\n", ferr)
+    }
+
+	clicmd := exec.Command(scriptName)
+	output, err := clicmd.CombinedOutput()
+	if err != nil {
+        cmd := string(output)
+		t.Logf("can't get cluster status: %v comand: %s\n", err, cmd)
+	} else {
+		soutput := string(output)
+		fmt.Printf("cluster status: %s\n", soutput)
+		t.Logf("cluster status: %s", output)
+	}
+}
+
 func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
@@ -216,6 +261,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		}
 		return false, nil
 	}); err != nil {
+		showDeploymtentStatus(t)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
@@ -240,6 +286,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 		return false, nil
 	}); err != nil {
+		showDeploymtentStatus(t)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
@@ -260,12 +307,14 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	if !kubevirtTaintExist(node) {
 		checkFailureStatus(t, f)
+		showDeploymtentStatus(t)
 		t.Fatal(fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
 	nodesList := &corev1.NodeList{}
 	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
 	if err != nil {
+		showDeploymtentStatus(t)
 		t.Fatal(err)
 	}
 
@@ -323,6 +372,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 		return false, nil
 	}); err != nil {
+		showDeploymtentStatus(t)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
