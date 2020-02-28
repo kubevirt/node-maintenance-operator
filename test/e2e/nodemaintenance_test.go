@@ -1,11 +1,12 @@
 package e2e
 
 import (
+	"bytes"
 	goctx "context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-    "io/ioutil"
 	"reflect"
 	"strings"
 	"testing"
@@ -31,9 +32,10 @@ var (
 	retryInterval        = time.Second * 5
 	timeout              = time.Second * 120
 	cleanupRetryInterval = time.Second * 1
-	cleanupTimeout       = time.Second * 5
+	cleanupTimeout       = time.Second * 30
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
+	operatorLabel        = map[string]string{"name": "node-maintenance-operator"}
 )
 
 const (
@@ -42,8 +44,15 @@ const (
 	LeaseHolderIdentity             = "node-maintenance"
 )
 
+const (
+	//scriptGetStatus = `OC="./cluster/kubectl.sh"; pwd; stat "$OC"; date; $OC get pods -n node-maintenance-operator; POD_NAME=$($OC get pods -n node-maintenance-operator  | grep node-maintenance-operator | awk '{print $1}'); echo "pod name: ${POD_NAME}"; $OC describe pod -n node-maintenance-operator ${POD_NAME}; $OC logs -n node-maintenance-operator ${POD_NAME} -c node-maintenance-operator"`
+
+	scriptGetLogs = "OC='./cluster/kubectl.sh'; POD_NAME=$($OC get pods -n node-maintenance-operator | grep node-maintenance-operator | awk '{print $1}'); $OC logs -n node-maintenance-operator $POD_NAME -c node-maintenance-operator"
+)
+
 func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
+
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
 			APIVersion: "kubevirt.io/v1alpha1",
@@ -125,7 +134,7 @@ func isLeaseValid(lease *coordv1beta1.Lease) bool {
 	return !timeNow.After(leasePeriodEnd)
 }
 
-func checkHasLease(t *testing.T, nodeName string, durationValid bool) {
+func checkHasLease(t *testing.T, nodeName string, durationValid bool, deleteLease bool) {
 
 	lease := &coordv1beta1.Lease{}
 	nName := types.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: nodeName}
@@ -160,55 +169,137 @@ func checkHasLease(t *testing.T, nodeName string, durationValid bool) {
 		}
 	}
 
+	if deleteLease {
+		if err := f.Client.Delete(goctx.TODO(), lease); err != nil {
+			t.Errorf("can' delete lease object. error=%v", err)
+		}
+	}
+
 }
 
-const ( scriptGetStatus = `#!/bin/bash -x
-
-OC="./cluster/kubectl.sh"
-
-pwd
-ls .
-
-echo "*** dump operator status & logs ***"
-
-$OC get pods -n node-maintenance-operator
-
-POD_NAME=$($OC get pods -n node-maintenance-operator  | grep node-maintenance-operator | awk '{print $1}')
-
-echo "pod name: ${POD_NAME}"
-
-$OC describe pod -n node-maintenance-operator  $POD_NAME
-
-$OC logs -n node-maintenance-operator ${POD_NAME} -c node-maintenance-operator
-`)
-
-func showDeploymtentStatus(t *testing.T) {
+func showDeploymentStatusScript(t *testing.T) {
 	mydir, _ := os.Getwd()
 	t.Logf("directory: %s", mydir)
 
-    scriptName := "./opstat.sh"
-    ferr := ioutil.WriteFile( scriptName, []byte(scriptGetStatus),0755)
-    if ferr != nil {
-        t.Logf("can't write script. err=%v\n", ferr)
-    }
-
-	clicmd := exec.Command(scriptName)
+	clicmd := exec.Command("bash", "-xec", scriptGetLogs)
 	output, err := clicmd.CombinedOutput()
 	if err != nil {
-        cmd := string(output)
-		t.Logf("can't get cluster status: %v comand: %s\n", err, cmd)
-	} else {
+		t.Logf("can't get cluster status: %v\n", err)
+	}
+
+    if output != nil {
 		soutput := string(output)
-		fmt.Printf("cluster status: %s\n", soutput)
-		t.Logf("cluster status: %s", output)
+		t.Logf("cluster status: %s", soutput)
+	}
+}
+func showDeploymentStatusScriptForPod(t *testing.T, podName string) {
+	mydir, _ := os.Getwd()
+	t.Logf("directory: %s", mydir)
+
+	clicmd := exec.Command("bash", "./cluster/kubectl.sh", "describe", "pod", "-n", "node-maintenance-operator", podName)
+	output, err := clicmd.CombinedOutput()
+	if err != nil {
+		t.Logf("can't describe pod: %s status: %v\n", podName, err)
+	}
+
+    if output != nil {
+		soutput := string(output)
+        t.Logf("describe pod %s output: %s", podName, soutput)
+	}
+
+	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "logs", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator",  "--insecure-skip-tls-verify=true" )
+	output, err = clicmd.CombinedOutput()
+	if err != nil {
+		t.Logf("can't get logs pod: %s status: %v\n", podName, err)
+	}
+
+	clicmd = exec.Command("bash", "./cluster/kubectl.sh",  "exec", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--insecure-skip-tls-verify=true", "--", "ls", "-al", "/var/log")
+	output, err = clicmd.CombinedOutput()
+	if err != nil {
+		t.Logf("can't get /var/log listing pod: %s status: %v\n", podName, err)
+	}
+
+    if output != nil {
+		soutput := string(output)
+        t.Logf("/var/log listing: %s output: %s", podName, soutput)
+	}
+
+	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "exec", "--insecure-skip-tls-verify=true", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--", "journalctl", "-r")
+	output, err = clicmd.CombinedOutput()
+	if err != nil {
+		t.Logf("can't get recent journlctl logs pod: %s status: %v\n", podName, err)
+	}
+
+    if output != nil {
+		soutput := string(output)
+        t.Logf("/var/log listing: %s output: %s", podName, soutput)
 	}
 }
 
+func showDeploymentStatus(t *testing.T, f *framework.Framework) {
+
+	pods, err := getCurrentOperatorPods(t, f)
+	if err != nil {
+		t.Logf("showDeployment: can't get operator deployment error=%v", err)
+		return
+	}
+	podName := pods.Items[0].ObjectMeta.Name
+
+	t.Logf("operator pod: %s", podName)
+
+	showDeploymentStatusScriptForPod(t, podName)
+
+	podLogOpts := corev1.PodLogOptions{}
+
+	req := f.KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
+	podLogs, err := req.Stream()
+	if err != nil {
+		t.Logf("showDeployment: can't get log stream error=%v", err)
+		return
+	}
+	defer podLogs.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, podLogs)
+	if err != nil {
+		t.Logf("showDeployment: can't copy log stream error=%v", err)
+		return
+	}
+	str := buf.String()
+	t.Logf("operator logs: %s", str)
+
+}
+
+func checkSupportLeaseNs(f *framework.Framework) (bool, error) {
+
+    _, err := f.KubeClient.CoreV1().Namespaces().Get("kube-node-lease",metav1.GetOptions{})
+
+    if err != nil {
+        if errors.IsNotFound(err) {
+            return false, nil
+        }
+        return  false, err
+    }
+    return true, nil
+}
+
 func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
+
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
-		return fmt.Errorf("could not get namespace: %v", err)
+		t.Fatalf( "could not get namespace: %v", err)
 	}
+
+    /*
+    supportLease, err := checkSupportLeaseNs(f)
+    if !supportLease {
+        t.Logf("The current environment does not include the node-lease namespace. can't run the test on this environment")
+        return
+    }
+    if err!= nil {
+        t.Fatal("failed to check if node-lease namespace exists")
+    }
+    */
 
 	err = createSimpleDeployment(t, f, ctx, namespace)
 	if err != nil {
@@ -261,13 +352,13 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		}
 		return false, nil
 	}); err != nil {
-		showDeploymtentStatus(t)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
 	t.Logf("node %s transition to maintenance mode ongoing", nodeName)
 
-	checkHasLease(t, nodeName, true)
+	checkHasLease(t, nodeName, true, false)
 
 	// Get Running phase first
 	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
@@ -286,13 +377,13 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 		return false, nil
 	}); err != nil {
-		showDeploymtentStatus(t)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
 	t.Logf("node %s maintenance mode active", nodeName)
 
-	checkHasLease(t, nodeName, true)
+	checkHasLease(t, nodeName, true, false)
 
 	node = &corev1.Node{}
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
@@ -307,14 +398,14 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	if !kubevirtTaintExist(node) {
 		checkFailureStatus(t, f)
-		showDeploymtentStatus(t)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
 	nodesList := &corev1.NodeList{}
 	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
 	if err != nil {
-		showDeploymtentStatus(t)
+		showDeploymentStatus(t, f)
 		t.Fatal(err)
 	}
 
@@ -372,7 +463,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 		return false, nil
 	}); err != nil {
-		showDeploymtentStatus(t)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
@@ -384,9 +475,10 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		t.Fatal(fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName))
 	}
 
-	checkHasLease(t, nodeName, false)
+	checkHasLease(t, nodeName, false, true)
 
 	t.Logf("node %s is operational again", nodeName)
+	showDeploymentStatus(t, f)
 
 	return nil
 }
@@ -463,6 +555,21 @@ func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.Pod
 
 	if pods.Size() == 0 {
 		return pods, fmt.Errorf("There are no pods deployed in cluster to perform the test")
+	}
+
+	return pods, nil
+}
+
+func getCurrentOperatorPods(t *testing.T, f *framework.Framework) (*corev1.PodList, error) {
+	labelSelector := labels.SelectorFromSet(operatorLabel)
+	pods := &corev1.PodList{}
+	err := f.Client.List(goctx.TODO(), &client.ListOptions{LabelSelector: labelSelector}, pods)
+	if err != nil {
+		return pods, err
+	}
+
+	if pods.Size() == 0 {
+		return pods, fmt.Errorf("There are no pods deployed in cluster to run the operator")
 	}
 
 	return pods, nil

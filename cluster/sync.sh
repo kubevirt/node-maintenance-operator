@@ -32,9 +32,25 @@ echo -e "\n---\n" >> _out/namespace-init.yaml
 cat deploy/role_binding.yaml >> _out/namespace-init.yaml
 echo -e "\n---\n" >> _out/namespace-init.yaml
 
+
 cp deploy/operator.yaml _out/operator.yaml
 sed -i "s,quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>,registry:5000/node-maintenance-operator:${TAG},g" _out/operator.yaml
 cat _out/operator.yaml >> _out/namespace-init.yaml
 rm _out/operator.yaml
+
+if [[ $CLUSTER_PROVIDER == "k8s-1.13.3" ]]; then
+echo "** workaround, make the test for this register kube-node-lease namespace ***"
+echo -e "\n---\n" >> _out/namespace-init.yaml
+cat >>_out/namespace-init.yaml <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-node-lease
+spec:
+  finalizers:
+  - kubernetes
+EOF
+
+fi
 
 cp deploy/crds/nodemaintenance_crd.yaml _out/nodemaintenance_crd.yaml
