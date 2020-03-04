@@ -42,6 +42,7 @@ const (
 	NodeMaintenanceSpecAnnotation   = "lifecycle.openshift.io/maintenance"
 	NodeMaintenanceStatusAnnotation = "lifecycle.openshift.io/maintenance-status"
 	LeaseHolderIdentity             = "node-maintenance"
+	LeaseNamespace                  = "node-maintenance-operator"
 )
 
 const (
@@ -137,7 +138,7 @@ func isLeaseValid(lease *coordv1beta1.Lease) bool {
 func checkHasLease(t *testing.T, nodeName string, durationValid bool, deleteLease bool) {
 
 	lease := &coordv1beta1.Lease{}
-	nName := types.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: nodeName}
+	nName := types.NamespacedName{Namespace: LeaseNamespace, Name: nodeName}
 
 	f := framework.Global
 
@@ -207,33 +208,39 @@ func showDeploymentStatusScriptForPod(t *testing.T, podName string) {
         t.Logf("describe pod %s output: %s", podName, soutput)
 	}
 
-	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "logs", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator",  "--insecure-skip-tls-verify=true" )
+	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "logs", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator") //,  "--insecure-skip-tls-verify=true" )
 	output, err = clicmd.CombinedOutput()
 	if err != nil {
 		t.Logf("can't get logs pod: %s status: %v\n", podName, err)
 	}
 
-	clicmd = exec.Command("bash", "./cluster/kubectl.sh",  "exec", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--insecure-skip-tls-verify=true", "--", "ls", "-al", "/var/log")
-	output, err = clicmd.CombinedOutput()
-	if err != nil {
-		t.Logf("can't get /var/log listing pod: %s status: %v\n", podName, err)
-	}
-
     if output != nil {
 		soutput := string(output)
         t.Logf("/var/log listing: %s output: %s", podName, soutput)
 	}
 
-	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "exec", "--insecure-skip-tls-verify=true", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--", "journalctl", "-r")
-	output, err = clicmd.CombinedOutput()
-	if err != nil {
-		t.Logf("can't get recent journlctl logs pod: %s status: %v\n", podName, err)
-	}
 
-    if output != nil {
-		soutput := string(output)
-        t.Logf("/var/log listing: %s output: %s", podName, soutput)
-	}
+//	clicmd = exec.Command("bash", "./cluster/kubectl.sh",  "exec", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--insecure-skip-tls-verify=true", "--", "ls", "-al", "/var/log")
+//	output, err = clicmd.CombinedOutput()
+//	if err != nil {
+//		t.Logf("can't get /var/log listing pod: %s status: %v\n", podName, err)
+//	}
+//
+//    if output != nil {
+//		soutput := string(output)
+//        t.Logf("/var/log listing: %s output: %s", podName, soutput)
+//	}
+//
+//	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "exec", "--insecure-skip-tls-verify=true", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--", "journalctl", "-r")
+//	output, err = clicmd.CombinedOutput()
+//	if err != nil {
+//		t.Logf("can't get recent journlctl logs pod: %s status: %v\n", podName, err)
+//	}
+//
+//    if output != nil {
+//		soutput := string(output)
+//        t.Logf("/var/log listing: %s output: %s", podName, soutput)
+//	}
 }
 
 func showDeploymentStatus(t *testing.T, f *framework.Framework) {
