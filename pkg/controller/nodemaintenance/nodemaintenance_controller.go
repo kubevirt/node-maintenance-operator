@@ -46,6 +46,7 @@ const (
 	LeaseHolderIdentity             = "node-maintenance"
 	LeasePaddingSeconds             = 30
 	WaitForLeasePeriod              = 10 * time.Second
+	LeaseNamespace                  = "node-maintenance-operator"
 )
 
 const (
@@ -555,8 +556,15 @@ func isLeaseDurationZero(lease *coordv1beta1.Lease) bool {
 
 func leasePeriodEnd(lease *coordv1beta1.Lease) time.Time {
 
-	if lease.Spec.AcquireTime != nil {
-		leasePeriodEnd := (*lease.Spec.AcquireTime).Time
+	if lease.Spec.AcquireTime != nil || lease.Spec.RenewTime != nil {
+
+		var leasePeriodEnd time.Time
+
+        if lease.Spec.RenewTime != nil {
+            leasePeriodEnd = (*lease.Spec.RenewTime).Time
+        } else {
+            leasePeriodEnd = (*lease.Spec.AcquireTime).Time
+        }
 
 		if lease.Spec.LeaseDurationSeconds != nil {
 			leasePeriodEnd.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
@@ -573,15 +581,24 @@ func isLeasePeriodSpecified(lease *coordv1beta1.Lease) bool {
 // check if lease is not expired (precondition that both AcquireTime and LeaseDuration are not nil)
 func isLeaseValid(lease *coordv1beta1.Lease, addPaddingToCurrent bool) bool {
 
-	if lease.Spec.AcquireTime == nil {
+	if lease.Spec.AcquireTime == nil && lease.Spec.RenewTime == nil {
 		// can this happen?
 		return false
 	}
 
-	leasePeriodEnd := (*lease.Spec.AcquireTime).Time
-	if lease.Spec.LeaseDurationSeconds != nil {
-		leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
-	}
+    var leasePeriodEnd time.Time
+
+    if lease.Spec.RenewTime != nil {
+        leasePeriodEnd = (*lease.Spec.RenewTime).Time
+    } else {
+        leasePeriodEnd = (*lease.Spec.AcquireTime).Time
+    }
+
+
+    if lease.Spec.LeaseDurationSeconds != nil {
+           leasePeriodEnd = leasePeriodEnd.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
+    }
+
 
 	timeNow := time.Now()
 
@@ -595,7 +612,7 @@ func (r *ReconcileCall) doesLeaseExist() (LeaseStatus, error, *coordv1beta1.Leas
 	lease := &coordv1beta1.Lease{}
 
 	nodeName := r.node.ObjectMeta.Name
-	nName := apitypes.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: nodeName}
+	nName := apitypes.NamespacedName{Namespace: LeaseNamespace, Name: nodeName}
 
 	if err := r.client.Get(context.TODO(), nName, lease); err != nil {
 		if errors.IsNotFound(err) {
@@ -647,13 +664,14 @@ func (r *ReconcileCall) createOrUpdateLease(lease *coordv1beta1.Lease, transitio
 		lease = &coordv1beta1.Lease{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            nodeName,
-				Namespace:       corev1.NamespaceNodeLease,
+				Namespace:       LeaseNamespace,
 				OwnerReferences: []metav1.OwnerReference{*owner},
 			},
 			Spec: coordv1beta1.LeaseSpec{
 				HolderIdentity:       &holderIdentity,
 				LeaseDurationSeconds: refDuration,
 				AcquireTime:          &microTimeNow,
+                RenewTime:            &microTimeNow,
 				LeaseTransitions:     &leaseTransitions,
 			},
 		}
@@ -667,9 +685,8 @@ func (r *ReconcileCall) createOrUpdateLease(lease *coordv1beta1.Lease, transitio
 		lease.ObjectMeta.Name = nodeName
 		lease.ObjectMeta.OwnerReferences = []metav1.OwnerReference{*owner}
 		lease.Spec.HolderIdentity = &holderIdentity
-		lease.Spec.AcquireTime = &metav1.MicroTime{Time: time.Now()}
-
-		timeNow := metav1.MicroTime{Time: time.Now()}
+        timeNow := metav1.MicroTime{Time: time.Now()}
+		lease.Spec.AcquireTime = &timeNow
 		lease.Spec.RenewTime = &timeNow
 
 		if transitions == TransitionInc && lease.Spec.LeaseTransitions != nil {

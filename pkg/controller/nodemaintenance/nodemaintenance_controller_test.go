@@ -94,7 +94,7 @@ var _ = Describe("updateCondition", func() {
 	getLeaseDuration := func(nodeName string) int32 {
 		lease := &coordv1beta1.Lease{}
 
-		nName := types.NamespacedName{Namespace: corev1.NamespaceNodeLease, Name: nodeName}
+		nName := types.NamespacedName{Namespace: LeaseNamespace, Name: nodeName}
 
 		cl.Get(context.TODO(), nName, lease)
 
@@ -160,7 +160,7 @@ var _ = Describe("updateCondition", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "lease-not-owned-by-me-active",
-					Namespace: corev1.NamespaceNodeLease,
+					Namespace: LeaseNamespace,
 				},
 				Spec: coordv1beta1.LeaseSpec{
 					AcquireTime:          &metav1.MicroTime{Time: time.Now()},
@@ -187,7 +187,7 @@ var _ = Describe("updateCondition", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      leaseExpiredWithinPadding,
-					Namespace: corev1.NamespaceNodeLease,
+					Namespace: LeaseNamespace,
 				},
 				Spec: coordv1beta1.LeaseSpec{
 					AcquireTime:          &metav1.MicroTime{Time: timeExpiredWithinPadding},
@@ -223,7 +223,7 @@ var _ = Describe("updateCondition", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "stat-active-valid-lease-me-owner",
-					Namespace: corev1.NamespaceNodeLease,
+					Namespace: LeaseNamespace,
 				},
 				Spec: coordv1beta1.LeaseSpec{
 					AcquireTime:          &metav1.MicroTime{Time: time.Now()},
@@ -258,7 +258,7 @@ var _ = Describe("updateCondition", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "stat-active-expired-lease-me-owner",
-					Namespace: corev1.NamespaceNodeLease,
+					Namespace: LeaseNamespace,
 				},
 				Spec: coordv1beta1.LeaseSpec{
 					AcquireTime:          &metav1.MicroTime{Time: time.Now().Add(time.Duration((-1*int64(timeDurationInSeconds301WithPadding) - 10) * int64(time.Second)))},
