@@ -46,9 +46,9 @@ const (
 )
 
 const (
-	//scriptGetStatus = `OC="./cluster/kubectl.sh"; pwd; stat "$OC"; date; $OC get pods -n node-maintenance-operator; POD_NAME=$($OC get pods -n node-maintenance-operator  | grep node-maintenance-operator | awk '{print $1}'); echo "pod name: ${POD_NAME}"; $OC describe pod -n node-maintenance-operator ${POD_NAME}; $OC logs -n node-maintenance-operator ${POD_NAME} -c node-maintenance-operator"`
+	//scriptGetStatus = `OC="./cluster-up/kubectl.sh"; pwd; stat "$OC"; date; $OC get pods -n node-maintenance-operator; POD_NAME=$($OC get pods -n node-maintenance-operator  | grep node-maintenance-operator | awk '{print $1}'); echo "pod name: ${POD_NAME}"; $OC describe pod -n node-maintenance-operator ${POD_NAME}; $OC logs -n node-maintenance-operator ${POD_NAME} -c node-maintenance-operator"`
 
-	scriptGetLogs = "OC='./cluster/kubectl.sh'; POD_NAME=$($OC get pods -n node-maintenance-operator | grep node-maintenance-operator | awk '{print $1}'); $OC logs -n node-maintenance-operator $POD_NAME -c node-maintenance-operator"
+	scriptGetLogs = "OC='./cluster-up/kubectl.sh'; POD_NAME=$($OC get pods -n node-maintenance-operator | grep node-maintenance-operator | awk '{print $1}'); $OC logs -n node-maintenance-operator $POD_NAME -c node-maintenance-operator"
 )
 
 func TestNodeMainenance(t *testing.T) {
@@ -188,59 +188,59 @@ func showDeploymentStatusScript(t *testing.T) {
 		t.Logf("can't get cluster status: %v\n", err)
 	}
 
-    if output != nil {
+	if output != nil {
 		soutput := string(output)
 		t.Logf("cluster status: %s", soutput)
 	}
 }
+
 func showDeploymentStatusScriptForPod(t *testing.T, podName string) {
 	mydir, _ := os.Getwd()
 	t.Logf("directory: %s", mydir)
 
-	clicmd := exec.Command("bash", "./cluster/kubectl.sh", "describe", "pod", "-n", "node-maintenance-operator", podName)
+	clicmd := exec.Command("bash", "./cluster-up/kubectl.sh", "describe", "pod", "-n", "node-maintenance-operator", podName)
 	output, err := clicmd.CombinedOutput()
 	if err != nil {
 		t.Logf("can't describe pod: %s status: %v\n", podName, err)
 	}
 
-    if output != nil {
+	if output != nil {
 		soutput := string(output)
-        t.Logf("describe pod %s output: %s", podName, soutput)
+		t.Logf("describe pod %s output: %s", podName, soutput)
 	}
 
-	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "logs", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator") //,  "--insecure-skip-tls-verify=true" )
+	clicmd = exec.Command("bash", "./cluster-up/kubectl.sh", "logs", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator") //,  "--insecure-skip-tls-verify=true" )
 	output, err = clicmd.CombinedOutput()
 	if err != nil {
 		t.Logf("can't get logs pod: %s status: %v\n", podName, err)
 	}
 
-    if output != nil {
+	if output != nil {
 		soutput := string(output)
-        t.Logf("/var/log listing: %s output: %s", podName, soutput)
+		t.Logf("/var/log listing: %s output: %s", podName, soutput)
 	}
 
-
-//	clicmd = exec.Command("bash", "./cluster/kubectl.sh",  "exec", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--insecure-skip-tls-verify=true", "--", "ls", "-al", "/var/log")
-//	output, err = clicmd.CombinedOutput()
-//	if err != nil {
-//		t.Logf("can't get /var/log listing pod: %s status: %v\n", podName, err)
-//	}
-//
-//    if output != nil {
-//		soutput := string(output)
-//        t.Logf("/var/log listing: %s output: %s", podName, soutput)
-//	}
-//
-//	clicmd = exec.Command("bash", "./cluster/kubectl.sh", "exec", "--insecure-skip-tls-verify=true", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--", "journalctl", "-r")
-//	output, err = clicmd.CombinedOutput()
-//	if err != nil {
-//		t.Logf("can't get recent journlctl logs pod: %s status: %v\n", podName, err)
-//	}
-//
-//    if output != nil {
-//		soutput := string(output)
-//        t.Logf("/var/log listing: %s output: %s", podName, soutput)
-//	}
+	//	clicmd = exec.Command("bash", "./cluster-up/kubectl.sh",  "exec", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--insecure-skip-tls-verify=true", "--", "ls", "-al", "/var/log")
+	//	output, err = clicmd.CombinedOutput()
+	//	if err != nil {
+	//		t.Logf("can't get /var/log listing pod: %s status: %v\n", podName, err)
+	//	}
+	//
+	//    if output != nil {
+	//		soutput := string(output)
+	//        t.Logf("/var/log listing: %s output: %s", podName, soutput)
+	//	}
+	//
+	//	clicmd = exec.Command("bash", "./cluster-up/kubectl.sh", "exec", "--insecure-skip-tls-verify=true", "-n", "node-maintenance-operator", podName, "-c", "node-maintenance-operator", "--", "journalctl", "-r")
+	//	output, err = clicmd.CombinedOutput()
+	//	if err != nil {
+	//		t.Logf("can't get recent journlctl logs pod: %s status: %v\n", podName, err)
+	//	}
+	//
+	//    if output != nil {
+	//		soutput := string(output)
+	//        t.Logf("/var/log listing: %s output: %s", podName, soutput)
+	//	}
 }
 
 func showDeploymentStatus(t *testing.T, f *framework.Framework) {
@@ -279,39 +279,39 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework) {
 
 func checkSupportLeaseNs(f *framework.Framework) (bool, error) {
 
-    _, err := f.KubeClient.CoreV1().Namespaces().Get("kube-node-lease",metav1.GetOptions{})
+	_, err := f.KubeClient.CoreV1().Namespaces().Get("kube-node-lease", metav1.GetOptions{})
 
-    if err != nil {
-        if errors.IsNotFound(err) {
-            return false, nil
-        }
-        return  false, err
-    }
-    return true, nil
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 
-    target := os.Getenv("TARGET")
-    if target == "os-3.11.0" {
-        t.Log("os-3.11.0 does not support lease object")
-        return nil
-    }
+	target := os.Getenv("TARGET")
+	if target == "os-3.11.0" {
+		t.Log("os-3.11.0 does not support lease object")
+		return nil
+	}
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
-		t.Fatalf( "could not get namespace: %v", err)
+		t.Fatalf("could not get namespace: %v", err)
 	}
 
-    /*
-    supportLease, err := checkSupportLeaseNs(f)
-    if !supportLease {
-        t.Logf("The current environment does not include the node-lease namespace. can't run the test on this environment")
-        return
-    }
-    if err!= nil {
-        t.Fatal("failed to check if node-lease namespace exists")
-    }
-    */
+	/*
+	   supportLease, err := checkSupportLeaseNs(f)
+	   if !supportLease {
+	       t.Logf("The current environment does not include the node-lease namespace. can't run the test on this environment")
+	       return
+	   }
+	   if err!= nil {
+	       t.Fatal("failed to check if node-lease namespace exists")
+	   }
+	*/
 
 	err = createSimpleDeployment(t, f, ctx, namespace)
 	if err != nil {
@@ -495,6 +495,24 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	return nil
 }
 
+func showSimpleDeploymentStatusScript(t *testing.T, deploymentName string, namespace string, container string) {
+	mydir, _ := os.Getwd()
+	t.Logf("showSimpleDeploymentStatusScript directory: %s", mydir)
+
+	scriptGetLogsSimple := fmt.Sprintf("OC='./cluster-up/kubectl.sh'; $OC get nodes; $OC describe pod %s -n %s; POD_NAME=$($OC get pods -n %s | grep %s | awk '{print $1}'); $OC logs -n %s $POD_NAME -c %s", deploymentName, namespace, namespace, deploymentName, namespace, container)
+
+	clicmd := exec.Command("bash", "-xc", scriptGetLogsSimple)
+	output, err := clicmd.CombinedOutput()
+	if err != nil {
+		t.Logf("can't get cluster status: %v\n", err)
+	}
+
+	if output != nil {
+		soutput := string(output)
+		t.Logf("cluster status: %s", soutput)
+	}
+}
+
 func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string) error {
 	replicas := rune(1)
 	dep := &appsv1.Deployment{
@@ -547,11 +565,13 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	// use TestCtx's create helper to create the object and add a cleanup function for the new object
 	err := f.Client.Create(goctx.TODO(), dep, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
 	if err != nil {
+		showSimpleDeploymentStatusScript(t, testDeployment, namespace, "testpodbusybox")
 		return err
 	}
 	// wait for testPodDeployment to reach 1 replicas
 	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
 	if err != nil {
+		showSimpleDeploymentStatusScript(t, testDeployment, namespace, "testpodbusybox")
 		return err
 	}
 	return nil

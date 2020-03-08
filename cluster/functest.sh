@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 function new_test() {
     name=$1
@@ -17,7 +17,12 @@ cat _out/nodemaintenance_crd.yaml
 echo "***namespacedMan***"
 cat _out/namespace-init.yaml
 # Run tests
-TEST_NAMESPACE=node-maintenance-operator go test ./test/e2e/... -root=$(pwd) -kubeconfig=cluster/.kubeconfig -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
+
+find . -name .kubeconfig || true
+KUBE_CONFIG=$(./cluster-up/kubeconfig.sh)
+
+
+TEST_NAMESPACE=node-maintenance-operator go test ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
 
 echo "E2e tests passed"
 
