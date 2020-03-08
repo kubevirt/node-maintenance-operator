@@ -292,6 +292,11 @@ func checkSupportLeaseNs(f *framework.Framework) (bool, error) {
 
 func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 
+    target := os.Getenv("TARGET")
+    if target == "os-3.11.0" {
+        t.Log("os-3.11.0 does not support lease object")
+        return nil
+    }
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
 		t.Fatalf( "could not get namespace: %v", err)
