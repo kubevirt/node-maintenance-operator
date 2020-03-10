@@ -14,10 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubernetes/pkg/kubectl/drain"
+	"k8s.io/kubectl/pkg/drain"
 	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -206,16 +207,25 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
-	if err = runCordonOrUncordon(r, node, true); err != nil {
+	if err = drain.RunCordonOrUncordon(r.drainer, node, true); err != nil {
 		return r.reconcileAndError(instance, err)
 	}
 
 	stop := make(chan struct{})
 	defer close(stop)
 
-	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
-	if err = drainPods(r, node, stop); err != nil {
-		return r.reconcileAndError(instance, err)
+	podsToDelete, errors := r.drainer.GetPodsForDeletion(nodeName)
+
+	if errors != nil && len(errors) != 0 {
+		aerror := utilerrors.NewAggregate(errors)
+		reqLogger.Errorf("Errors while listing pods for deletion: %v", aerror)
+	}
+
+	if len(podsToDelete.Pods()) != 0 {
+		reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
+		if err = r.drainer.DeleteOrEvictPods(podsToDelete.Pods()); err != nil {
+			return r.reconcileAndError(instance, err)
+		}
 	}
 
 	instance.Status.Phase = kubevirtv1alpha1.MaintenanceSucceeded
@@ -241,7 +251,7 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 		return err
 	}
 
-	if err = runCordonOrUncordon(r, node, false); err != nil {
+	if err = drain.RunCordonOrUncordon(r.drainer, node, false); err != nil {
 		return err
 	}
 
