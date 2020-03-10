@@ -212,10 +212,10 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	}
 
 	podsToDelete, errors := r.drainer.GetPodsForDeletion(nodeName)
-
-	if errors != nil && len(errors) != 0 {
+	if errors != nil {
 		aerror := utilerrors.NewAggregate(errors)
 		reqLogger.Errorf("Errors while listing pods for deletion: %v", aerror)
+        return r.reconcileAndError(instance, aerror)
 	}
 
 	if len(podsToDelete.Pods()) != 0 {
