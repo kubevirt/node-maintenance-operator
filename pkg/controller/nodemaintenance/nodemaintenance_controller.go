@@ -211,9 +211,6 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
-	stop := make(chan struct{})
-	defer close(stop)
-
 	podsToDelete, errors := r.drainer.GetPodsForDeletion(nodeName)
 
 	if errors != nil && len(errors) != 0 {
