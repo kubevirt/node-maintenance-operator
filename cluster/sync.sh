@@ -49,7 +49,7 @@ for node in ${nodes[@]}; do
 done
 
 # Deploy the HCO
-#CMD="./cluster-up/kubectl.sh" HCO_IMAGE="registry:5000/kubevirt/hyperconverged-cluster-operator:latest" ./hack/deploy.sh 
+#CMD="./cluster-up/kubectl.sh" HCO_IMAGE="registry:5000/kubevirt/hyperconverged-cluster-operator:latest" ./hack/deploy.sh
 
 
 # Cleanup previously generated manifests
