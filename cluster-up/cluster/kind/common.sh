@@ -8,12 +8,12 @@ export KIND_NODE_CLI="docker exec -it "
 export KUBEVIRTCI_PATH
 
 function _wait_kind_up {
-    echo "Waiting for kind to be ready ..."  
+    echo "Waiting for kind to be ready ..."
     while [ -z "$(docker exec --privileged ${CLUSTER_NAME}-control-plane kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --selector=node-role.kubernetes.io/master -o=jsonpath='{.items..status.conditions[-1:].status}' | grep True)" ]; do
-        echo "Waiting for kind to be ready ..."        
+        echo "Waiting for kind to be ready ..."
         sleep 10
     done
-    echo "Waiting for dns to be ready ..."        
+    echo "Waiting for dns to be ready ..."
     kubectl wait -n kube-system --timeout=12m --for=condition=Ready -l k8s-app=kube-dns pods
 }
 
@@ -81,9 +81,9 @@ EOF
 
 function kind_up() {
     _fetch_kind
-  
+
     # appending eventual workers to the yaml
-    for ((n=0;n<$(($KUBEVIRT_NUM_NODES-1));n++)); do 
+    for ((n=0;n<$(($KUBEVIRT_NUM_NODES-1));n++)); do
         echo "- role: worker" >> ${KUBEVIRTCI_CONFIG_PATH}/$KUBEVIRT_PROVIDER/kind.yaml
     done
 
@@ -92,7 +92,7 @@ function kind_up() {
 
     docker cp ${CLUSTER_NAME}-control-plane:/kind/bin/kubectl ${KUBEVIRTCI_CONFIG_PATH}/$KUBEVIRT_PROVIDER/.kubectl
     chmod u+x ${KUBEVIRTCI_CONFIG_PATH}/$KUBEVIRT_PROVIDER/.kubectl
-    
+
     _kubectl create -f $KIND_MANIFESTS_DIR/kube-flannel.yaml
 
     _wait_kind_up

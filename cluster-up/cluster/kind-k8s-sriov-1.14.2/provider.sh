@@ -8,7 +8,7 @@ source ${KUBEVIRTCI_PATH}/cluster/kind/common.sh
 function up() {
     cp $KIND_MANIFESTS_DIR/kind.yaml ${KUBEVIRTCI_CONFIG_PATH}/$KUBEVIRT_PROVIDER/kind.yaml
     # adding mounts to control plane, need them for sriov
-    cat >> ${KUBEVIRTCI_CONFIG_PATH}/$KUBEVIRT_PROVIDER/kind.yaml << EOF 
+    cat >> ${KUBEVIRTCI_CONFIG_PATH}/$KUBEVIRT_PROVIDER/kind.yaml << EOF
   extraMounts:
   - containerPath: /lib/modules
     hostPath: /lib/modules

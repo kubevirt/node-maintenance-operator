@@ -14,7 +14,7 @@ function enable_vfio {
         pfroot=$(dirname $file)
 
         # enable all enabled VFs. If it fails means that sysfs is not supported on that device and we pass
-        cat $file > $pfroot/sriov_numvfs || continue 
+        cat $file > $pfroot/sriov_numvfs || continue
 
         # bind all VFs with vfio
         for virtfn in $(ls -d $pfroot/virtfn*); do
