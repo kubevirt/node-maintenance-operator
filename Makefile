@@ -95,7 +95,7 @@ cluster-down:
 	./cluster-up/down.sh
 
 cluster-sync:
-	./cluster/new-sync.sh
+	./cluster/sync.sh
 
 cluster-functest:
 	./cluster/functest.sh
