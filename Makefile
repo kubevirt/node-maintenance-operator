@@ -96,10 +96,10 @@ cluster-down:
 	./cluster-up/down.sh
 
 cluster-sync:
-	./cluster/sync.sh
+	./hack/sync.sh
 
 cluster-functest:
-	./cluster/functest.sh
+	./hack/functest.sh
 
 cluster-clean:
 	./cluster-up/clean.sh
