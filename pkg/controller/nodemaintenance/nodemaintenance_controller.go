@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/drain"
+    "k8s.io/klog"
 	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -74,6 +75,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
+// writer implements io.Writer interface as a pass-through for klog.
+type writer struct {
+	logFunc func(args ...interface{})
+}
+
+// Write passes string(p) into writer's logFunc and always returns len(p)
+func (w writer) Write(p []byte) (n int, err error) {
+	w.logFunc(string(p))
+	return len(p), nil
+}
+
 func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	r.drainer = &drain.Helper{}
@@ -115,7 +127,10 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 	r.drainer.Client = cs
 	r.drainer.DryRun = false
 
-	return nil
+	r.drainer.Out = writer{klog.Info}
+	r.drainer.ErrOut = writer{klog.Error}
+
+    return nil
 }
 
 var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
