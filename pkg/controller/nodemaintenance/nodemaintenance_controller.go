@@ -18,8 +18,8 @@ import (
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog"
 	"k8s.io/kubectl/pkg/drain"
-    "k8s.io/klog"
 	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -86,6 +86,11 @@ func (w writer) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func onPodDeletedOrEvicted(pod *corev1.Pod, usingEviction bool) {
+	msg := fmt.Sprintf("pod: %s:%s evicted from node: %s method: %t", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Spec.NodeName, usingEviction)
+	klog.Info(msg)
+}
+
 func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	r.drainer = &drain.Helper{}
@@ -129,8 +134,8 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	r.drainer.Out = writer{klog.Info}
 	r.drainer.ErrOut = writer{klog.Error}
-
-    return nil
+	r.drainer.OnPodDeletedOrEvicted = onPodDeletedOrEvicted
+	return nil
 }
 
 var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
@@ -230,7 +235,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	if errors != nil {
 		aerror := utilerrors.NewAggregate(errors)
 		reqLogger.Errorf("Errors while listing pods for deletion: %v", aerror)
-        return r.reconcileAndError(instance, aerror)
+		return r.reconcileAndError(instance, aerror)
 	}
 
 	if len(podsToDelete.Pods()) != 0 {
