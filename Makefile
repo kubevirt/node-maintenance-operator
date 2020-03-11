@@ -7,6 +7,7 @@ OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
 TARGETS = \
+	cluster-up \
 	gen-k8s \
 	gen-k8s-check \
 	goimports \
