@@ -87,7 +87,13 @@ func (w writer) Write(p []byte) (n int, err error) {
 }
 
 func onPodDeletedOrEvicted(pod *corev1.Pod, usingEviction bool) {
-	msg := fmt.Sprintf("pod: %s:%s evicted from node: %s method: %t", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Spec.NodeName, usingEviction)
+    var verbString string
+    if usingEviction {
+        verbString = "Evicted"
+    } else {
+        verbString = "Deleted"
+    }
+	msg := fmt.Sprintf("pod: %s:%s %s from node: %s", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, verbString, pod.Spec.NodeName)
 	klog.Info(msg)
 }
 
