@@ -3,6 +3,7 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/selection"
 	"reflect"
 	"testing"
 	"time"
@@ -32,6 +33,8 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
+	operatorLabel        = map[string]string{"name": "node-maintenance-operator"}
+	masterLabelKey 		 = "node-role.kubernetes.io/master"
 )
 
 func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
@@ -407,4 +410,43 @@ func checkFailureStatus(t *testing.T, f *framework.Framework) {
 			t.Logf("Status.PendingPods on %s nodeMaintenance does not contain pod %s", nm.Name, pods.Items[0].Name)
 		}
 	}
+}
+
+func getOperatorHostname(t *testing.T, f *framework.Framework) string {
+	pods := &corev1.PodList{}
+
+	err := f.Client.List(goctx.TODO(), &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(operatorLabel),
+	}, pods)
+
+	if err != nil {
+		t.Fatal("failed listing operator pods: %v", err)
+	}
+
+	if len(pods.Items) < 1 {
+		t.Fatal("there are no operator pods")
+	}
+
+	return pods.Items[0].Spec.NodeName
+}
+
+func countWorkerNodes(t *testing.T, f *framework.Framework) int {
+	nodes := corev1.NodeList{}
+	labelSelector := labels.NewSelector()
+
+	requirement, err := labels.NewRequirement(masterLabelKey, selection.DoesNotExist, []string{})
+	if err != nil {
+		t.Fatal("failed creating selector requirement: %v", err)
+	}
+
+	labelSelector = labelSelector.Add(*requirement)
+	err = f.Client.List(goctx.TODO(), &client.ListOptions{
+		LabelSelector: labelSelector,
+	}, &nodes)
+
+	if err != nil {
+		t.Fatal("failed listing worker nodes: %v", err)
+	}
+
+	return len(nodes.Items)
 }
