@@ -76,7 +76,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
 metadata:
   name: node-maintenance-operator
-  namespace: openshift-operator-lifecycle-manager
+  namespace: openshift-marketplace
 spec:
   sourceType: grpc
   image: quay.io/kubevirt/node-maintenance-operator-registry:<VERSION>
@@ -100,7 +100,7 @@ spec:
   channel: beta
   name: node-maintenance-operator
   source: node-maintenance-operator
-  sourceNamespace: openshift-operator-lifecycle-manager
+  sourceNamespace: openshift-marketplace
   startingCSV: node-maintenance-operator.<VERSION>
 EOF
 ```
