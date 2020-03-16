@@ -20,10 +20,7 @@ spec:
             nodeSelectorTerms:
             - matchExpressions:
               - key: node-role.kubernetes.io/master
-                operator: Exists
-      tolerations:
-      - key: node-role.kubernetes.io/master
-        effect: NoSchedule
+                operator: DoesNotExist
       containers:
         - name: node-maintenance-operator
           # Replace this with the built image name

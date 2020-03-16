@@ -128,15 +128,26 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		return fmt.Errorf("could not get namespace: %v", err)
 	}
 
+	// Count worker nodes to spread the test deployment on all of them
+	computeNodesNumber := countWorkerNodes(t, f)
+
+	if computeNodesNumber < 2 {
+		t.Fatal("not enough worker nodes in the cluster, expecting at least 2")
+	}
+
+	testDeploymentReplicas = int32(computeNodesNumber)
+
+	// Create a test deployment with pod anti affinity to have a pod on each node
 	err = createSimpleDeployment(t, f, ctx, namespace, testDeploymentReplicas)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	nodeName, err := getCurrentDeploymentHostName(t, f)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Drain the node the operator is deployed on, in order to test
+	// if it will be recovered and complete the drain operation from a different node
+	// note: this node will have a test deployment pod because of its replica count
+	// and anti pod affinity
+	nodeName := getOperatorHostname(t, f)
 
 	t.Logf("Putting node %s into maintanance", nodeName)
 
@@ -156,7 +167,12 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	}
 
 	// Create node maintenance CR
-	err = f.Client.Create(goctx.TODO(), nodeMaintenance, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
+	err = f.Client.Create(goctx.TODO(), nodeMaintenance, &framework.CleanupOptions{
+		TestContext: ctx,
+		Timeout: cleanupTimeout,
+		RetryInterval: cleanupRetryInterval,
+	})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,35 +230,22 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		t.Fatal(fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-	nodesList := &corev1.NodeList{}
-	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
+	// Check that the deployment has full replicas running after maintenance
+	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, int(testDeploymentReplicas), retryInterval, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	computeNodesNumber := 0
-
-	for _, node := range nodesList.Items {
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
-			computeNodesNumber++
-		}
+	// Check that the operator deployment has full recplicas
+	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, "node-maintenance-operator", 1, retryInterval, timeout)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if computeNodesNumber > 2 {
-		// Check that the deployment has 1 replica running after maintenance
-		err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
-		if err != nil {
-			t.Fatal(err)
-		}
+	operatorNewNodeName := getOperatorHostname(t, f)
 
-		newNodeName, err := getCurrentDeploymentHostName(t, f)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if newNodeName == nodeName {
-			t.Fatal(fmt.Errorf("Deployment was done on node %s that should be under maintanence", nodeName))
-		}
+	if testDeploymentExistsOnNode(t, f, nodeName) || operatorNewNodeName == nodeName {
+		t.Fatal(fmt.Errorf("Deployment was done on node %s that should be under maintanence", nodeName))
 	}
 
 	t.Logf("Setting node %s out of maintanance", nodeName)
@@ -280,8 +283,8 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		t.Fatal(fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName))
 	}
 
-	// Check that the deployment has 1 replica running after maintenance is removed.
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+	// Check that the deployment has full replica running after maintenance is removed.
+	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, int(testDeploymentReplicas), retryInterval, timeout)
 	if err != nil {
 		showDeploymentStatus(t, f)
 		t.Fatal(err)
@@ -332,6 +335,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 									Weight: 1,
 									PodAffinityTerm: corev1.PodAffinityTerm{
 										LabelSelector: metav1.SetAsLabelSelector(podLabel),
+										TopologyKey:   "kubernetes.io/hostname",
 									},
 								},
 							},
@@ -353,8 +357,8 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	if err != nil {
 		return err
 	}
-	// wait for testPodDeployment to reach 1 replicas
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+	// wait for testPodDeployment to reach full replicas
+	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, int(testDeploymentReplicas), retryInterval, timeout)
 	if err != nil {
 		return err
 	}
@@ -374,15 +378,6 @@ func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.Pod
 	}
 
 	return pods, nil
-}
-
-func getCurrentDeploymentHostName(t *testing.T, f *framework.Framework) (string, error) {
-	pods, err := getCurrentDeploymentPods(t, f)
-	if err != nil {
-		return "", nil
-	}
-	nodeName := pods.Items[0].Spec.NodeName
-	return nodeName, nil
 }
 
 func kubevirtTaintExist(node *corev1.Node) bool {
@@ -430,7 +425,7 @@ func getOperatorHostname(t *testing.T, f *framework.Framework) string {
 	}, pods)
 
 	if err != nil {
-		t.Fatal("failed listing operator pods: %v", err)
+		t.Fatalf("failed listing operator pods: %v", err)
 	}
 
 	if len(pods.Items) < 1 {
@@ -446,7 +441,7 @@ func countWorkerNodes(t *testing.T, f *framework.Framework) int {
 
 	requirement, err := labels.NewRequirement(masterLabelKey, selection.DoesNotExist, []string{})
 	if err != nil {
-		t.Fatal("failed creating selector requirement: %v", err)
+		t.Fatalf("failed creating selector requirement: %v", err)
 	}
 
 	labelSelector = labelSelector.Add(*requirement)
@@ -455,8 +450,40 @@ func countWorkerNodes(t *testing.T, f *framework.Framework) int {
 	}, &nodes)
 
 	if err != nil {
-		t.Fatal("failed listing worker nodes: %v", err)
+		t.Fatalf("failed listing worker nodes: %v", err)
 	}
 
 	return len(nodes.Items)
+}
+
+func testDeploymentExistsOnNode(t *testing.T, f *framework.Framework, nodeName string) bool {
+	return sliceContainsString(getTestDeploymentHostnames(t, f), nodeName)
+}
+
+func getTestDeploymentHostnames(t *testing.T, f *framework.Framework) []string {
+	pods, err := getCurrentDeploymentPods(t, f)
+
+	if err != nil {
+		t.Fatalf("could not list test deployment pods: %v", err)
+	}
+
+	hostnames := []string{}
+
+	for _, pod := range pods.Items {
+		if !sliceContainsString(hostnames, pod.Spec.NodeName) {
+			hostnames = append(hostnames, pod.Spec.NodeName)
+		}
+	}
+
+	return hostnames
+}
+
+func sliceContainsString(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+
+	return false
 }
