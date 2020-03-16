@@ -27,14 +27,15 @@ import (
 )
 
 var (
-	retryInterval        = time.Second * 5
-	timeout              = time.Second * 120
-	cleanupRetryInterval = time.Second * 1
-	cleanupTimeout       = time.Second * 5
-	testDeployment       = "testdeployment"
-	podLabel             = map[string]string{"test": "drain"}
-	operatorLabel        = map[string]string{"name": "node-maintenance-operator"}
-	masterLabelKey 		 = "node-role.kubernetes.io/master"
+	retryInterval                = time.Second * 5
+	timeout                      = time.Second * 120
+	cleanupRetryInterval         = time.Second * 1
+	cleanupTimeout               = time.Second * 5
+	testDeployment               = "testdeployment"
+	testDeploymentReplicas int32 = 2
+	podLabel                     = map[string]string{"test": "drain"}
+	operatorLabel                = map[string]string{"name": "node-maintenance-operator"}
+	masterLabelKey               = "node-role.kubernetes.io/master"
 )
 
 func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
@@ -127,7 +128,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		return fmt.Errorf("could not get namespace: %v", err)
 	}
 
-	err = createSimpleDeployment(t, f, ctx, namespace)
+	err = createSimpleDeployment(t, f, ctx, namespace, testDeploymentReplicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,8 +290,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	return nil
 }
 
-func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string) error {
-	replicas := rune(1)
+func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string, replicas int32) error {
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -322,6 +322,16 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 												Operator: corev1.NodeSelectorOpDoesNotExist,
 											},
 										},
+									},
+								},
+							},
+						},
+						PodAntiAffinity: &corev1.PodAntiAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+								{
+									Weight: 1,
+									PodAffinityTerm: corev1.PodAffinityTerm{
+										LabelSelector: metav1.SetAsLabelSelector(podLabel),
 									},
 								},
 							},
