@@ -14,6 +14,7 @@ TARGETS = \
 	vet \
 	whitespace \
 	whitespace-check \
+	tabs-check \
 	manifests \
 	test
 
@@ -42,10 +43,16 @@ goimports: $(cmd_sources) $(pkg_sources)
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
 
-check: whitespace-check vet goimports-check gen-operator-sdk gen-k8s-check test
+check: whitespace-check tabs-check vet goimports-check gen-operator-sdk gen-k8s-check test
 
 whitespace-check: $(all_sources)
 	./hack/whitespace.sh
+
+tabs-check: $(all_sources)
+	./hack/enforce-tabs-or-spaces.sh
+
+tabs-fix: $(all_sources)
+	./hack/enforce-tabs-or-spaces.sh -f
 
 vet: $(cmd_sources) $(pkg_sources)
 	go vet ./pkg/... ./cmd/...
@@ -103,4 +110,4 @@ cluster-functest:
 cluster-clean:
 	./cluster/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean
+.PHONY: all check fmt test container-build whitespace-check tabs-check tabs-fix container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean
