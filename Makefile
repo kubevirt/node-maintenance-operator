@@ -7,6 +7,7 @@ OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
 TARGETS = \
+	cluster-up \
 	gen-k8s \
 	gen-k8s-check \
 	goimports \
@@ -89,18 +90,18 @@ manifests: csv-generator
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:
-	CLUSTER_NUM_NODES=3 ./cluster/up.sh
+	KUBEVIRT_NUM_NODES=3 ./cluster-up/up.sh
 
 cluster-down:
-	./cluster/down.sh
+	./cluster-up/down.sh
 
 cluster-sync:
-	./cluster/sync.sh
+	./hack/sync.sh
 
 cluster-functest:
-	./cluster/functest.sh
+	./hack/functest.sh
 
 cluster-clean:
-	./cluster/clean.sh
+	./cluster-up/clean.sh
 
 .PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean
