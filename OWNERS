@@ -1,0 +1,24 @@
+filters:
+  ".*":
+    reviewers:
+      - davidvossel
+      - rmohr
+      - slintes
+      - cynepco3hahue
+      - vladikr
+      - dhiller
+      - qinqon
+      - oscollabus
+      - phoracek
+      - ormergi
+      - danielBelenky
+    approvers:
+      - davidvossel
+      - rmohr
+      - slintes
+      - cynepco3hahue
+      - vladikr
+      - dhiller
+      - qinqon
+      - phoracek
+      - danielBelenky
