@@ -6,6 +6,9 @@ IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
+KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
+KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs 
+
 TARGETS = \
 	cluster-up \
 	gen-k8s \
@@ -90,10 +93,10 @@ manifests: csv-generator
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:
-	KUBEVIRT_NUM_NODES=3 ./cluster-up/up.sh
+	KUBEVIRT_NUM_NODES=3 $(KUBEVIRTCI_PATH)/up.sh
 
 cluster-down:
-	./cluster-up/down.sh
+	$(KUBEVIRTCI_PATH)/down.sh
 
 cluster-sync:
 	./hack/sync.sh
@@ -102,6 +105,6 @@ cluster-functest:
 	./hack/functest.sh
 
 cluster-clean:
-	./cluster-up/clean.sh
+	$(KUBEVIRTCI_PATH)/clean.sh
 
 .PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean
