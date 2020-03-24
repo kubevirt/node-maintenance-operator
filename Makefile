@@ -7,7 +7,7 @@ OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
 KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
-KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs 
+KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
 
 TARGETS = \
 	cluster-up \
@@ -110,4 +110,4 @@ cluster-functest:
 cluster-clean:
 	$(KUBEVIRTCI_PATH)/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes 
+.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes
