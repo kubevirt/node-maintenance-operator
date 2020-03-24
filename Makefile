@@ -98,6 +98,9 @@ cluster-up:
 cluster-down:
 	$(KUBEVIRTCI_PATH)/down.sh
 
+pull-ci-changes:
+	git subtree pull --prefix kubevirtci https://github.com/kubevirt/kubevirtci.git master --squash
+
 cluster-sync:
 	./hack/sync.sh
 
@@ -107,4 +110,4 @@ cluster-functest:
 cluster-clean:
 	$(KUBEVIRTCI_PATH)/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean
+.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes 
