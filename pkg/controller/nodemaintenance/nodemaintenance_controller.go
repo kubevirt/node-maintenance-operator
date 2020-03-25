@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -87,12 +86,12 @@ func (w writer) Write(p []byte) (n int, err error) {
 }
 
 func onPodDeletedOrEvicted(pod *corev1.Pod, usingEviction bool) {
-    var verbString string
-    if usingEviction {
-        verbString = "Evicted"
-    } else {
-        verbString = "Deleted"
-    }
+	var verbString string
+	if usingEviction {
+		verbString = "Evicted"
+	} else {
+		verbString = "Deleted"
+	}
 	msg := fmt.Sprintf("pod: %s:%s %s from node: %s", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, verbString, pod.Spec.NodeName)
 	klog.Info(msg)
 }
@@ -237,18 +236,8 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
-	podsToDelete, errors := r.drainer.GetPodsForDeletion(nodeName)
-	if errors != nil {
-		aerror := utilerrors.NewAggregate(errors)
-		reqLogger.Errorf("Errors while listing pods for deletion: %v", aerror)
-		return r.reconcileAndError(instance, aerror)
-	}
-
-	if len(podsToDelete.Pods()) != 0 {
-		reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
-		if err = r.drainer.DeleteOrEvictPods(podsToDelete.Pods()); err != nil {
-			return r.reconcileAndError(instance, err)
-		}
+	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
+		return r.reconcileAndError(instance, err)
 	}
 
 	instance.Status.Phase = kubevirtv1alpha1.MaintenanceSucceeded
