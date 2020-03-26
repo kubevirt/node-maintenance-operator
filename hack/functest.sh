@@ -1,6 +1,7 @@
 #!/bin/bash -ex
 
 if [ -z "$KUBEVIRTCI_PATH" ]; then
+    # sets the path of the CI scripts
     KUBEVIRTCI_PATH="$(
         cd "$(dirname "$BASH_SOURCE[0]")/"
         readlink -f ../kubevirtci/cluster-up
@@ -9,7 +10,10 @@ fi
 
 
 if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
-    KUBEVIRTCI_CONFIG_PATH="$(
+    # set location of ci configuration.
+    # need to override this variable, as the file common.sh is now one level deeper in the directory tree, so it wouldn't find the _ci_config directory
+    # set in the root directory of the git repo for this project.
+     KUBEVIRTCI_CONFIG_PATH="$(
         cd "$(dirname "$BASH_SOURCE[0]")/"
         readlink -f ../_ci-configs
     )"
