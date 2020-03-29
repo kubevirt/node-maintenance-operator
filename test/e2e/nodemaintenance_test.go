@@ -2,10 +2,12 @@ package e2e
 
 import (
 	goctx "context"
+	"os/exec"
 	"fmt"
 	"reflect"
 	"testing"
 	"time"
+	"strings"
 
 	apis "kubevirt.io/node-maintenance-operator/pkg/apis"
 	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
@@ -29,6 +31,28 @@ var (
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
 )
+
+const (
+	scriptShowCRD = `./kubevirtci/cluster-up/kubectl.sh get -o yaml crd nodemaintenances.kubevirt.io`
+)
+
+// check operator crd for opeAPIV3Schema validation errors.
+func checkOperatorCRD(t *testing.T) {
+	clicmd := exec.Command("bash", "-xc", scriptShowCRD)
+	output, err := clicmd.CombinedOutput()
+
+	if err != nil || output == nil {
+		if output != nil {
+			t.Fatalf("can't get CRD. status: %v output %s\n", err, output)
+		}  else {
+			t.Fatalf("can't get CRD. status: %v\n", err)
+		}
+	}
+
+	if sout := string(output); strings.Contains(sout, "spec.validation.openAPIV3Schema") {
+		t.Fatalf("operator CRD failed validation: %s", output);
+	}
+}
 
 func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
@@ -229,6 +253,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		t.Fatal(err)
 	}
 
+	checkOperatorCRD(t)
 	return nil
 }
 
