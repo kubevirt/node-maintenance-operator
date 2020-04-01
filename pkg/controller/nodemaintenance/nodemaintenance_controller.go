@@ -236,6 +236,8 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
+	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
+
 	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
 		return r.reconcileAndError(instance, err)
 	}
