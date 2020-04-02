@@ -19,6 +19,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/kubernetes"
+	"bytes"
+	"io"
 )
 
 var (
@@ -29,6 +32,47 @@ var (
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
 )
+
+func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
+
+	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	if err != nil {
+		return nil, err
+	}
+
+	if pods.Size() == 0 {
+		return nil, fmt.Errorf("There are no pods deployed in cluster to run the operator")
+	}
+
+	return &pods.Items[0], nil
+}
+
+func showDeploymentStatus(t *testing.T, f *framework.Framework) {
+
+	pod, err := getCurrentOperatorPods(f.KubeClient)
+	if err != nil {
+		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
+		return;
+	}
+	podName := pod.ObjectMeta.Name
+	podLogOpts := corev1.PodLogOptions{}
+
+	req := f.KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
+	podLogs, err := req.Stream()
+	if err != nil {
+		t.Fatalf("showDeployment: can't get log stream error=%v", err)
+	}
+	defer podLogs.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, podLogs)
+	if err != nil {
+		t.Fatalf("showDeployment: can't copy log stream error=%v", err)
+		return;
+	}
+	str := buf.String()
+	t.Fatalf("operator logs: %s", str)
+}
 
 func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
@@ -125,6 +169,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		}
 		return true, nil
 	}); err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
 	}
 
@@ -142,6 +187,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 		return true, nil
 	}); err != nil {
 		checkFailureStatus(t, f)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
 	}
 
@@ -153,11 +199,13 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	if node.Spec.Unschedulable == false {
 		checkFailureStatus(t, f)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been unschedulable ", nodeName))
 	}
 
 	if !kubevirtTaintExist(node) {
 		checkFailureStatus(t, f)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
@@ -198,12 +246,14 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: nodeMaintenance.Namespace, Name: nodeMaintenance.Name}, nodeMaintenanceDelete)
 	if err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatal(err)
 	}
 
 	// Delete the node maintenance custom resource
 	err = f.Client.Delete(goctx.TODO(), nodeMaintenanceDelete)
 	if err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatalf("Could not delete node maintenance CR : %v", err)
 	}
 
@@ -216,16 +266,19 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	}
 
 	if node.Spec.Unschedulable == true {
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been schedulable", nodeName))
 	}
 
 	if kubevirtTaintExist(node) {
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName))
 	}
 
 	// Check that the deployment has 1 replica running after maintenance is removed.
 	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
 	if err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatal(err)
 	}
 
