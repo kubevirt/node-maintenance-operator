@@ -6,7 +6,11 @@ IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 
+KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
+KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
+
 TARGETS = \
+	cluster-up \
 	gen-k8s \
 	gen-k8s-check \
 	goimports \
@@ -89,18 +93,21 @@ manifests: csv-generator
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:
-	CLUSTER_NUM_NODES=3 ./cluster/up.sh
+	KUBEVIRT_NUM_NODES=3 $(KUBEVIRTCI_PATH)/up.sh
 
 cluster-down:
-	./cluster/down.sh
+	$(KUBEVIRTCI_PATH)/down.sh
+
+pull-ci-changes:
+	git subtree pull --prefix kubevirtci https://github.com/kubevirt/kubevirtci.git master --squash
 
 cluster-sync:
-	./cluster/sync.sh
+	./hack/sync.sh
 
 cluster-functest:
-	./cluster/functest.sh
+	./hack/functest.sh
 
 cluster-clean:
-	./cluster/clean.sh
+	$(KUBEVIRTCI_PATH)/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean
+.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes
