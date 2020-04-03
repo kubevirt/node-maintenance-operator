@@ -3,6 +3,7 @@ filters:
     reviewers:
       - yanirq
       - ksimon1
+      - beekhof
     approvers:
       - yanirq
       - ksimon1

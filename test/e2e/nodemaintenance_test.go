@@ -26,6 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/kubernetes"
+	"bytes"
+	"io"
 )
 
 var (
@@ -50,6 +53,47 @@ const (
 
 	scriptGetLogs = "OC='./cluster-up/kubectl.sh'; POD_NAME=$($OC get pods -n node-maintenance-operator | grep node-maintenance-operator | awk '{print $1}'); $OC logs -n node-maintenance-operator $POD_NAME -c node-maintenance-operator"
 )
+
+func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
+
+	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	if err != nil {
+		return nil, err
+	}
+
+	if pods.Size() == 0 {
+		return nil, fmt.Errorf("There are no pods deployed in cluster to run the operator")
+	}
+
+	return &pods.Items[0], nil
+}
+
+func showDeploymentStatus(t *testing.T, f *framework.Framework) {
+
+	pod, err := getCurrentOperatorPods(f.KubeClient)
+	if err != nil {
+		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
+		return;
+	}
+	podName := pod.ObjectMeta.Name
+	podLogOpts := corev1.PodLogOptions{}
+
+	req := f.KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
+	podLogs, err := req.Stream()
+	if err != nil {
+		t.Fatalf("showDeployment: can't get log stream error=%v", err)
+	}
+	defer podLogs.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, podLogs)
+	if err != nil {
+		t.Fatalf("showDeployment: can't copy log stream error=%v", err)
+		return;
+	}
+	str := buf.String()
+	t.Fatalf("operator logs: %s", str)
+}
 
 func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
@@ -221,39 +265,6 @@ func showDeploymentStatusScriptForPod(t *testing.T, podName string) {
 	}
 }
 
-func showDeploymentStatus(t *testing.T, f *framework.Framework) {
-
-	pods, err := getCurrentOperatorPods(t, f)
-	if err != nil {
-		t.Logf("showDeployment: can't get operator deployment error=%v", err)
-		return
-	}
-	podName := pods.Items[0].ObjectMeta.Name
-
-	t.Logf("operator pod: %s", podName)
-
-	showDeploymentStatusScriptForPod(t, podName)
-
-	podLogOpts := corev1.PodLogOptions{}
-
-	req := f.KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
-	podLogs, err := req.Stream()
-	if err != nil {
-		t.Logf("showDeployment: can't get log stream error=%v", err)
-		return
-	}
-	defer podLogs.Close()
-
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, podLogs)
-	if err != nil {
-		t.Logf("showDeployment: can't copy log stream error=%v", err)
-		return
-	}
-	str := buf.String()
-	t.Logf("operator logs: %s", str)
-
-}
 
 func checkSupportLeaseNs(f *framework.Framework) (bool, error) {
 
@@ -367,8 +378,9 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 		return false, nil
 	}); err != nil {
+		checkFailureStatus(t, f)
 		showDeploymentStatus(t, f)
-		t.Fatal(fmt.Errorf("Failed to verify running phase: %v", err))
+		t.Fatal(fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
 	}
 
 	t.Logf("node %s maintenance mode active", nodeName)
@@ -383,6 +395,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 
 	if node.Spec.Unschedulable == false {
 		checkFailureStatus(t, f)
+		showDeploymentStatus(t, f)
 		t.Fatal(fmt.Errorf("Node %s should have been unschedulable ", nodeName))
 	}
 
@@ -565,21 +578,6 @@ func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.Pod
 
 	if pods.Size() == 0 {
 		return pods, fmt.Errorf("There are no pods deployed in cluster to perform the test")
-	}
-
-	return pods, nil
-}
-
-func getCurrentOperatorPods(t *testing.T, f *framework.Framework) (*corev1.PodList, error) {
-	labelSelector := labels.SelectorFromSet(operatorLabel)
-	pods := &corev1.PodList{}
-	err := f.Client.List(goctx.TODO(), &client.ListOptions{LabelSelector: labelSelector}, pods)
-	if err != nil {
-		return pods, err
-	}
-
-	if pods.Size() == 0 {
-		return pods, fmt.Errorf("There are no pods deployed in cluster to run the operator")
 	}
 
 	return pods, nil
