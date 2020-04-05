@@ -4,7 +4,7 @@ set -ex
 
 SELF=$( realpath $0 )
 BASEPATH=$( dirname $SELF )
-OPERATOR_SDK_VERSION="${1:-v0.8.0}"
+OPERATOR_SDK_VERSION="${1:-v0.16.0}"
 
 if [ -x "${BASEPATH}/../operator-sdk" ]
 then

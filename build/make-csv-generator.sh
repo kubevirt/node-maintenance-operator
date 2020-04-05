@@ -22,8 +22,9 @@ PLACEHOLDER_CSV_VERSION="9999.9999.9999"
 # Create CSV with placeholder version. The version
 # has to be semver compatible in order for the
 # operator sdk to create it for us. That's why we
-# are using the absurd 9999.9999.9999 version here.
-${OPERATOR_SDK} olm-catalog gen-csv --csv-version ${PLACEHOLDER_CSV_VERSION}
+# are using the absurd 9999.9999.9999 version here. 
+
+${OPERATOR_SDK} generate csv --csv-version ${PLACEHOLDER_CSV_VERSION}
 
 # Move CSV to generated folder
 mv deploy/olm-catalog/node-maintenance-operator/${PLACEHOLDER_CSV_VERSION}/node-maintenance-operator.v${PLACEHOLDER_CSV_VERSION}.clusterserviceversion.yaml $MANIFESTS_GENERATED_CSV

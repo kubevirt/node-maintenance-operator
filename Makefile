@@ -1,6 +1,6 @@
 all: fmt check
 
-OPERATOR_SDK_VERSION ?= v0.8.0
+OPERATOR_SDK_VERSION = v0.16.0
 IMAGE_REGISTRY ?= quay.io/kubevirt
 IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
