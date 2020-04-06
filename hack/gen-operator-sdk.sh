@@ -23,3 +23,10 @@ if [[ "$DETECTED_SDK_VERSION" != $TARGET_SDK_VERSION ]]; then
      chmod 0755 operator-sdk
 
 fi
+
+
+# install the operator courier for the current user
+# the executable is downloaded into $HOME/.local/bin/operator-courier
+echo "install operator courier"
+pip3 install --user operator-courier
+
