@@ -2,8 +2,10 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: '[{"apiVersion":"nodemaintenance.kubevirt.io/v1beta1","kind":"NodeMaintenance","metadata":{"name":"nodemaintenance-xyz"},"spec":{"nodeName":"node02","reason":"Test
-      node maintenance"}}]'
+    alm-examples: "[\n  {\n    \"apiVersion\": \"kubevirt.io/v1alpha1\",\n    \"kind\"\
+      : \"NodeMaintenance\",\n    \"metadata\": {\n      \"name\": \"nodemaintenance-xyz\"\
+      \n    },\n    \"spec\": {\n      \"nodeName\": \"node02\",\n      \"reason\"\
+      : \"Test node maintenance\"\n    }\n  }\n]"
     capabilities: Basic Install
     categories: OpenShift Optional
     containerImage: quay.io/kubevirt/node-maintenance-operator
@@ -20,6 +22,9 @@ spec:
       version: v1beta1
   description: Node maintenance operator
   displayName: Node Maintenance Operator
+  icon:
+  - base64data: ''
+    mediatype: ''
   install:
     spec:
       clusterPermissions:
@@ -116,6 +121,9 @@ spec:
               containers:
               - env:
                 - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
@@ -158,6 +166,7 @@ spec:
   maturity: alpha
   provider:
     name: KubeVirt project
+  replaces: node-maintenance-operator.v0.0.0
   selector:
     matchLabels:
       alm-owner-kubevirt: nodemaintenanceoperator
