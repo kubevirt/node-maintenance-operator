@@ -73,6 +73,10 @@ container-build-operator: csv-generator
 container-build-registry:
 	docker build -f build/Dockerfile.registry -t $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG) .
 
+test-courier:
+	echo "bundle dir: $(BUNDLE_DIR_VERSION)"
+	export BUNDLE_DIR_VERSION; docker build -f build/Dockerfile.test-courier -t test-courier . --build-arg dir=$(BUNDLE_DIR_VERSION)
+
 container-push: container-push-operator container-push-registry
 
 container-push-operator:
@@ -109,4 +113,4 @@ cluster-functest:
 cluster-clean:
 	$(KUBEVIRTCI_PATH)/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes
+.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier

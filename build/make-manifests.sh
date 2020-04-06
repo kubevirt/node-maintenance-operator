@@ -42,25 +42,16 @@ cp "${BUNDLE_DIR}/node-maintenance-operator.package.yaml" "${BUNDLE_DIR_VERSION}
 
 set +e
 
-echo "OLM verify bundle"
-$HOME/.local/bin/operator-courier verify ${BUNDLE_DIR_VERSION}
+echo "OLM verify bundle for operator hub"
+
+export BUNDLE_DIR_VERSION
+make test-courier
 if [[ $? != 0 ]]; then
 	echo "OLM verify failed"
 	exit 1
 else
 	echo "OLM verify passed"
 fi
-
-echo "OLM verify bundle for operator hub"
-$HOME/.local/bin/operator-courier verify --ui_validate_io ${BUNDLE_DIR_VERSION}
-if [[ $? != 0 ]]; then
-	echo "OLM verify for operator hub failed"
-	exit 1
-else
-	echo "OLM verify for operator hub passed"
-fi
-
-
 
 set -e
 
