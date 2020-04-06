@@ -22,7 +22,7 @@ PLACEHOLDER_CSV_VERSION="9999.9999.9999"
 # Create CSV with placeholder version. The version
 # has to be semver compatible in order for the
 # operator sdk to create it for us. That's why we
-# are using the absurd 9999.9999.9999 version here. 
+# are using the absurd 9999.9999.9999 version here.
 
 ${OPERATOR_SDK} generate csv --csv-version ${PLACEHOLDER_CSV_VERSION}
 
