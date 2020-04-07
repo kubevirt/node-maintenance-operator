@@ -16,4 +16,3 @@ if [[ "$DETECTED_SDK_VERSION" != $TARGET_SDK_VERSION ]]; then
 
 fi
 
-chmod 0755 ${BASEPATH}/../operator-sdk

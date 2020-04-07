@@ -56,8 +56,3 @@ fi
 set -e
 
 rm "${BUNDLE_DIR_VERSION}/node-maintenance-operator.package.yaml"
-
-
-
-
-
