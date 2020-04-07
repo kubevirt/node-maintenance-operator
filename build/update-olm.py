@@ -75,8 +75,8 @@ def process(path):
     manifest['metadata']['annotations'].update(_ANNOTATIONS)
 
     manifest['spec'].update(_SPEC)
-    manifest['spec']['icon'][0]['mediatype'] = _KUBEVIRT_ICON_TYPE 
-    manifest['spec']['icon'][0]['base64data'] = _KUBEVIRT_ICON_BASE_64 
+    manifest['spec']['icon'][0]['mediatype'] = _KUBEVIRT_ICON_TYPE
+    manifest['spec']['icon'][0]['base64data'] = _KUBEVIRT_ICON_BASE_64
 
     for crd in manifest['spec']['customresourcedefinitions']['owned']:
         crd.update(_CRD_INFOS.get(crd['name'], {}))

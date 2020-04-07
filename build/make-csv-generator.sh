@@ -38,6 +38,10 @@ sed -i "s/${PLACEHOLDER_CSV_VERSION}/PLACEHOLDER_CSV_VERSION/g" $MANIFESTS_GENER
 
 # inject the CRD and Description related data into the CSV
 cp $MANIFESTS_GENERATED_CSV ${MANIFESTS_GENERATED_CSV}.tmp
+set -x
+
+echo "Input file: ${MANIFESTS_GENERATED_CSV}.tmp"
+cat ${MANIFESTS_GENERATED_CSV}.tmp
 python3 build/update-olm.py ${MANIFESTS_GENERATED_CSV}.tmp > ${MANIFESTS_GENERATED_CSV}
 rm ${MANIFESTS_GENERATED_CSV}.tmp
 
