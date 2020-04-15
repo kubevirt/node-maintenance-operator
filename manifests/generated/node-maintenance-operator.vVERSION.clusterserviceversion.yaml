@@ -2,7 +2,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: '[{"apiVersion":"kubevirt.io/v1alpha1","kind":"NodeMaintenance","metadata":{"name":"nodemaintenance-xyz"},"spec":{"nodeName":"node02","reason":"Test
+    alm-examples: '[{"apiVersion":"nodemaintenance.kubevirt.io/v1beta1","kind":"NodeMaintenance","metadata":{"name":"nodemaintenance-xyz"},"spec":{"nodeName":"node02","reason":"Test
       node maintenance"}}]'
     capabilities: Basic Install
     categories: OpenShift Optional
@@ -15,17 +15,9 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: Represents a deployment of node maintenance crd
-      displayName: KubeVirt node maintenance
-      kind: NodeMaintenance
-      name: nodemaintenances.kubevirt.io
-      specDescriptors:
-      - description: The version of the node maintenance to deploy
-        displayName: Version
-        path: version
-        x-descriptors:
-        - urn:alm:descriptor:io.kubernetes.node-maintenance:version
-      version: v1alpha1
+    - kind: NodeMaintenance
+      name: nodemaintenances.nodemaintenance.kubevirt.io
+      version: v1beta1
   description: Node maintenance operator
   displayName: Node Maintenance Operator
   install:
@@ -89,7 +81,7 @@ spec:
           - get
           - create
         - apiGroups:
-          - kubevirt.io
+          - nodemaintenance.kubevirt.io
           resources:
           - '*'
           verbs:

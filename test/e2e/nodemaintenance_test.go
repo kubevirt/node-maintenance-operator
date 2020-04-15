@@ -74,11 +74,12 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework) {
 	t.Fatalf("operator logs: %s", str)
 }
 
+
 func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha1",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
 		},
 	}
 	err := framework.AddToFrameworkScheme(apis.AddToScheme, nodeMainenanceList)
@@ -139,7 +140,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	nodeMaintenance := &operator.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha1",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "nodemaintenance-xyz",
