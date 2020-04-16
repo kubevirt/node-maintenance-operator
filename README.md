@@ -163,7 +163,7 @@ Create the example `NodeMaintenance` CR found at `deploy/crds/nodemaintenance_cr
 ```sh
 $ cat deploy/crds/nodemaintenance_cr.yaml
 
-apiVersion: kubevirt.io/v1alpha1
+apiVersion: nodemaintenance.kubevirt.io/v1beta1
 kind: NodeMaintenance
 metadata:
   name: nodemaintenance-xyz
@@ -189,7 +189,7 @@ To remove maintenance from a node a `NodeMaintenance` CR with the node's name  s
 ```sh
 $ cat deploy/crds/nodemaintenance_cr.yaml
 
-apiVersion: kubevirt.io/v1alpha1
+apiVersion: nodemaintenance.kubevirt.io/v1beta1
 kind: NodeMaintenance
 metadata:
   name: nodemaintenance-xyz
@@ -209,7 +209,7 @@ $ kubectl delete -f deploy/crds/nodemaintenance_cr.yaml
 The NodeMaintenance CR can contain the following status fields:
 
 ```yaml
-apiVersion: kubevirt.io/v1alpha1
+apiVersion: nodemaintenance.kubevirt.io/v1beta1
 kind: NodeMaintenance
 metadata:
   name: nodemaintenance-xyz

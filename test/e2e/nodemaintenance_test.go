@@ -10,6 +10,9 @@ import (
 	apis "kubevirt.io/node-maintenance-operator/pkg/apis"
 	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 
+	"bytes"
+	"io"
+
 	framework "github.com/operator-framework/operator-sdk/pkg/test"
 	"github.com/operator-framework/operator-sdk/pkg/test/e2eutil"
 	appsv1 "k8s.io/api/apps/v1"
@@ -18,10 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/client-go/kubernetes"
-	"bytes"
-	"io"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -52,7 +53,7 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework) {
 	pod, err := getCurrentOperatorPods(f.KubeClient)
 	if err != nil {
 		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
-		return;
+		return
 	}
 	podName := pod.ObjectMeta.Name
 	podLogOpts := corev1.PodLogOptions{}
@@ -68,7 +69,7 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework) {
 	_, err = io.Copy(buf, podLogs)
 	if err != nil {
 		t.Fatalf("showDeployment: can't copy log stream error=%v", err)
-		return;
+		return
 	}
 	str := buf.String()
 	t.Fatalf("operator logs: %s", str)
@@ -78,7 +79,7 @@ func TestNodeMainenance(t *testing.T) {
 	nodeMainenanceList := &operator.NodeMaintenanceList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha1",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
 		},
 	}
 	err := framework.AddToFrameworkScheme(apis.AddToScheme, nodeMainenanceList)
@@ -139,7 +140,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	nodeMaintenance := &operator.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "kubevirt.io/v1alpha1",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "nodemaintenance-xyz",
