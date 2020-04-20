@@ -62,7 +62,7 @@ echo "validate CRD"
 
 VALIDATE_CRD=$($KUBECTL_CMD get -o yaml crd nodemaintenances.kubevirt.io || true)
 if [[ $VALIDATE_CRD == "" ]]; then
-	echo "can't validate CRD, check if deployment is running"
+	echo "can't validate CRD, check if the CRD is installed"
 	exit 1
 fi
 
