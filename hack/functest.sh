@@ -60,7 +60,7 @@ $KUBECTL_CMD create -f _out/nodemaintenance_crd.yaml
 
 echo "validate CRD"
 
-VALIDATE_CRD=$($KUBECTL_CMD get -o yaml crd nodemaintenances.kubevirt.io || true)
+VALIDATE_CRD=$($KUBECTL_CMD get -o yaml crd nodemaintenances.nodemaintenance.kubevirt.io || true)
 if [[ $VALIDATE_CRD == "" ]]; then
 	echo "can't validate CRD, check if the CRD is installed"
 	exit 1
