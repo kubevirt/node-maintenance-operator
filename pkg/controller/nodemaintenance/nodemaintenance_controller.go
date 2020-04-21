@@ -17,7 +17,8 @@ import (
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubernetes/pkg/kubectl/drain"
+	"k8s.io/klog"
+	"k8s.io/kubectl/pkg/drain"
 	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -73,6 +74,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
+// writer implements io.Writer interface as a pass-through for klog.
+type writer struct {
+	logFunc func(args ...interface{})
+}
+
+// Write passes string(p) into writer's logFunc and always returns len(p)
+func (w writer) Write(p []byte) (n int, err error) {
+	w.logFunc(string(p))
+	return len(p), nil
+}
+
+func onPodDeletedOrEvicted(pod *corev1.Pod, usingEviction bool) {
+	var verbString string
+	if usingEviction {
+		verbString = "Evicted"
+	} else {
+		verbString = "Deleted"
+	}
+	msg := fmt.Sprintf("pod: %s:%s %s from node: %s", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, verbString, pod.Spec.NodeName)
+	klog.Info(msg)
+}
+
 func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	r.drainer = &drain.Helper{}
@@ -114,6 +137,9 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 	r.drainer.Client = cs
 	r.drainer.DryRun = false
 
+	r.drainer.Out = writer{klog.Info}
+	r.drainer.ErrOut = writer{klog.Error}
+	r.drainer.OnPodDeletedOrEvicted = onPodDeletedOrEvicted
 	return nil
 }
 
@@ -206,15 +232,13 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 
-	if err = runCordonOrUncordon(r, node, true); err != nil {
+	if err = drain.RunCordonOrUncordon(r.drainer, node, true); err != nil {
 		return r.reconcileAndError(instance, err)
 	}
 
-	stop := make(chan struct{})
-	defer close(stop)
-
 	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
-	if err = drainPods(r, node, stop); err != nil {
+
+	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
 		return r.reconcileAndError(instance, err)
 	}
 
@@ -241,7 +265,7 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
 		return err
 	}
 
-	if err = runCordonOrUncordon(r, node, false); err != nil {
+	if err = drain.RunCordonOrUncordon(r.drainer, node, false); err != nil {
 		return err
 	}
 
