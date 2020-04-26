@@ -1,8 +1,25 @@
 #!/bin/bash -ex
 
-COVERAGE_FILE=$1
+GINKGO="$1"
+COVERAGE_FILE=cover.out
+GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipPackage ./vendor"
+GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
 
+# source files excluded from ginkgo coverage report. these files are not used during the unit test and include code that is only relevant to the installed product.
 declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
+
+# delete coverage files (if present)
+find . -name ${COVERAGE_FILE} | xargs rm -f
+
+# run ginkgo with coverage result line
+${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed  '/coverage:.*$/d'
+GSTAT=${PIPESTATUS[0]}
+
+if [[ $GSTAT != 0 ]]; then
+	echo "* ginkgo run failed *"
+	exit 1
+fi
+
 
 # ginkgo and html coverage don't quite live in harmony. fix that.
 # ginkgo aggregates the coverage file, but the resulting file is not accepted by go tool cover.

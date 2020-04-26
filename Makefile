@@ -21,9 +21,6 @@ TARGETS = \
 	manifests \
 	test
 
-COVERAGE_FILE := cover.out
-GINKGO_EXTRA_ARGS ?=
-GINKGO_ARGS ?= -v -r --progress $(GINKGO_EXTRA_ARGS) -cover -coverprofile=$(COVERAGE_FILE) -outputdir=. --skipPackage ./vendor
 GINKGO ?= build/_output/bin/ginkgo
 
 $(GINKGO): Gopkg.toml
@@ -59,9 +56,7 @@ goimports-check: $(cmd_sources) $(pkg_sources)
 	go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 test: $(GINKGO)
-	find . -name $(COVERAGE_FILE) | xargs rm -f
-	$(GINKGO) $(GINKGO_ARGS) ./pkg/ ./cmd/
-	./hack/coverage.sh $(COVERAGE_FILE)
+	./hack/coverage.sh $(GINKGO)
 
 gen-k8s: $(apis_sources)
 	./hack/gen-k8s.sh generate k8s
