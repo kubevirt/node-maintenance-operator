@@ -39,7 +39,7 @@ function exclude_file {
 # so that the function can be called from xargs
 export -f exclude_file
 
-# exclude files listed from coverage report
+# exclude files listed as excluded from coverage report
 for f in "${EXCLUDE_FILES_FROM_COVERAGE}"; do
 	find . -name $COVERAGE_FILE | xargs bash -c "exclude_file $f $@"
 done
@@ -47,6 +47,6 @@ done
 # function coverage report (textual)
 go tool cover -func=$COVERAGE_FILE
 
-# html coverage report
+# html coverage report (this makes sense if run in interactive mode - go tool displays the results in the current browser)
 go tool cover -html=$COVERAGE_FILE
 
