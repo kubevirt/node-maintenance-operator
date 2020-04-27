@@ -57,7 +57,7 @@ goimports-check: $(cmd_sources) $(pkg_sources)
 	go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 test: $(GINKGO)
-	./hack/coverage.sh $(GINKGO)
+	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
 
 gen-k8s: $(apis_sources)
 	./hack/gen-k8s.sh generate k8s

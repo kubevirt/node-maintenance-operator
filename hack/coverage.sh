@@ -1,6 +1,8 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 GINKGO="$1"
+TARGETCOVERAGE="$2"
+
 COVERAGE_FILE=cover.out
 GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipPackage ./vendor"
 GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
@@ -30,7 +32,6 @@ sed -i '1i mode: atomic' $COVERAGE_FILE
 function exclude_file {
 	local file=$2
 	local term=$1
-	set -x
 
 	grep -v $term ${file} >${file}.tmp
 	mv -f ${file}.tmp $file
@@ -41,11 +42,26 @@ export -f exclude_file
 
 # exclude files listed as excluded from coverage report
 for f in "${EXCLUDE_FILES_FROM_COVERAGE}"; do
-	find . -name $COVERAGE_FILE | xargs bash -c "exclude_file $f $@"
+	exclude_file "$f" "${COVERAGE_FILE}"
 done
 
+#echo "now exit"
+#exit 1
+
+
 # function coverage report (textual)
-go tool cover -func=$COVERAGE_FILE
+FUNC_REP=$(go tool cover -func=$COVERAGE_FILE)
+
+echo "$FUNC_REP"
+
+COVERAGENUM=$(echo "$FUNC_REP" | sed -n 's/^total:[[:blank:]]*(statements)[[:blank:]]*\([0-9\.]*\)\%$/\1/p')
+
+ROUNDEDCOVERAGE=$(echo "$COVERAGENUM" | awk '{print int($1+0.5)}')
+
+if [[ "$ROUNDEDCOVERAGE" -lt "$TARGETCOVERAGE" ]]; then
+	echo "Error: actual coverage $ROUNDEDCOVERAGE of unit tests is less then the target coverage $TARGETCOVERAGE"
+	exit 1
+fi
 
 # html coverage report (this makes sense if run in interactive mode - go tool displays the results in the current browser)
 go tool cover -html=$COVERAGE_FILE
