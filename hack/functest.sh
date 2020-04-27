@@ -76,6 +76,3 @@ if [[ $VALIDATION_ERRORS != "0" ]]; then
 fi
 
 echo "check validation of openaAPIV3Schema passed"
-
-
-
