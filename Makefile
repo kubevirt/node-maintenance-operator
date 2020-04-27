@@ -5,6 +5,7 @@ IMAGE_REGISTRY ?= quay.io/kubevirt
 IMAGE_TAG ?= latest
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
+TARGETCOVERAGE=60
 
 KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
 KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
@@ -56,7 +57,7 @@ goimports-check: $(cmd_sources) $(pkg_sources)
 	go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 test: $(GINKGO)
-	./hack/coverage.sh $(GINKGO)
+	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
 
 gen-k8s: $(apis_sources)
 	./hack/gen-k8s.sh generate k8s
