@@ -8,7 +8,7 @@ import (
 	"time"
 
 	apis "kubevirt.io/node-maintenance-operator/pkg/apis"
-	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
+	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1beta1"
 
 	"bytes"
 	"io"
