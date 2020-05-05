@@ -75,7 +75,7 @@ def process(path):
     for crd in manifest['spec']['customresourcedefinitions']['owned']:
         crd.update(_CRD_INFOS.get(crd['name'], {}))
 
-    yaml.safe_dump(manifest, sys.stdout)
+    yaml.safe_dump(manifest, sys.stdout, default_flow_style=False)
 
 
 if __name__ == '__main__':
@@ -84,4 +84,5 @@ if __name__ == '__main__':
             process(arg)
         except Exception as ex:
             logging.error('error processing %r: %s', arg, ex)
+            sys.exit(1)
 # keep going!
