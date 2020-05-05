@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
+	kubevirtv1beta1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1beta1"
 )
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -41,13 +41,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	pred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			newObj := e.ObjectNew.(*kubevirtv1alpha1.NodeMaintenance)
+			newObj := e.ObjectNew.(*kubevirtv1beta1.NodeMaintenance)
 			return !newObj.DeletionTimestamp.IsZero()
 		},
 	}
 
 	// Create a source for watching noe maintenance events.
-	src := &source.Kind{Type: &kubevirtv1alpha1.NodeMaintenance{}}
+	src := &source.Kind{Type: &kubevirtv1beta1.NodeMaintenance{}}
 
 	// Watch for changes to primary resource NodeMaintenance
 	err = c.Watch(src, &handler.EnqueueRequestForObject{}, pred)

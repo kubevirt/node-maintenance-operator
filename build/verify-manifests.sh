@@ -11,7 +11,9 @@ function compare_files {
 	set +e
 	diff "$file_a" "$file_b"
 	if [[ $? != 0 ]]; then
-		echo "$file_b"
+		echo "$file_a differ from $file_b"
+		cat "$file_b"
+		exit 1
 	fi
 	set -e
 }
