@@ -1,9 +1,9 @@
 all: fmt check
 
-OPERATOR_SDK_VERSION = v0.16.0
+OPERATOR_SDK_VERSION = v0.17.0
 IMAGE_REGISTRY ?= quay.io/kubevirt
 IMAGE_TAG ?= latest
-CURRENT_IMAGE_TAG=v0.5.0
+CURRENT_IMAGE_TAG=v0.6.0
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 TARGETCOVERAGE=60
