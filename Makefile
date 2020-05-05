@@ -3,6 +3,7 @@ all: fmt check
 OPERATOR_SDK_VERSION ?= v0.8.0
 IMAGE_REGISTRY ?= quay.io/kubevirt
 IMAGE_TAG ?= latest
+CURRENT_IMAGE_TAG=v0.5.0
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 TARGETCOVERAGE=60
@@ -45,7 +46,7 @@ goimports: $(cmd_sources) $(pkg_sources)
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
 
-check: whitespace-check vet goimports-check gen-operator-sdk gen-k8s-check test
+check: whitespace-check vet goimports-check gen-operator-sdk gen-k8s-check verify-manifests test
 
 whitespace-check: $(all_sources)
 	./hack/whitespace.sh
@@ -87,6 +88,9 @@ csv-generator: gen-operator-sdk
 gen-operator-sdk:
 	./hack/gen-operator-sdk.sh ${OPERATOR_SDK_VERSION}
 
+verify-manifests: csv-generator
+	./build/verify-manifests.sh ${CURRENT_IMAGE_TAG}
+
 manifests: csv-generator
 	./build/make-manifests.sh ${IMAGE_TAG}
 	./hack/release-manifests.sh ${IMAGE_TAG}
@@ -109,4 +113,4 @@ cluster-functest:
 cluster-clean:
 	$(KUBEVIRTCI_PATH)/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes
+.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes
