@@ -39,6 +39,10 @@ find . -name .kubeconfig || true
 KUBE_CONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)
 
 
+echo "testing presence of admissionregistration api"
+./kubevirtci/cluster-up/kubectl.sh api-versions | grep admissionregistration
+
+
 TEST_NAMESPACE=node-maintenance-operator go test ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
 
 echo "E2e tests passed"
