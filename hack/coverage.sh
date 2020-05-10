@@ -5,7 +5,6 @@ TARGETCOVERAGE="$2"
 
 COVERAGE_FILE=cover.out
 
-#GINKGO_COVERAGE_ARGS="-coverpkg  ./,./pkg/controller/nodemaintenance -coverprofile=${COVERAGE_FILE} -outputdir=.  --skipPackage ./vendor"
 GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=.  --skipPackage ./vendor"
 GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
 
@@ -15,7 +14,9 @@ declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
 # delete coverage files (if present)
 find . -name ${COVERAGE_FILE} | xargs rm -f
 
-while [ true ]; do
+REPEAT_COUNT=0
+MAX_REPEAT_COUNT=10
+while [[ $REPEAT_COUNT -lt $MAX_REPEAT_COUNT ]]; do
 
 		# run ginkgo with coverage result line
 		${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ 2>&1 | sed  '/coverage:.*$/d'  | tee msg
@@ -36,6 +37,7 @@ while [ true ]; do
 			break
 		fi
 		echo "repeating ginkgo run, unable to read coverage"
+		((REPEAT_COUNT+=1))
 done
 
 if [[ $GSTAT != 0 ]]; then
