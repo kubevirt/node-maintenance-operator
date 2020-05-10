@@ -4,7 +4,9 @@ GINKGO="$1"
 TARGETCOVERAGE="$2"
 
 COVERAGE_FILE=cover.out
-GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipPackage ./vendor"
+
+#GINKGO_COVERAGE_ARGS="-coverpkg  ./,./pkg/controller/nodemaintenance -coverprofile=${COVERAGE_FILE} -outputdir=.  --skipPackage ./vendor"
+GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=.  --skipPackage ./vendor"
 GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
 
 # source files excluded from ginkgo coverage report. these files are not used during the unit test and include code that is only relevant to the installed product.
@@ -13,9 +15,28 @@ declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
 # delete coverage files (if present)
 find . -name ${COVERAGE_FILE} | xargs rm -f
 
-# run ginkgo with coverage result line
-${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed  '/coverage:.*$/d'
-GSTAT=${PIPESTATUS[0]}
+while [ true ]; do
+
+		# run ginkgo with coverage result line
+		${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ 2>&1 | sed  '/coverage:.*$/d'  | tee msg
+		GSTAT=${PIPESTATUS[0]}
+
+		if [[ $GSTAT -eq 0 ]]; then
+			break
+		fi
+
+		# sometimes the error message is 'Unable to read coverage file' for no apparent reason
+		# repeat the test if that is so.
+		set +e
+		grep "Unable to read coverage file" ./msg
+		STAT=$?
+		set -e
+
+		if [[ $STAT -ne 0 ]]; then
+			break
+		fi
+		echo "repeating ginkgo run, unable to read coverage"
+done
 
 if [[ $GSTAT != 0 ]]; then
 	echo "* ginkgo run failed *"
