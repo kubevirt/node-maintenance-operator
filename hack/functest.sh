@@ -16,6 +16,7 @@ if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
 fi
 
 
+KUBECTL_CMD="${KUBEVIRTCI_PATH}/kubectl.sh"
 
 function new_test() {
     name=$1
@@ -43,3 +44,36 @@ TEST_NAMESPACE=node-maintenance-operator go test ./test/e2e/... -root=$(pwd) -ku
 
 echo "E2e tests passed"
 
+echo "check validation of openaAPIV3Schema"
+
+
+cleanup() {
+		$KUBECTL_CMD delete -f _out/namespace-init.yaml
+
+		$KUBECTL_CMD delete -f _out/nodemaintenance_crd.yaml
+}
+trap "cleanup" EXIT SIGINT
+
+
+$KUBECTL_CMD create -f _out/namespace-init.yaml
+
+$KUBECTL_CMD create -f _out/nodemaintenance_crd.yaml
+
+echo "validate CRD"
+
+VALIDATE_CRD=$($KUBECTL_CMD get -o yaml crd nodemaintenances.nodemaintenance.kubevirt.io || true)
+if [[ $VALIDATE_CRD == "" ]]; then
+	echo "can't validate CRD, check if the CRD is installed"
+	exit 1
+fi
+
+VALIDATION_ERRORS=$(echo "$VALIDATE_CRD" | grep -c "spec.validation.openAPIV3Schema" || true)
+
+if [[ $VALIDATION_ERRORS != "0" ]]; then
+	echo "validation of CRD failed"
+	echo "Validation errors:"
+	echo "$VALIDATION_ERRORS"
+	exit 1
+fi
+
+echo "check validation of openaAPIV3Schema passed"
