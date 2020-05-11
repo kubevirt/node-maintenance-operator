@@ -155,7 +155,7 @@ spec:
   maintainers:
   - email: kubevirt-dev@googlegroups.com
     name: KubeVirt project
-  maturity: alpha
+  maturity: beta
   provider:
     name: KubeVirt project
   selector:
