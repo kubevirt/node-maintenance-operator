@@ -15,6 +15,7 @@ if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
     )"
 fi
 
+
 KUBECTL_CMD="${KUBEVIRTCI_PATH}/kubectl.sh"
 
 function new_test() {
@@ -71,7 +72,7 @@ VALIDATION_ERRORS=$(echo "$VALIDATE_CRD" | grep -c "spec.validation.openAPIV3Sch
 if [[ $VALIDATION_ERRORS != "0" ]]; then
 	echo "validation of CRD failed"
 	echo "Validation errors:"
-	echo "$VALIDATE_CRD" | grep "spec.validation.openAPIV3Schema"
+	echo "$VALIDATION_ERRORS"
 	exit 1
 fi
 
