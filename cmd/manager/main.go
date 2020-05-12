@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -114,7 +115,10 @@ func main() {
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+	signalHandlerVar := signals.SetupSignalHandler()
+	nodemaintenance.SetSignalHandler(signalHandlerVar)
+
+	if err := mgr.Start(signalHandlerVar); err != nil {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}

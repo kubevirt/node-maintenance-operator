@@ -3,6 +3,7 @@
 package nodemaintenance
 
 import (
+	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -10,8 +11,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	kubevirtv1alpha1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
 )
+
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -26,8 +29,18 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+
 	err := initDrainer(r, mgr.GetConfig())
 	Handler = r
+
+	if err == nil {
+		err = r.StartNMOWebhook(mgr)
+		if  err != nil {
+			log.Errorf("failed to initialize webhooks. error %v", err)
+			return nil, err
+		}
+	}
+
 	return r, err
 }
 
