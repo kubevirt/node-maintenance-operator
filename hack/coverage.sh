@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 GINKGO="$1"
 TARGETCOVERAGE="$2"
@@ -8,7 +8,8 @@ GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipP
 GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
 
 # source files excluded from ginkgo coverage report. these files are not used during the unit test and include code that is only relevant to the installed product.
-declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
+declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go", "nodemaintenance_webhookaction.go" )
+
 
 # delete coverage files (if present)
 find . -name ${COVERAGE_FILE} | xargs rm -f
@@ -41,7 +42,7 @@ function exclude_file {
 export -f exclude_file
 
 # exclude files listed as excluded from coverage report
-for f in "${EXCLUDE_FILES_FROM_COVERAGE}"; do
+for f in "${EXCLUDE_FILES_FROM_COVERAGE[@]}"; do
 	exclude_file "$f" "${COVERAGE_FILE}"
 done
 
