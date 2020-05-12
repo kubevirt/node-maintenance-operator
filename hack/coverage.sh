@@ -19,8 +19,9 @@ MAX_REPEAT_COUNT=10
 while [[ $REPEAT_COUNT -lt $MAX_REPEAT_COUNT ]]; do
 
 		# run ginkgo with coverage result line
-		${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ 2>&1 | sed  '/coverage:.*$/d'  | tee msg
+		GINKGO_OUT=$(${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ 2>&1 | sed  '/coverage:.*$/d')
 		GSTAT=${PIPESTATUS[0]}
+		echo "$GINKGO_OUT"
 
 		if [[ $GSTAT -eq 0 ]]; then
 			break
@@ -29,7 +30,7 @@ while [[ $REPEAT_COUNT -lt $MAX_REPEAT_COUNT ]]; do
 		# sometimes the error message is 'Unable to read coverage file' for no apparent reason
 		# repeat the test if that is so.
 		set +e
-		grep "Unable to read coverage file" ./msg
+		echo "$GINKGO_OUT" | grep "Unable to read coverage file"
 		STAT=$?
 		set -e
 
