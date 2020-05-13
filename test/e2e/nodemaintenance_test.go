@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"strings"
 
 	apis "kubevirt.io/node-maintenance-operator/pkg/apis"
 	operator "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1alpha1"
@@ -32,6 +33,10 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
+)
+
+const (
+	ErrorForCreationOfCRDWithIllegalNodeName = "Can't create NMO object for node blablaNode. The node does not exist"
 )
 
 func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
@@ -72,7 +77,7 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework) {
 		return
 	}
 	str := buf.String()
-	t.Fatalf("operator logs: %s", str)
+	t.Errorf("operator logs: %s", str)
 }
 
 func TestNodeMainenance(t *testing.T) {
@@ -96,26 +101,69 @@ func ClusterTest(t *testing.T) {
 	//t.Parallel()
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup()
+	// get global framework variables
+	f := framework.Global
 	err := ctx.InitializeClusterResources(&framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
 	if err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatalf("failed to initialize cluster resources: %v", err)
 	}
 	t.Log("Initialized cluster resources")
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatal(err)
 	}
-	// get global framework variables
-	f := framework.Global
 	// wait for node- maintanence-operator to be ready
 	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, "node-maintenance-operator", 1, retryInterval, timeout)
 	if err != nil {
+		showDeploymentStatus(t, f)
+		t.Fatal(err)
+	}
+
+	if err = nodeMaintenanceAdmissionWebhookTest(t, f, ctx); err != nil {
+		showDeploymentStatus(t, f)
 		t.Fatal(err)
 	}
 
 	if err = nodeMaintenanceTest(t, f, ctx); err != nil {
 		t.Fatal(err)
 	}
+}
+func nodeMaintenanceAdmissionWebhookTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
+
+	nodeName := "blablaNode"
+
+	t.Logf("Create NMO object on nonexisting node")
+
+	// Create node maintenance custom resource
+	nodeMaintenance := &operator.NodeMaintenance{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "NodeMaintenance",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nodemaintenance-xyz",
+		},
+		Spec: operator.NodeMaintenanceSpec{
+			NodeName: nodeName,
+			Reason:   "Set maintenance on node for e2e testing",
+		},
+	}
+
+	err := f.Client.Create(goctx.TODO(), nodeMaintenance, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
+	if err == nil {
+		showDeploymentStatus(t, f)
+		t.Fatal(fmt.Errorf("Test Failed. Creation of non existing NMO node should have failed"))
+	}
+
+	if err != nil {
+		if !strings.Contains(err.Error(),ErrorForCreationOfCRDWithIllegalNodeName) {
+			showDeploymentStatus(t, f)
+			t.Fatal(fmt.Errorf("that's the error message of creating nmo with wrong node name: |%s|", err.Error()))
+		}
+	}
+	return nil
 }
 
 func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
