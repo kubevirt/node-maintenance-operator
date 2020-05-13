@@ -7,5 +7,5 @@ spec:
   channel: beta
   name: node-maintenance-operator
   source: node-maintenance-operator
-  sourceNamespace: openshift-operator-lifecycle-manager
+  sourceNamespace: openshift-marketplace
   startingCSV: node-maintenance-operator.v0.3.0
