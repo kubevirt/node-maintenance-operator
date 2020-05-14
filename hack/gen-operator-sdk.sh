@@ -6,7 +6,6 @@ SELF=$( realpath $0 )
 BASEPATH=$( dirname $SELF )
 TARGET_SDK_VERSION="${1:-v0.16.0}"
 
-
 CURRENT_OPERATOR_SDK=${BASEPATH}/../operator-sdk
 
 if [[ ! -x $CURRENT_OPERATOR_SDK ]]; then
