@@ -6,6 +6,7 @@ import (
 	"time"
 	"fmt"
 	"strconv"
+	"strings"
 	"net"
 	"net/http"
 	"encoding/json"
@@ -14,12 +15,11 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/apimachinery/pkg/api/errors"
-	//certutil "k8s.io/client-go/util/cert"
+	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/api/admission/v1beta1"
@@ -27,91 +27,54 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-import (
-	"bytes"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"math/big"
-	cryptorand "crypto/rand"
-	"encoding/pem"
-	"strings"
-	"path"
-)
-
-const CertificateBlockType = "CERTIFICATE"
-const RSAPrivateKeyBlockType = "RSA PRIVATE KEY"
-
 const (
-	//DefaultListenPort =  443
 	DefaultListenPort =  8454
-	DefaultListenAddress = "0.0.0.0" //"10.99.25.77"
+	DefaultListenAddress = "0.0.0.0"
 	ShutdownTimeoutInSeconds = 30 * time.Second
 	defaultKeepAlivePeriod = 5 * time.Minute
 	WebhookServiceName = "webhook"
+	CreationHookUrl = "/creation-hook"
 )
 
-
-var scheme = runtime.NewScheme()
-var codecs = serializer.NewCodecFactory(scheme)
-
-
-
-type WebhookCallback interface {
-	validateCRDAdmission(runtime.Object) error
-}
+type WebhookCallback func(runtime.Object) error
 
 type WebHooks struct {
-	ListenIp	string
+	ListenIp		string
 	ListenIpAndPort string
-	ListenPort int
-	Client     kubernetes.Interface
-	ErrChan chan error
-
-	GroupVersion schema.GroupVersion
-	Namespace string
-	UrlPath string
+	ListenPort		int
+	Client			kubernetes.Interface
+	ErrChan			chan error
+	GroupVersion	schema.GroupVersion
+	PluralName		string
+	Namespace		string
+	ServiceName		string
+	UrlPath			string
 	WebhookCallback WebhookCallback
+	Codecs			serializer.CodecFactory
 }
 
-func getServiceIP(KubeClient kubernetes.Interface, serviceName string, namespaceName string) (string, error) {
 
-	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
-	if err != nil {
-		return "", err
-	}
+func NewWebHooks(config *rest.Config, scheme *runtime.Scheme, groupVersion schema.GroupVersion, plurarlName string, namespace string, callback WebhookCallback) (*WebHooks, error) {
 
-	if pods.Size() == 0 {
-		return "", fmt.Errorf("There are no pods deployed in cluster to run the operator")
-	}
-
-	return pods.Items[0].Status.PodIP, nil
-}
-
-/*
-func getServiceIP(KubeClient kubernetes.Interface, serviceName string, namespaceName string) (string, error) {
-
-	svc, err := KubeClient.CoreV1().Services(namespaceName).Get(serviceName, metav1.GetOptions{})
-	if err != nil {
-		return "", err
-	}
-	return svc.Spec.ClusterIP, nil
-}
-*/
-
-func NewWebHooks(config *rest.Config, groupVersion schema.GroupVersion, namespace string, callback WebhookCallback) (*WebHooks, error) {
+	codecs := serializer.NewCodecFactory(scheme)
 
 	cs, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
+	svcName := WebhookServiceName + groupVersion.Group + groupVersion.Version
+	svcName = strings.Replace(svcName, ".", "-", -1)
 
 	return &WebHooks{
 			Client: cs,
 			GroupVersion: groupVersion,
+			PluralName: plurarlName,
 			Namespace: namespace,
-			UrlPath: "/creation-hook",
 			WebhookCallback: callback,
+			ServiceName:  svcName,
+			UrlPath: CreationHookUrl,
+			Codecs: codecs,
+
 		}, nil
 }
 
@@ -128,13 +91,7 @@ func (obj *WebHooks)  readIpAndPort() error {
 
 	listenIp := os.Getenv("LISTEN_ADDRESS")
 	if listenIp == "" {
-		var err error
-
-		listenIp, err = getServiceIP(obj.Client,WebhookServiceName,obj.Namespace)
-		if err != nil {
-			return fmt.Errorf("failed to service address: %v", err)
-		}
-		//listenIp = DefaultListenAddress;
+		listenIp = DefaultListenAddress;
 	}
 
 	ipAndPort := fmt.Sprintf("%s:%s", listenIp, listenPort)
@@ -142,8 +99,6 @@ func (obj *WebHooks)  readIpAndPort() error {
 	obj.ListenIpAndPort = ipAndPort
 	obj.ListenPort = numListenPort
 	obj.ListenIp = listenIp
-
-	log.Infof("webhook listening address: %s", ipAndPort)
 
 	return nil
 }
@@ -153,7 +108,7 @@ func (obj *WebHooks)  readIpAndPort() error {
 func (obj *WebHooks) initService() (*corev1.Service) {
 	return  &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      WebhookServiceName,
+			Name:      obj.ServiceName,
 			Namespace: obj.Namespace,
 		},
 		TypeMeta: metav1.TypeMeta{
@@ -163,7 +118,7 @@ func (obj *WebHooks) initService() (*corev1.Service) {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Port:     int32(obj.ListenPort),
+					Port:     int32(443),
 					Protocol: corev1.ProtocolTCP,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
@@ -172,9 +127,11 @@ func (obj *WebHooks) initService() (*corev1.Service) {
 				},
 			},
 			Selector: map[string]string {
-				"webhook": "true",
+				// Note: the service needs a matching label to the pod definition
+				// otherwise IP traffic is not routed to the pod.
+				// somehow the pod of the operator gets this label, but I am not exactly sure why.
+				"name": obj.Namespace,
 			},
-			//Type: corev1.ServiceTypeNodePort, //ServiceTypeClusterIP,
 		},
 	}
 
@@ -183,12 +140,14 @@ func (obj *WebHooks) initService() (*corev1.Service) {
 func (obj *WebHooks) registerService() error {
 	svc := obj.initService()
 
-	err := obj.Client.CoreV1().Services(obj.Namespace).Delete(WebhookServiceName,&metav1.DeleteOptions{})
-	if err != nil {
-		return fmt.Errorf("can't delete service: %v",err)
-	}
+//	err := obj.Client.CoreV1().Services(obj.Namespace).Delete(obj.ServiceName,&metav1.DeleteOptions{})
+//	if err != nil {
+//		if !errors.IsNotFound(err) {
+//			return fmt.Errorf("can't delete service: %v",err)
+//		}
+//	}
 
-	_, err = obj.Client.CoreV1().Services(obj.Namespace).Create(svc)
+	_, err := obj.Client.CoreV1().Services(obj.Namespace).Create(svc)
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
@@ -200,119 +159,6 @@ func (obj *WebHooks) registerService() error {
 
 }
 
-
-func GenerateSelfSignedCertKeyWithFixtures(host string, alternateIPs []net.IP, alternateDNS []string, fixtureDirectory string) ([]byte, []byte, error) {
-	validFrom := time.Now().Add(-time.Hour) // valid an hour earlier to avoid flakes due to clock skew
-	maxAge := time.Hour * 24 * 365          // one year self-signed certs
-
-	baseName := fmt.Sprintf("%s_%s_%s", host, strings.Join(ipsToStrings(alternateIPs), "-"), strings.Join(alternateDNS, "-"))
-	certFixturePath := path.Join(fixtureDirectory, baseName+".crt")
-	keyFixturePath := path.Join(fixtureDirectory, baseName+".key")
-	if len(fixtureDirectory) > 0 {
-		cert, err := ioutil.ReadFile(certFixturePath)
-		if err == nil {
-			key, err := ioutil.ReadFile(keyFixturePath)
-			if err == nil {
-				return cert, key, nil
-			}
-			return nil, nil, fmt.Errorf("cert %s can be read, but key %s cannot: %v", certFixturePath, keyFixturePath, err)
-		}
-		maxAge = 100 * time.Hour * 24 * 365 // 100 years fixtures
-	}
-
-	caKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	/*
-	caTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("%s-ca", host),
-		},
-		NotBefore: validFrom,
-		NotAfter:  validFrom.Add(maxAge),
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-
-	caDERBytes, err := x509.CreateCertificate(cryptorand.Reader, &caTemplate, &caTemplate, &caKey.PublicKey, caKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	caCertificate, err := x509.ParseCertificate(caDERBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	*/
-
-	priv, err := rsa.GenerateKey(cryptorand.Reader, 2048)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(2),
-		Issuer: pkix.Name{
-			CommonName: fmt.Sprintf("%s", host),
-		},
-		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("%s", host),
-		},
-		NotBefore: validFrom,
-		NotAfter:  validFrom.Add(maxAge),
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		template.IPAddresses = append(template.IPAddresses, ip)
-	} else {
-		template.DNSNames = append(template.DNSNames, host)
-	}
-
-	template.IPAddresses = append(template.IPAddresses, alternateIPs...)
-	template.DNSNames = append(template.DNSNames, alternateDNS...)
-
-	derBytes, err := x509.CreateCertificate(cryptorand.Reader, &template, &template, &priv.PublicKey, caKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Generate cert, followed by ca
-	certBuffer := bytes.Buffer{}
-	if err := pem.Encode(&certBuffer, &pem.Block{Type: CertificateBlockType, Bytes: derBytes}); err != nil {
-		return nil, nil, err
-	}
-	/*
-	if err := pem.Encode(&certBuffer, &pem.Block{Type: CertificateBlockType, Bytes: caDERBytes}); err != nil {
-		return nil, nil, err
-	}
-	*/
-
-	// Generate key
-	keyBuffer := bytes.Buffer{}
-	if err := pem.Encode(&keyBuffer, &pem.Block{Type: RSAPrivateKeyBlockType, Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
-		return nil, nil, err
-	}
-
-	if len(fixtureDirectory) > 0 {
-		if err := ioutil.WriteFile(certFixturePath, certBuffer.Bytes(), 0644); err != nil {
-			return nil, nil, fmt.Errorf("failed to write cert fixture to %s: %v", certFixturePath, err)
-		}
-		if err := ioutil.WriteFile(keyFixturePath, keyBuffer.Bytes(), 0644); err != nil {
-			return nil, nil, fmt.Errorf("failed to write key fixture to %s: %v", certFixturePath, err)
-		}
-	}
-
-	return certBuffer.Bytes(), keyBuffer.Bytes(), nil
-}
 
 func ipsToStrings(ips []net.IP) []string {
 	ss := make([]string, 0, len(ips))
@@ -337,15 +183,15 @@ func (obj *WebHooks) CreateSelfSignedCert() ([]byte,[]byte,error) {
 		alternateIPs = append(alternateIPs, netIp)
 	}
 
-	hostname := WebhookServiceName + "." + obj.Namespace + ".svc"
-	cert, key, err := GenerateSelfSignedCertKeyWithFixtures(hostname, alternateIPs, alternateDNS, "")
+	hostname := obj.ServiceName + "." + obj.Namespace + ".svc"
+	cert, key, err := certutil.GenerateSelfSignedCertKeyWithFixtures(hostname, alternateIPs, alternateDNS, "")
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to generate self signed cert: %v", err)
 	}
 
-	log.Infof("Key: %s",key)
-	log.Infof("Cert: %s",cert)
+	log.Debugf("Key: %s",key)
+	log.Debugf("Cert: %s",cert)
 
 	return cert, key, nil
 }
@@ -367,13 +213,13 @@ func (obj *WebHooks) createValidatingHook(certPem []byte) ([]admissionregistrati
 				Rule: admissionregistrationv1beta1.Rule{
 					APIGroups:   []string{obj.GroupVersion.Group},
 					APIVersions: []string{obj.GroupVersion.Version},
-					Resources:   []string{"nodemaintenances"},
+					Resources:   []string{obj.PluralName},
 				},
 			}},
 			ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
 				Service: &admissionregistrationv1beta1.ServiceReference{
 					Namespace: obj.Namespace,
-					Name:      WebhookServiceName,
+					Name:      obj.ServiceName,
 					Path:      &obj.UrlPath,
 				},
 				CABundle: certPem,
@@ -452,28 +298,29 @@ func makeAddmissionErrorResponse(err error) *v1beta1.AdmissionResponse {
 	}
 }
 
-func handleCRDAdmissionRequest(ar v1beta1.AdmissionReview, cb WebhookCallback ) (*v1beta1.AdmissionResponse) {
+func handleCRDAdmissionRequest(ar v1beta1.AdmissionReview, obj *WebHooks ) (*v1beta1.AdmissionResponse) {
 
-	crdResource := metav1.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1beta1", Resource: "customresourcedefinitions"}
-	if ar.Request.Resource != crdResource {
-		err := fmt.Errorf("expect resource to be %s actual %s", crdResource, ar.Request.Resource)
+	if ar.Kind == "AdmissionReview" &&	ar.APIVersion != "admission.k8s.io/v1beta1"  {
+		err := fmt.Errorf("wrong admission review object. actual kind %s apiversion %s", ar.Kind, ar.APIVersion )
 		log.Error(err)
 		return makeAddmissionErrorResponse(err)
 	}
 
-	log.Info("deserializing admission request")
+	log.Debug("deserializing admission request")
+	if ar.Request.Object.Object == nil {
+		var err error
 
-	raw := ar.Request.Object.Raw
-	crd := apiextensionsv1beta1.CustomResourceDefinition{}
-	deserializer := codecs.UniversalDeserializer()
-	obj, _, err := deserializer.Decode(raw, nil, &crd)
-
-	if err != nil {
-		log.Errorf("Failed to deserialize CRD object: %v", err)
-		return makeAddmissionErrorResponse(err)
+		ar.Request.Object.Object, _, err = obj.Codecs.UniversalDeserializer().Decode(ar.Request.Object.Raw, nil, nil)
+		if err != nil {
+			return makeAddmissionErrorResponse(fmt.Errorf("failed to deserialize request obj : %v", err))
+		}
 	}
 
-	err = cb.validateCRDAdmission(obj)
+	if ar.Request.Object.Object == nil {
+		return makeAddmissionErrorResponse(fmt.Errorf("failed to deserialize request obj - nil object"))
+	}
+
+	err := obj.WebhookCallback(ar.Request.Object.Object)
 	if err != nil {
 		log.Errorf("Error while handling callback: %v", err)
 		return makeAddmissionErrorResponse(err)
@@ -482,7 +329,7 @@ func handleCRDAdmissionRequest(ar v1beta1.AdmissionReview, cb WebhookCallback ) 
 	reviewResponse := v1beta1.AdmissionResponse{}
 	reviewResponse.Allowed = true
 
-	log.Info("crd admission validated")
+	log.Debug("crd admission validated!")
 
 	return &reviewResponse
 }
@@ -503,7 +350,7 @@ func (obj *WebHooks) RunHttpsServer(stopCh <-chan struct{}, handler *http.ServeM
 
 	admissionHandler := func(w http.ResponseWriter, r *http.Request) {
 
-		log.Info("service handler called")
+		log.Debug("service handler called")
 
 		var body []byte
 		if r.Body != nil {
@@ -521,26 +368,26 @@ func (obj *WebHooks) RunHttpsServer(stopCh <-chan struct{}, handler *http.ServeM
 			return
 		}
 
-		log.Info(fmt.Sprintf("handling request body: %s", body))
+		log.Debug(fmt.Sprintf("handling request body: %s", body))
 
 		// The AdmissionReview that was sent to the webhook
 		requestedAdmissionReview := v1beta1.AdmissionReview{}
 
 		responseAdmissionReview := v1beta1.AdmissionReview{}
 
-		deserializer := codecs.UniversalDeserializer()
+		deserializer := obj.Codecs.UniversalDeserializer()
 		if _, _, err := deserializer.Decode(body, nil, &requestedAdmissionReview); err != nil {
 			log.Error(err)
 			responseAdmissionReview.Response = makeAddmissionErrorResponse(err)
 		} else {
 			// pass to admitFunc
-			responseAdmissionReview.Response = handleCRDAdmissionRequest(requestedAdmissionReview, obj.WebhookCallback)
+			responseAdmissionReview.Response = handleCRDAdmissionRequest(requestedAdmissionReview, obj)
 		}
 
 		// Return the same UID
 		responseAdmissionReview.Response.UID = requestedAdmissionReview.Request.UID
 
-		log.Info(fmt.Sprintf("sending response: %v", responseAdmissionReview.Response))
+		log.Debug(fmt.Sprintf("sending response: %v", responseAdmissionReview.Response))
 
 		respBytes, err := json.Marshal(responseAdmissionReview)
 		if err != nil {
@@ -555,20 +402,18 @@ func (obj *WebHooks) RunHttpsServer(stopCh <-chan struct{}, handler *http.ServeM
 
 	handler.Handle(obj.UrlPath, http.HandlerFunc(admissionHandler))
 
-
 	secureServer := &http.Server{
 		Addr:           obj.ListenIpAndPort,
 		Handler:        handler,
 		MaxHeaderBytes: 1 << 20,
 		TLSConfig: &tls.Config{
-			// Can't use SSLv3 because of POODLE and BEAST
-			// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
-			// Can't use TLSv1.1 because of RC4 cipher usage
 			MinVersion: tls.VersionTLS12,
+			Certificates: []tls.Certificate{keyPair},
 		},
 	}
 
-	secureServer.TLSConfig.Certificates = []tls.Certificate{keyPair}
+	keepAliveListener := tcpKeepAliveListener{impl: netListener.(*net.TCPListener)}
+	tlsListener := tls.NewListener(keepAliveListener, secureServer.TLSConfig)
 
 	shutDownTimeout := time.Duration(ShutdownTimeoutInSeconds)
 	// Shutdown server gracefully.
@@ -583,11 +428,10 @@ func (obj *WebHooks) RunHttpsServer(stopCh <-chan struct{}, handler *http.ServeM
 
 	go func() {
 		//defer utilruntime.HandleCrash()
-		listener := tcpKeepAliveListener{impl: netListener.(*net.TCPListener)}
 
-		log.Infof("web hook server: start listening on %s", listener.Addr().String())
-		err := secureServer.Serve(listener)
-		msg := fmt.Sprintf("Stopped listening on %s", listener.Addr().String())
+		log.Infof("web hook server: start listening on %s", tlsListener.Addr().String())
+		err := secureServer.Serve(tlsListener)
+		msg := fmt.Sprintf("Stopped listening on %s", tlsListener.Addr().String())
 		select {
 		case <-stopCh:
 			log.Info(msg)
@@ -600,9 +444,9 @@ func (obj *WebHooks) RunHttpsServer(stopCh <-chan struct{}, handler *http.ServeM
 	return nil
 }
 
-func StartAdmissionWebhook(config *rest.Config, stopChan <-chan struct{}, gvk schema.GroupVersion, namespace string, callback WebhookCallback) error {
+func StartAdmissionWebhook(config *rest.Config, scheme *runtime.Scheme, stopChan <-chan struct{}, gvk schema.GroupVersion, plurarlName string, namespace string, callback WebhookCallback) error {
 
-	obj, err := NewWebHooks(config, gvk, namespace, callback)
+	obj, err := NewWebHooks(config, scheme, gvk, plurarlName, namespace, callback)
 	if err != nil {
 		return err
 	}
@@ -614,12 +458,6 @@ func StartAdmissionWebhook(config *rest.Config, stopChan <-chan struct{}, gvk sc
 	return nil
 }
 
-// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
-// connections. It's used by ListenAndServe and ListenAndServeTLS so
-// dead TCP connections (e.g. closing laptop mid-download) eventually
-// go away.
-//
-// Copied from Go 1.7.2 net/http/server.go
 type tcpKeepAliveListener struct {
 	impl *net.TCPListener
 }
@@ -633,31 +471,27 @@ func (ln tcpKeepAliveListener) Accept() (net.Conn, error) {
 	tc.SetKeepAlivePeriod(defaultKeepAlivePeriod)
 
 	if err != nil {
-		log.Info("TCP listener accepted")
+		log.Debugf("TCP listener accept error?: %v", err)
 	} else {
-		log.Infof("TCP listener accept error: %v", err)
+		log.Debug("TCP listener accepted!")
 	}
 
-	return tc, nil
+	return tc, err
 }
 
 func (ln tcpKeepAliveListener) Close() error {
 	err := ln.impl.Close()
 
 	if err != nil {
-		log.Info("TCP listener close")
+		log.Debug("TCP listener close")
 	} else {
-		log.Infof("TCP connection close error: %v", err)
+		log.Debugf("TCP connection close error: %v", err)
 	}
 	return err
 }
 
 func (ln tcpKeepAliveListener) Addr() net.Addr {
-	addr := ln.impl.Addr()
-
-	log.Info("TCP listener Addr")
-
-	return addr
+	return ln.impl.Addr()
 }
 
 

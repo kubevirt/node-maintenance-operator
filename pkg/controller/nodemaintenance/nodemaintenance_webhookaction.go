@@ -12,6 +12,7 @@ import (
 
 const (
 	NMONamespace = "node-maintenance-operator"
+	NMOPluralName="nodemaintenances"
 )
 
 var signalHandler <-chan struct{}
@@ -21,6 +22,7 @@ func SetSignalHandler(handler <-chan struct{}) {
 }
 
 func (r *ReconcileNodeMaintenance) validateCRDAdmission(crd runtime.Object) error {
+
 	switch crdObj := crd.(type) {
 		case *kubevirtv1alpha1.NodeMaintenance:
 			nodeName := crdObj.Spec.NodeName
@@ -36,8 +38,13 @@ func (r *ReconcileNodeMaintenance) validateCRDAdmission(crd runtime.Object) erro
 	return nil
 }
 
+
 func (r *ReconcileNodeMaintenance) StartNMOWebhook(mgr manager.Manager) error {
-	return webhooks.StartAdmissionWebhook(mgr.GetConfig(), signalHandler, kubevirtv1alpha1.SchemeGroupVersion, NMONamespace, nil)
+
+		var callback = func(obj runtime.Object) error {
+			return r.validateCRDAdmission(obj)
+		}
+		return webhooks.StartAdmissionWebhook(mgr.GetConfig(), mgr.GetScheme(), signalHandler, kubevirtv1alpha1.SchemeGroupVersion, NMOPluralName, NMONamespace, callback)
 }
 
 
