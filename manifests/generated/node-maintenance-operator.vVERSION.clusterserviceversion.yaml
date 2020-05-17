@@ -25,6 +25,14 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
+          - admissionregistration.k8s.io
+          resources:
+          - validatingwebhookconfigurations
+          verbs:
+          - get
+          - create
+          - update
+        - apiGroups:
           - ''
           resources:
           - services
