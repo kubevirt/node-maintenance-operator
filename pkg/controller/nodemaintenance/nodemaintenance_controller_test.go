@@ -17,7 +17,7 @@ import (
 	k8sfakeclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	kubevirtv1beta1 "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1beta1"
+	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,17 +28,17 @@ var _ = Describe("updateCondition", func() {
 	var r *ReconcileNodeMaintenance
 	var ctrl *gomock.Controller
 	var mockMaintenanceReconcile *MockReconcileHandler
-	var nm *kubevirtv1beta1.NodeMaintenance
+	var nm *nodemaintenanceapi.NodeMaintenance
 	var cl client.Client
 	var cs *k8sfakeclient.Clientset
 	var req reconcile.Request
 
 	setFakeClients := func() {
-		nm = &kubevirtv1beta1.NodeMaintenance{
+		nm = &nodemaintenanceapi.NodeMaintenance{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node-maintanance",
 			},
-			Spec: kubevirtv1beta1.NodeMaintenanceSpec{
+			Spec: nodemaintenanceapi.NodeMaintenanceSpec{
 				NodeName: "node01",
 				Reason:   "test reason",
 			},
@@ -100,20 +100,20 @@ var _ = Describe("updateCondition", func() {
 	}
 
 	checkSuccesfulReconcile := func() {
-		maintanance := &kubevirtv1beta1.NodeMaintenance{}
+		maintanance := &nodemaintenanceapi.NodeMaintenance{}
 		err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(maintanance.Status.Phase).To(Equal(kubevirtv1beta1.MaintenanceSucceeded))
+		Expect(maintanance.Status.Phase).To(Equal(nodemaintenanceapi.MaintenanceSucceeded))
 	}
 
 	checkFailedReconcile := func() {
-		maintanance := &kubevirtv1beta1.NodeMaintenance{}
+		maintanance := &nodemaintenanceapi.NodeMaintenance{}
 		err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(maintanance.Status.LastError)).NotTo(Equal(0))
 	}
 
-	reconcileMaintenance := func(nm *kubevirtv1beta1.NodeMaintenance) {
+	reconcileMaintenance := func(nm *nodemaintenanceapi.NodeMaintenance) {
 		// Mock request to simulate Reconcile() being called on an event for a
 		// watched resource .
 		req = reconcile.Request{
@@ -145,7 +145,7 @@ var _ = Describe("updateCondition", func() {
 		Handler = mockMaintenanceReconcile
 
 		s := scheme.Scheme
-		s.AddKnownTypes(kubevirtv1beta1.SchemeGroupVersion, nm)
+		s.AddKnownTypes(nodemaintenanceapi.SchemeGroupVersion, nm)
 
 		setFakeClients()
 
@@ -163,22 +163,22 @@ var _ = Describe("updateCondition", func() {
 
 		It("Node maintenanace should be initialized properly", func() {
 			r.initMaintenanceStatus(nm)
-			maintanance := &kubevirtv1beta1.NodeMaintenance{}
+			maintanance := &nodemaintenanceapi.NodeMaintenance{}
 			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(maintanance.Status.Phase).To(Equal(kubevirtv1beta1.MaintenanceRunning))
+			Expect(maintanance.Status.Phase).To(Equal(nodemaintenanceapi.MaintenanceRunning))
 			Expect(len(maintanance.Status.PendingPods)).To(Equal(2))
 			Expect(maintanance.Status.EvictionPods).To(Equal(2))
 			Expect(maintanance.Status.TotalPods).To(Equal(2))
 		})
 		It("Should not init Node maintenanace if already set", func() {
 			nmCopy := nm.DeepCopy()
-			nmCopy.Status.Phase = kubevirtv1beta1.MaintenanceRunning
+			nmCopy.Status.Phase = nodemaintenanceapi.MaintenanceRunning
 			r.initMaintenanceStatus(nmCopy)
-			maintanance := &kubevirtv1beta1.NodeMaintenance{}
+			maintanance := &nodemaintenanceapi.NodeMaintenance{}
 			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(maintanance.Status.Phase).NotTo(Equal(kubevirtv1beta1.MaintenanceRunning))
+			Expect(maintanance.Status.Phase).NotTo(Equal(nodemaintenanceapi.MaintenanceRunning))
 			Expect(len(maintanance.Status.PendingPods)).NotTo(Equal(2))
 			Expect(maintanance.Status.EvictionPods).NotTo(Equal(2))
 			Expect(maintanance.Status.TotalPods).NotTo(Equal(2))
