@@ -1,7 +1,7 @@
 package apis
 
 import (
-	"kubevirt.io/node-maintenance-operator/pkg/apis/kubevirt/v1beta1"
+	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 )
 
 func init() {
