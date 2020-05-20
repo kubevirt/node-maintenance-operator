@@ -43,6 +43,7 @@ _SPEC = {
             'operated-by': 'nodemaintenanceoperator',
         },
     },
+    'maturity': 'beta',
 }
 
 _KUBEVIRT_ICON_TYPE="image/png"
