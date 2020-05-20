@@ -29,7 +29,7 @@ ${OPERATOR_SDK} version
 # operator sdk to create it for us. That's why we
 # are using the absurd 9999.9999.9999 version here.
 
-${OPERATOR_SDK} generate csv --csv-version ${PLACEHOLDER_CSV_VERSION} --update-crds --crd-dir=deploy/crds
+GO111MODULE=auto ${OPERATOR_SDK} generate csv --csv-version ${PLACEHOLDER_CSV_VERSION} --update-crds --crd-dir=deploy/crds
 
 # Move CSV to generated folder
 mv deploy/olm-catalog/node-maintenance-operator/manifests/node-maintenance-operator.clusterserviceversion.yaml $MANIFESTS_GENERATED_CSV
