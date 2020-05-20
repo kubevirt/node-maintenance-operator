@@ -1,3 +1,4 @@
+---
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
@@ -9,8 +10,8 @@ metadata:
     containerImage: quay.io/kubevirt/node-maintenance-operator
     description: Node-maintenance-operator maintains nodes in cluster
     repository: https://github.com/kubevirt/node-maintenance-operator
-  name: node-maintenance-operator.vPLACEHOLDER_CSV_VERSION
-  namespace: node-maintenance-operator
+  name: node-maintenance-operator.v0.5.0
+  namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
@@ -116,13 +117,14 @@ spec:
               containers:
               - env:
                 - name: WATCH_NAMESPACE
+                  value: ""
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
                 - name: OPERATOR_NAME
                   value: node-maintenance-operator
-                image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
+                image: quay.io/kubevirt/node-maintenance-operator:v0.5.0
                 imagePullPolicy: Always
                 name: node-maintenance-operator
                 resources: {}
@@ -162,4 +164,4 @@ spec:
     matchLabels:
       alm-owner-kubevirt: nodemaintenanceoperator
       operated-by: nodemaintenanceoperator
-  version: PLACEHOLDER_CSV_VERSION
+  version: 0.5.0

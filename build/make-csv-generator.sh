@@ -19,6 +19,9 @@ MANIFESTS_GENERATED_DIR="manifests/generated"
 MANIFESTS_GENERATED_CSV=${MANIFESTS_GENERATED_DIR}/node-maintenance-operator.vVERSION.clusterserviceversion.yaml
 PLACEHOLDER_CSV_VERSION="9999.9999.9999"
 
+echo "operator-sdk version: "
+${OPERATOR_SDK} version
+
 # Create CSV with placeholder version. The version
 # has to be semver compatible in order for the
 # operator sdk to create it for us. That's why we
