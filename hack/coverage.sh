@@ -4,7 +4,6 @@ GINKGO="$1"
 TARGETCOVERAGE="$2"
 
 COVERAGE_FILE=cover.out
-
 GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=.  --skipPackage ./vendor"
 GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
 
