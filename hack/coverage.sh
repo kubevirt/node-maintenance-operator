@@ -28,6 +28,9 @@ while [[ $REPEAT_COUNT -lt $MAX_REPEAT_COUNT ]]; do
 
 		# sometimes the error message is 'Unable to read coverage file' for no apparent reason
 		# repeat the test if that is so.
+		#
+		# See also: https://github.com/onsi/ginkgo/issues/417
+		#  'coverage:' lines hold no clue and unsetting -outputdir produced no effect
 		set +e
 		echo "$GINKGO_OUT" | grep "Unable to read coverage file"
 		STAT=$?
