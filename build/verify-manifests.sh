@@ -9,7 +9,7 @@ function compare_files {
 	local file_b="$2"
 
 	set +e
-	diff "$file_a" "$file_b"
+	diff -C 5 "$file_a" "$file_b"
 	if [[ $? != 0 ]]; then
 		echo "$file_a differ from $file_b"
 		cat "$file_b"
