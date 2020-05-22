@@ -18,11 +18,6 @@ BUNDLE_DIR="${2:-manifests/node-maintenance-operator}"
 BUNDLE_DIR_VERSION="${BUNDLE_DIR}/${TAG}"
 CHANNEL="beta"
 
-HAVE_COURIER=0
-if which operator-courier &> /dev/null; then
-	HAVE_COURIER=1
-fi
-
 mkdir -p ${BUNDLE_DIR_VERSION}
 
 ./build/csv-generator.sh --csv-version=${VERSION} --namespace=placeholder --operator-image="quay.io/kubevirt/node-maintenance-operator:${TAG}" > ${BUNDLE_DIR_VERSION}/node-maintenance-operator.${TAG}.clusterserviceversion.yaml
@@ -45,8 +40,19 @@ ls ${BUNDLE_DIR_VERSION}
 # needed to make operator-courier happy
 cp "${BUNDLE_DIR}/node-maintenance-operator.package.yaml" "${BUNDLE_DIR_VERSION}/node-maintenance-operator.package.yaml"
 
-if [ "${HAVE_COURIER}" == "1" ]; then
-    operator-courier verify ${BUNDLE_DIR_VERSION} && echo "OLM verify passed" || echo "OLM verify failed"
+set +e
+
+echo "OLM verify bundle for operator hub"
+
+export BUNDLE_DIR_VERSION
+make test-courier
+if [[ $? != 0 ]]; then
+	echo "OLM verify failed"
+	exit 1
+else
+	echo "OLM verify passed"
 fi
+
+set -e
 
 rm "${BUNDLE_DIR_VERSION}/node-maintenance-operator.package.yaml"

@@ -1,0 +1,22 @@
+FROM registry.access.redhat.com/ubi8/python-36
+
+WORKDIR /go/src/kubevirt.io/node-maintenance-operator/
+
+COPY . .
+
+ARG dir
+
+RUN echo "operator dir: $dir"
+
+#RUN pip3 install --upgrade pip
+
+RUN pip3 install operator-courier
+
+RUN echo "validate CSD file"
+
+RUN /opt/app-root/bin/operator-courier verify $dir
+
+RUN echo "validate CSD file for operator hub"
+
+RUN /opt/app-root/bin/operator-courier verify --ui_validate_io $dir
+
