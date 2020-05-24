@@ -115,6 +115,6 @@ cluster-functest:
 	./hack/functest.sh
 
 cluster-clean:
-	$(KUBEVIRTCI_PATH)/clean.sh
+	./hack/clean.sh
 
 .PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier
