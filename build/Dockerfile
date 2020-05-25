@@ -1,8 +1,11 @@
-FROM golang:1.10 AS builder
+FROM golang:1.13.8 AS builder
 WORKDIR /go/src/kubevirt.io/node-maintenance-operator/
 ENV GOPATH=/go
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+
+#RUN GOPATH=/go GOROOT=/usr/local/go GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+
+RUN GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 ENV ENTRYPOINT=/entrypoint \

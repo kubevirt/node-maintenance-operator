@@ -8,7 +8,7 @@ BASEPATH=$( dirname $SELF )
 
 if [ -x "${BASEPATH}/../operator-sdk" ]
 then
-   GO111MODULE="auto" ${BASEPATH}/../operator-sdk generate k8s
+   ${BASEPATH}/../operator-sdk generate k8s
 else
-   GO111MODULE="auto" operator-sdk generate k8s
+   operator-sdk generate k8s
 fi
