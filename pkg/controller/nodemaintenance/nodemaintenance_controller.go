@@ -24,6 +24,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// set readable timestamp format in logs, not reference time
+func init() {
+	log.SetFormatter(&log.TextFormatter{TimestampFormat: "2006-01-02 15:04:05.000000", FullTimestamp: true})
+}
+
 // writer implements io.Writer interface as a pass-through for klog.
 type writer struct {
 	logFunc func(args ...interface{})
