@@ -43,18 +43,11 @@ apis_sources=$(call rwildcard,pkg/apis,*.go)
 
 fmt: whitespace goimports
 
+goimports: install-goimports
+	GO111MODULE=on go run ./vendor/golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
 
-goimports:
-
-#goimports: $(cmd_sources) $(pkg_sources)
-#	go run ./vendor/golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
-
-goimports:
-	echo "goimports disabled (temporary)"
-
-goimports-check: $(cmd_sources) $(pkg_sources)
-	echo "goimports-check disabled (temporary)"
-	#go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
+goimports-check: $(cmd_sources) $(pkg_sources) install-goimports
+	GO111MODULE=on go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
@@ -127,4 +120,4 @@ cluster-functest:
 cluster-clean:
 	./hack/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier
+.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier install-goimports
