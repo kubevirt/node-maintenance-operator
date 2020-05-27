@@ -31,8 +31,9 @@ ${OPERATOR_SDK} version
 
 GO111MODULE=auto ${OPERATOR_SDK} generate csv --csv-version ${PLACEHOLDER_CSV_VERSION} --update-crds --crd-dir=deploy/crds
 
+GEN_FILE="deploy/olm-catalog/node-maintenance-operator/manifests/node-maintenance-operator.clusterserviceversion.yaml"
 # Move CSV to generated folder
-mv deploy/olm-catalog/node-maintenance-operator/manifests/node-maintenance-operator.clusterserviceversion.yaml $MANIFESTS_GENERATED_CSV
+mv $GEN_FILE $MANIFESTS_GENERATED_CSV
 
 # cleanup placeholder version's deployment dir
 rm -rf deploy/olm-catalog/node-maintenance-operator/manifests
