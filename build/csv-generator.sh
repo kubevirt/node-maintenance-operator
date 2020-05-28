@@ -11,12 +11,6 @@ fi
 MANIFESTS_GENERATED_CSV=${MANIFESTS_GENERATED_DIR}/node-maintenance-operator.vVERSION.clusterserviceversion.yaml
 TMP_FILE=$(mktemp)
 
-replace_env_var() {
-    local value_offset="                  "
-    local key=$1
-    local var=$2
-    sed -i "s/- name: ${key}/- name: $1\n${value_offset}value: \"${var}\"/g" ${TMP_FILE}
-}
 
 help_text() {
     echo "USAGE: csv-generator --csv-version=<version> --namespace=<namespace> --operator-image=<operator image> [optional args]"
@@ -82,7 +76,7 @@ sed -i "s/PLACEHOLDER_CSV_VERSION/${CSV_VERSION}/g" ${TMP_FILE}
 sed -i "s/namespace: node-maintenance-operator/namespace: ${NAMESPACE}/g" ${TMP_FILE}
 sed -i "s|quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>|${OPERATOR_IMAGE}|g" ${TMP_FILE}
 
-replace_env_var "WATCH_NAMESPACE" $WATCH_NAMESPACE
+sed -ie 's/\([[:space:]]*\)fieldPath: metadata\.annotations\[.olm\.targetNamespaces.].*$/\1fieldPath: metadata.namespace/' ${TMP_FILE}
 
 # dump CSV and CRD manifests to stdout
 echo "---"

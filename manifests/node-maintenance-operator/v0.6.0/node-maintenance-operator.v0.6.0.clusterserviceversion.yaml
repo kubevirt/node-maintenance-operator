@@ -123,10 +123,9 @@ spec:
               containers:
               - env:
                 - name: WATCH_NAMESPACE
-                  value: ""
                   valueFrom:
                     fieldRef:
-                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                      fieldPath: metadata.namespace
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
