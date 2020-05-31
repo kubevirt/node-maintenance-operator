@@ -23,11 +23,12 @@ import (
 
 const (
 	MaxAllowedErrorToUpdateOwnedLease = 3
-	drainerTimeoutInMinutes = 2
+    drainerTimeoutInSeconds = 30
 	LeaseDurationInSeconds = 3600
 	LeaseHolderIdentity    = "node-maintenance"
 	LeaseNamespaceDefault  = "node-maintenance-operator"
 	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
+	WaitOnDrainErrorInSeconds = 5
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -91,7 +92,7 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	// TODO - add logical value or attach from the maintancene CR
 	//The length of time to wait before giving up, zero means infinite
-	r.drainer.Timeout = drainerTimeoutInMinutes * time.Minute
+	r.drainer.Timeout = drainerTimeoutInSeconds * time.Second
 
 	// TODO - consider pod selectors (only for VMIs + others ?)
 	//Label selector to filter pods on the node
@@ -239,8 +240,11 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
 
 	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
-		return r.reconcileAndError(instance, err)
+		reqLogger.Infof("not all pods evicted: %s : %v", nodeName, err)
+		waitOnReconcile := time.Duration(WaitOnDrainErrorInSeconds * time.Second)
+		return r.reconcileAndErrorExt(instance, err, &waitOnReconcile)
 	}
+	reqLogger.Infof("All pods evicted: %s", nodeName)
 
 	instance.Status.Phase = nodemaintenanceapi.MaintenanceSucceeded
 	instance.Status.PendingPods = nil
@@ -341,7 +345,7 @@ func (r *ReconcileNodeMaintenance) initMaintenanceStatus(nm *nodemaintenanceapi.
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) reconcileAndError(nm *nodemaintenanceapi.NodeMaintenance, err error) (reconcile.Result, error) {
+func (r *ReconcileNodeMaintenance) reconcileAndErrorExt(nm *nodemaintenanceapi.NodeMaintenance, err error, duration *time.Duration) (reconcile.Result, error) {
 	nm.Status.LastError = err.Error()
 
 	if nm.Spec.NodeName != "" {
@@ -355,5 +359,13 @@ func (r *ReconcileNodeMaintenance) reconcileAndError(nm *nodemaintenanceapi.Node
 	if updateErr != nil {
 		log.Errorf("Failed to update NodeMaintenance with \"Failed\" status. Error: %v", updateErr)
 	}
+	if duration != nil {
+		return reconcile.Result{RequeueAfter: *duration }, nil
+	}
 	return reconcile.Result{}, err
+}
+
+func (r *ReconcileNodeMaintenance) reconcileAndError(nm *nodemaintenanceapi.NodeMaintenance, err error) (reconcile.Result, error) {
+	return r.reconcileAndErrorExt(nm, err, nil)
+
 }
