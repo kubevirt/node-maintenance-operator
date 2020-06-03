@@ -44,10 +44,10 @@ apis_sources=$(call rwildcard,pkg/apis,*.go)
 fmt: whitespace goimports
 
 goimports: install-goimports
-	GO111MODULE=on go run ./vendor/golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
+	GO111MODULE=on go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
 
 goimports-check: $(cmd_sources) $(pkg_sources) install-goimports
-	GO111MODULE=on go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
+	GO111MODULE=on go run golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
