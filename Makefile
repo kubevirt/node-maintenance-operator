@@ -25,17 +25,14 @@ TARGETS = \
 
 GINKGO ?= build/_output/bin/ginkgo
 
-$(GINKGO): go.sum
-	GO111MODULE=on GOBIN=$$(pwd)/build/_output/bin/ go install $(GOPATH)/pkg/mod/github.com/onsi/ginkgo@v1.11.0/ginkgo
-
-
-
+$(GINKGO): go.mod
+       GOBIN=$$(pwd)/build/_output/bin/ go install ./vendor/github.com/onsi/ginkgo/ginkgo
 
 # Make does not offer a recursive wildcard function, so here's one:
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 # Gather needed source files and directories to create target dependencies
-directories := $(filter-out ./ ,$(sort $(dir $(wildcard ./*/))))
+directories := $(filter-out ./ ./vendor/ ,$(sort $(dir $(wildcard ./*/))))
 all_sources=$(call rwildcard,$(directories),*) $(filter-out $(TARGETS) ./go.mod ./go.sum, $(wildcard *))
 cmd_sources=$(call rwildcard,cmd/,*.go)
 pkg_sources=$(call rwildcard,pkg/,*.go)
