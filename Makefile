@@ -25,9 +25,6 @@ TARGETS = \
 
 GINKGO ?= build/_output/bin/ginkgo
 
-$(GINKGO): go.mod
-       GOBIN=$$(pwd)/build/_output/bin/ go install ./vendor/github.com/onsi/ginkgo/ginkgo
-
 # Make does not offer a recursive wildcard function, so here's one:
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
@@ -57,7 +54,10 @@ whitespace-check: $(all_sources)
 vet: $(cmd_sources) $(pkg_sources)
 	go vet ./pkg/... ./cmd/...
 
-test: $(GINKGO)
+ginkgo:
+	GOBIN=$(PWD)/build/_output/bin/ go install github.com/onsi/ginkgo/ginkgo
+
+test: ginkgo
 	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
 
 gen-k8s: $(apis_sources)
