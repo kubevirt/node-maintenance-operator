@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+[  -f ./build/_output/bin/ginkgo ] || GOBIN=$PWD/build/_output/bin/  go install github.com/onsi/ginkgo/ginkgo
+
 GINKGO="$1"
 TARGETCOVERAGE="$2"
 

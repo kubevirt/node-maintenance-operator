@@ -54,10 +54,7 @@ whitespace-check: $(all_sources)
 vet: $(cmd_sources) $(pkg_sources)
 	go vet ./pkg/... ./cmd/...
 
-ginkgo:
-	GOBIN=$(PWD)/build/_output/bin/ go install github.com/onsi/ginkgo/ginkgo
-
-test: ginkgo
+test:
 	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
 
 gen-k8s: $(apis_sources)
