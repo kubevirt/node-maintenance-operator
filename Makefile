@@ -106,7 +106,7 @@ pull-ci-changes:
 	git subtree pull --prefix kubevirtci https://github.com/kubevirt/kubevirtci.git master --squash
 
 cluster-sync:
-	./hack/sync.sh
+	IMAGE_REGISTRY=$(IMAGE_REGISTRY) IMAGE_TAG=$(IMAGE_TAG) ./hack/sync.sh
 
 cluster-functest:
 	./hack/functest.sh
