@@ -2,8 +2,17 @@
 
 set -e
 
+function fix_one_file() {
+	local fname="$1"
+ 	sed --follow-symlinks 's/[[:space:]]*$//' ${fname} | sed 'N;/^\n$/D;P;D;' >${fname}.tmp
+	cp -f ${fname}.tmp ${fname}
+	rm -f ${fname}.tmp
+}
+
+export -f fix_one_file
+
 function fix() {
-    git ls-files -- ':!vendor/' | grep -vE '^kubevirtci/' | xargs sed --follow-symlinks -i 's/[[:space:]]*$//'
+    git ls-files -- ':!vendor/' | grep -vE '^kubevirtci/' | xargs -I {} bash -c 'fix_one_file "{}"'
 }
 
 function check() {
