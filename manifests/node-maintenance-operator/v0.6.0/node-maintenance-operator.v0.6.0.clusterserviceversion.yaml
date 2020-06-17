@@ -42,6 +42,17 @@ spec:
           verbs:
           - '*'
         - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - update
+          - patch
+          - watch
+          - create
+        - apiGroups:
           - ''
           resources:
           - nodes
