@@ -17,6 +17,8 @@ const (
 	MaintenanceRunning MaintenancePhase = "Running"
 	// MaintenanceSucceeded - maintenance has finished succesfuly, cordoned the node and evicted all pods (that could be evicted)
 	MaintenanceSucceeded MaintenancePhase = "Succeeded"
+	// MaintenanceFailed - maintenance has failed
+	MaintenanceFailed MaintenancePhase = "Failed"
 )
 
 // NodeMaintenanceSpec defines the desired state of NodeMaintenance
@@ -61,6 +63,8 @@ type NodeMaintenanceStatus struct {
 	TotalPods int `json:"totalpods,omitempty"`
 	// EvictionPods is the total number of pods up for eviction from the start
 	EvictionPods int `json:"evictionPods,omitempty"`
+	// Consecutive number of errors upon obtaining a lease
+	ErrorOnLeaseCount int `json:"errorOnLeaseCount,omitempty"`
 }
 
 func init() {
