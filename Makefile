@@ -52,7 +52,7 @@ whitespace-check: $(all_sources)
 	./hack/whitespace.sh
 
 vet: $(cmd_sources) $(pkg_sources)
-	go vet --mod=vendor ./pkg/... ./cmd/...
+	go vet -mod=vendor ./pkg/... ./cmd/...
 
 test:
 	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
