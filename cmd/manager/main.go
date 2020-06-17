@@ -9,7 +9,7 @@ import (
 
 	"kubevirt.io/node-maintenance-operator/pkg/apis"
 	"kubevirt.io/node-maintenance-operator/pkg/controller"
-
+	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
@@ -80,6 +80,8 @@ func main() {
 		log.Error(err, "")
 		os.Exit(1)
 	}
+
+	nodemaintenance.SetLeaseNamespace(namespace)
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
