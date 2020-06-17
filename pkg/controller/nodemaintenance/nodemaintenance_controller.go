@@ -18,10 +18,11 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
-	"k8s.io/kubectl/pkg/drain"
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"kubevirt.io/node-maintenance-operator/pkg/drain"
 )
 
 // set readable timestamp format in logs, not reference time

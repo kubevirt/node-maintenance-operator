@@ -2,7 +2,7 @@
 dist: xenial
 language: go
 go_import_path: kubevirt.io/node-maintenance-operator
-go: "1.11"
+go: "1.13.5"
 
 services:
 - docker

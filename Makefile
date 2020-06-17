@@ -25,23 +25,23 @@ TARGETS = \
 
 GINKGO ?= build/_output/bin/ginkgo
 
-$(GINKGO): Gopkg.toml
-	GOBIN=$$(pwd)/build/_output/bin/ go install ./vendor/github.com/onsi/ginkgo/ginkgo
-
 # Make does not offer a recursive wildcard function, so here's one:
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 # Gather needed source files and directories to create target dependencies
 directories := $(filter-out ./ ./vendor/ ,$(sort $(dir $(wildcard ./*/))))
-all_sources=$(call rwildcard,$(directories),*) $(filter-out $(TARGETS), $(wildcard *))
+all_sources=$(call rwildcard,$(directories),*) $(filter-out $(TARGETS) ./go.mod ./go.sum, $(wildcard *))
 cmd_sources=$(call rwildcard,cmd/,*.go)
 pkg_sources=$(call rwildcard,pkg/,*.go)
 apis_sources=$(call rwildcard,pkg/apis,*.go)
 
 fmt: whitespace goimports
 
-goimports: $(cmd_sources) $(pkg_sources)
-	go run ./vendor/golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
+goimports: install-goimports
+	GO111MODULE=on go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
+
+goimports-check: $(cmd_sources) $(pkg_sources) install-goimports
+	GO111MODULE=on go run golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
@@ -52,12 +52,9 @@ whitespace-check: $(all_sources)
 	./hack/whitespace.sh
 
 vet: $(cmd_sources) $(pkg_sources)
-	go vet ./pkg/... ./cmd/...
+	go vet -mod=vendor ./pkg/... ./cmd/...
 
-goimports-check: $(cmd_sources) $(pkg_sources)
-	go run ./vendor/golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
-
-test: $(GINKGO)
+test:
 	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
 
 gen-k8s: $(apis_sources)
@@ -117,4 +114,4 @@ cluster-functest:
 cluster-clean:
 	./hack/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier
+.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier install-goimports
