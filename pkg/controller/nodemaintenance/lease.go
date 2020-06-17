@@ -89,15 +89,19 @@ func createOrGetExistingLease(client  client.Client, node *corev1.Node, duration
 	return lease, false,  nil
 }
 
+func leaseDueTime(lease *coordv1beta1.Lease, durationInSeconds time.Duration) (time.Time) {
+	dueTime := lease.Spec.RenewTime.Time
+	return dueTime.Add(durationInSeconds * time.Second)
+}
+
 func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime time.Time) (bool,bool) {
 
 	if lease.Spec.RenewTime == nil || lease.Spec.LeaseDurationSeconds == nil {
 		log.Info("empty renew time or duration in sec")
 		return true, true
 	}
-	dueTime := lease.Spec.RenewTime.Time
 	duration := time.Duration(*lease.Spec.LeaseDurationSeconds)
-	dueTime = dueTime.Add(duration * time.Second)
+	dueTime := leaseDueTime(lease, duration)
 
 	deadline := currentTime
 
@@ -120,10 +124,8 @@ func isValidLease(lease *coordv1beta1.Lease, currentTime time.Time) bool {
 	}
 
 	duration := time.Duration(*lease.Spec.LeaseDurationSeconds)
-	leaseDuration := duration * time.Second
 	renewTime := (*lease.Spec.RenewTime).Time
-	dueTime := renewTime
-	dueTime = dueTime.Add(leaseDuration)
+	dueTime := leaseDueTime(lease, duration)
 
 	// valid lease if: due time not in the past and renew time not in the future
 	return !dueTime.Before(currentTime) && !renewTime.After(currentTime)
