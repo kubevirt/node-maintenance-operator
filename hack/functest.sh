@@ -39,9 +39,7 @@ cat _out/namespace-init.yaml
 find . -name .kubeconfig || true
 KUBE_CONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)
 
-#GO111MODULE=on TEST_NAMESPACE=node-maintenance-operator go test -v -mod=vendor ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
-
-TEST_NAMESPACE=node-maintenance-operator go test -v ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
+TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
 
 echo "E2e tests passed"
 
