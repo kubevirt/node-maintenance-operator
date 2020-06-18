@@ -42,7 +42,7 @@ func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error
 		return nil, err
 	}
 
-	if pods.Size() == 0 {
+	if pods.Size() == 0 || len(pods.Items) == 0 {
 		return nil, fmt.Errorf("There are no pods deployed in cluster to run the operator")
 	}
 
@@ -53,7 +53,7 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework, callerError erro
 
 	pod, err := getCurrentOperatorPods(f.KubeClient)
 	if err != nil {
-		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
+		t.Fatalf("showDeployment: can't get operator deployment error=%v callerError=%v", err, callerError)
 		return
 	}
 	podName := pod.ObjectMeta.Name
@@ -115,6 +115,10 @@ func ClusterTest(t *testing.T) {
 	// wait for node- maintanence-operator to be ready
 	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, "node-maintenance-operator", 1, retryInterval, timeout)
 	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = checkQuorumSizeViolation(t, f, ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,10 +190,11 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		return fmt.Errorf("could not get namespace: %v", err)
 	}
 
-	err = createSimpleDeployment(t, f, ctx, namespace)
+	err = createSimpleDeployment(t, f, ctx, namespace, false)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("simple deployment created")
 
 	nodeName, err := getCurrentDeploymentHostName(t, f)
 	if err != nil {
@@ -197,7 +202,18 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 	}
 	t.Logf("Putting node %s into maintanance", nodeName)
 
-	// Create node maintenance custom resource
+	node := &corev1.Node{}
+	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
+	if err != nil {
+		showDeploymentStatus(t, f, fmt.Errorf("can't get node. error %v", err))
+	}
+
+	_, isMaster := node.ObjectMeta.Labels[nmo.MasterNodeLabel]
+	if isMaster {
+		showDeploymentStatus(t, f, fmt.Errorf("test deployment is running on the master node %s",nodeName))
+	}
+
+		// Create node maintenance custom resource
 	nodeMaintenance := &operator.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
@@ -254,7 +270,7 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		showDeploymentStatus(t, f, fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
 	}
 
-	node := &corev1.Node{}
+	node = &corev1.Node{}
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
 	if err != nil {
 		showDeploymentStatus(t, f, fmt.Errorf("Failed to get CRD after entering main. mode : %v", err))
@@ -398,7 +414,18 @@ func deleteSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	})
 }
 
-func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string) error {
+func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string, onMaster bool) error {
+
+	var nodeName string
+	var  op  corev1.NodeSelectorOperator
+	if  onMaster {
+		op  = corev1.NodeSelectorOpExists
+		nodeName = "node01"
+	} else {
+		op = corev1.NodeSelectorOpDoesNotExist
+		nodeName = "node02"
+	}
+
 	replicas := rune(1)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -428,7 +455,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 										MatchExpressions: []corev1.NodeSelectorRequirement{
 											{
 												Key:      "node-role.kubernetes.io/master",
-												Operator: corev1.NodeSelectorOpDoesNotExist,
+												Operator: op,
 											},
 										},
 									},
@@ -442,6 +469,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 						Command: []string{"/bin/sh"},
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
+					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
 				},
 			},
 		},
