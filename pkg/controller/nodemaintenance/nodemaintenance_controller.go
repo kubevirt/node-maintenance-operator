@@ -28,6 +28,11 @@ const (
 	LeaseHolderIdentity    = "node-maintenance"
 	LeaseNamespaceDefault  = "node-maintenance-operator"
 	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
+	MasterNodeLabel         = "node-role.kubernetes.io/master"
+	MasterNodeLabelSelector = "node-role.kubernetes.io/master="
+	QuorumViolationErrorMsg = "Can't take master node offline, quorum would be violated"
+	RequeuAfterInSeconds    = 300
+	NodeMaintenanceOperatorNamespace = "node-maintenance-operator"
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -225,6 +230,18 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			instance.Status.ErrorOnLeaseCount = 0
 		}
 	}
+	validQuorum, _, err := checkValidQuorum(r.drainer.Client, node)
+	if err != nil {
+		err = fmt.Errorf("Can't check quorum validity: %v", err)
+		log.Error(err)
+		return r.reconcileAndError(instance, err)
+	}
+	if !validQuorum {
+		err := fmt.Errorf(QuorumViolationErrorMsg)
+		log.Error(err)
+		return r.reconcileAndError(instance, err)
+	}
+	log.Infof("master node quorum maintained upon maintenance.")
 
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
