@@ -6,6 +6,16 @@ metadata:
   name: node-maintenance-operator
 rules:
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - get
+  - list
+  - watch
+  - delete
+  - create
+- apiGroups:
   - ""
   resources:
   - services
