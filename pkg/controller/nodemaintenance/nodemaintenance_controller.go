@@ -225,10 +225,6 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		if instance.Status.Phase != nodemaintenanceapi.MaintenanceRunning || instance.Status.ErrorOnLeaseCount != 0 {
 			instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
 			instance.Status.ErrorOnLeaseCount = 0
-			updateErr := r.client.Status().Update(context.TODO(), instance)
-			if updateErr != nil {
-				return r.reconcileAndError(instance, updateErr)
-			}
 		}
 	}
 
