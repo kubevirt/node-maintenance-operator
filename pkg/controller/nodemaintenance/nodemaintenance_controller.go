@@ -218,6 +218,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		}
 		return r.reconcileAndError(instance,fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
 	}
+	needUpdateOnError := false
 	if err != nil {
 		instance.Status.ErrorOnLeaseCount = 0
 		return r.reconcileAndError(instance, err)
@@ -225,6 +226,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		if instance.Status.Phase != nodemaintenanceapi.MaintenanceRunning || instance.Status.ErrorOnLeaseCount != 0 {
 			instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
 			instance.Status.ErrorOnLeaseCount = 0
+			needUpdateOnError = true
 		}
 	}
 
@@ -250,6 +252,13 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	if err != nil {
 		reqLogger.Errorf("Failed to update NodeMaintenance with \"Succeeded\" status. Error: %v", err)
 		return r.reconcileAndError(instance, err)
+	}
+	if needUpdateOnError {
+		reqLogger.Info("postponed update due to exit from error condition")
+		updateErr := r.client.Status().Update(context.TODO(), instance)
+		if updateErr != nil {
+			return r.reconcileAndError(instance, updateErr)
+		}
 	}
 	reqLogger.Infof("Reconcile completed for Node: %s", nodeName)
 
