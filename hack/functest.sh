@@ -37,7 +37,7 @@ cat _out/namespace-init.yaml
 # Run tests
 
 find . -name .kubeconfig || true
-KUBE_CONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)
+KUBE_CONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
 
 TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
 
