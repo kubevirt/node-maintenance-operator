@@ -24,7 +24,6 @@ if [[ $GSTAT != 0 ]]; then
 	exit 1
 fi
 
-
 # ginkgo and html coverage don't quite live in harmony. fix that.
 # ginkgo aggregates the coverage file, but the resulting file is not accepted by go tool cover.
 # the reason is that there are repeated mode: headers, we need to leave just the first one of them
@@ -49,7 +48,6 @@ done
 
 #echo "now exit"
 #exit 1
-
 
 # function coverage report (textual)
 FUNC_REP=$(go tool cover -func=$COVERAGE_FILE)

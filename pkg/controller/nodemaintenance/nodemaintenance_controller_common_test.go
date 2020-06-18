@@ -11,7 +11,6 @@ import (
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 )
 
-
 func getCommonTestObjs() (*nodemaintenanceapi.NodeMaintenance, []runtime.Object) {
 		nm := &nodemaintenanceapi.NodeMaintenance{
 			ObjectMeta: metav1.ObjectMeta{
@@ -74,7 +73,6 @@ func getCommonTestObjs() (*nodemaintenanceapi.NodeMaintenance, []runtime.Object)
 			},
 		}
 
-
 }
 
 type FakeDiscoveryThatReturnsError struct {
@@ -93,7 +91,6 @@ type FakeDiscovery struct {
 func (self *FakeDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	return self.groupList, nil
 }
-
 
 const (
 	FakeClientReturnError = 0

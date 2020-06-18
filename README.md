@@ -26,7 +26,6 @@ Manager](https://github.com/operator-framework/operator-lifecycle-manager) and
 Cluster Service Versions checkout out ["Building a Cluster Service
 Version"](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/Documentation/design/building-your-csv.md).
 
-
 1) Build and push operator and operator-registry image.
 
 ```shell
@@ -125,7 +124,6 @@ $ kubectl get deployment
 NAME                     DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
 node-maintenance-operator      1         1         1            1           1m
 ```
-
 
 ### 2. Run locally outside the cluster
 
@@ -254,9 +252,7 @@ Chang the `<IMAGE_VERSION>` under `deploy/operator.yaml` image link to the desir
 image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
 ```
 
-
 Run the operator tests locally with the default Kubernetes config file present at `$HOME/.kube/config` or  with specificing kubeconfig via the flag `--kubeconfig=<path/to/kubeconfig>` and a namespace `--namespace=<namespace>`:
-
 
 ```sh
 operator-sdk test local ./test/e2e --kubeconfig=<path/to/kubeconfig> --namespace="node-maintenance-operator"

@@ -104,13 +104,11 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 	r.drainer.Client = cs
 	r.drainer.DryRun = false
 
-
 	r.drainer.Out = writer{klog.Info}
 	r.drainer.ErrOut = writer{klog.Error}
 	r.drainer.OnPodDeletedOrEvicted = onPodDeletedOrEvicted
 	return nil
 }
-
 
 var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
 
@@ -252,7 +250,6 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.reconcileAndError(instance, err)
 	}
 	reqLogger.Infof("Reconcile completed for Node: %s", nodeName)
-
 
 	return reconcile.Result{}, nil
 }

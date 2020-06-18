@@ -15,7 +15,6 @@ import (
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 )
 
-
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -62,5 +61,4 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 	return nil
 }
-
 

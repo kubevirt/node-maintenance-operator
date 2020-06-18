@@ -153,7 +153,6 @@ func  checkValidLease(t *testing.T, f *framework.Framework, nodeName string) err
 		return fmt.Errorf("checkValidLease expiration time in the past time Now: %s expiration time %s :: leaseDuration %d renew time %s", timeNow.Format(time.UnixDate), tm.Format(time.UnixDate), *lease.Spec.LeaseDurationSeconds, (*lease.Spec.RenewTime).Time.Format(time.UnixDate))
 	}
 
-
 	return nil
 }
 
@@ -180,8 +179,6 @@ func  checkInvalidLease(t *testing.T, f *framework.Framework, nodeName string) e
 
 	return nil
 }
-
-
 
 func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 	namespace, err := ctx.GetNamespace()
@@ -273,7 +270,6 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		showDeploymentStatus(t, f, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-
 	nodesList := &corev1.NodeList{}
 	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
 	if err != nil {
@@ -346,8 +342,6 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		showDeploymentStatus(t, f, fmt.Errorf("valid lease after nmo completion %v", err))
 	}
 
-
-
 	// Check that the deployment has 1 replica running after maintenance is removed.
 	t.Logf("%s: wait for deployment.", time.Now().Format("2006-01-02 15:04:05.000000"))
 	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
@@ -392,7 +386,6 @@ func deleteSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	}
 
 	return wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
-
 
 				err = f.Client.Get(goctx.TODO(), namespaceName, deploymentToDelete)
 				if err != nil {
@@ -466,7 +459,6 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	}
 	return nil
 }
-
 
 func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.PodList, error) {
 	labelSelector := labels.SelectorFromSet(podLabel)
