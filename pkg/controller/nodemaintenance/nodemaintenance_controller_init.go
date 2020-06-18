@@ -1,8 +1,10 @@
-//go:generate mockgen -source $GOFILE -package=$GOPACKAGE -destination=generated_mock_$GOFILE
+// +build !test
 
 package nodemaintenance
 
 import (
+
+//	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -12,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 )
+
 
 // Add creates a new NodeMaintenance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -26,8 +29,11 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+
 	err := initDrainer(r, mgr.GetConfig())
-	Handler = r
+	if err == nil {
+		err = r.checkLeaseSupported()
+	}
 	return r, err
 }
 

@@ -27,14 +27,11 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 	patch := ""
 	client := clientset.Core().Nodes()
 
-	oldTaints, err := json.Marshal(node.Spec.Taints)
-	if err != nil {
-		return err
-	}
-
 	if add {
 		newTaints := append([]corev1.Taint{}, MaintenanceTaints...)
-		addTaints(node.Spec.Taints, &newTaints)
+		if !addTaints(node.Spec.Taints, &newTaints) {
+			return nil
+		}
 		addTaints, err := json.Marshal(newTaints)
 		if err != nil {
 			return err
@@ -44,7 +41,9 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 		patch = fmt.Sprintf(`{ "op": "add", "path": "/spec/taints", "value": %s }`, string(addTaints))
 	} else {
 		newTaints := append([]corev1.Taint{}, node.Spec.Taints...)
-		deleteTaints(MaintenanceTaints, &newTaints)
+		if !deleteTaints(MaintenanceTaints, &newTaints) {
+			return nil
+		}
 		removeTaints, err := json.Marshal(newTaints)
 		if err != nil {
 			return err
@@ -52,6 +51,11 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 		taintStr = "remove"
 		log.Infof("Maintenance taints  will be removed from node %s", node.Name)
 		patch = fmt.Sprintf(`{ "op": "replace", "path": "/spec/taints", "value": %s }`, string(removeTaints))
+	}
+
+	oldTaints, err := json.Marshal(node.Spec.Taints)
+	if err != nil {
+		return err
 	}
 
 	log.Infof("Applying %s taint %s on Node: %s", KubevirtDrainTaint.Key, taintStr, node.Name)
@@ -67,7 +71,8 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 }
 
 // addTaints adds the newTaints list to existing ones and updates the newTaints List.
-func addTaints(oldTaints []corev1.Taint, newTaints *[]corev1.Taint) {
+func addTaints(oldTaints []corev1.Taint, newTaints *[]corev1.Taint) bool {
+	oldTaintLen := len(oldTaints)
 	for _, oldTaint := range oldTaints {
 		existsInNew := false
 		for _, taint := range *newTaints {
@@ -80,6 +85,7 @@ func addTaints(oldTaints []corev1.Taint, newTaints *[]corev1.Taint) {
 			*newTaints = append(*newTaints, oldTaint)
 		}
 	}
+	return len(*newTaints) != oldTaintLen
 }
 
 // deleteTaint removes all the taints that have the same key and effect to given taintToDelete.
@@ -95,8 +101,10 @@ func deleteTaint(taints []corev1.Taint, taintToDelete *corev1.Taint) []corev1.Ta
 }
 
 // deleteTaints deletes the given taints from the node's taintlist.
-func deleteTaints(taintsToRemove []corev1.Taint, newTaints *[]corev1.Taint) {
+func deleteTaints(taintsToRemove []corev1.Taint, newTaints *[]corev1.Taint) bool {
+	oldTaintLen := len(*newTaints)
 	for _, taintToRemove := range taintsToRemove {
 		*newTaints = deleteTaint(*newTaints, &taintToRemove)
 	}
+	return len(*newTaints) != oldTaintLen
 }

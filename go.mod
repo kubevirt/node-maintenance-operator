@@ -18,7 +18,7 @@ require (
 	github.com/go-openapi/spec v0.19.0
 	github.com/go-openapi/swag v0.18.0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
-	github.com/golang/mock v1.3.1-0.20190508161146-9fa652df1129
+	github.com/golang/mock v1.3.1-0.20190508161146-9fa652df1129 // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/google/uuid v1.1.0 // indirect
 	github.com/googleapis/gnostic v0.2.0 // indirect
@@ -29,7 +29,7 @@ require (
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/mailru/easyjson v0.0.0-20190221075403-6243d8e04c3f // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/onsi/ginkgo v1.8.0
+	github.com/onsi/ginkgo v1.12.2
 	github.com/onsi/gomega v1.5.0
 	github.com/operator-framework/operator-sdk v0.8.0
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709 // indirect
