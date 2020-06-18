@@ -52,7 +52,6 @@ func makeExpectedOwnerOfLease(node *corev1.Node) (*metav1.OwnerReference) {
 	}
 }
 
-
 func createOrGetExistingLease(client  client.Client, node *corev1.Node, durationInSeconds int32) (*coordv1beta1.Lease, bool, error) {
 	holderIdentity := LeaseHolderIdentity
 	owner := makeExpectedOwnerOfLease(node)
@@ -131,7 +130,6 @@ func isValidLease(lease *coordv1beta1.Lease, currentTime time.Time) bool {
 	return !dueTime.Before(currentTime) && !renewTime.After(currentTime)
 }
 
-
 func updateLease(client  client.Client, node *corev1.Node, lease *coordv1beta1.Lease, currentTime time.Time, durationInSeconds int32) (*coordv1beta1.Lease, error, bool) {
 
 	holderIdentity := LeaseHolderIdentity
@@ -205,5 +203,4 @@ func invalidateLease(client  client.Client, nodeName string) error {
 	}
 	return nil
 }
-
 

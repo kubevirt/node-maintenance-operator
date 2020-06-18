@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-
 var _ = Describe("updateCondition", func() {
 
 	var r *ReconcileNodeMaintenance
@@ -80,7 +79,6 @@ var _ = Describe("updateCondition", func() {
 	}
 
 	BeforeEach(func() {
-
 
 		s := scheme.Scheme
 		s.AddKnownTypes(nodemaintenanceapi.SchemeGroupVersion, nm)
@@ -186,5 +184,4 @@ var _ = Describe("updateCondition", func() {
 
 	})
 })
-
 

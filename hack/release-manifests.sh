@@ -21,7 +21,3 @@ sed -i "s/<IMAGE_VERSION>/${VERSION}/g" ${OUT_DIR}/operator.yaml
 
 cp manifests/node-maintenance-operator/${TAG}/* ${OUT_DIR}/
 
-
-
-
-

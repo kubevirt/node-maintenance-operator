@@ -11,7 +11,6 @@ fi
 MANIFESTS_GENERATED_CSV=${MANIFESTS_GENERATED_DIR}/node-maintenance-operator.vVERSION.clusterserviceversion.yaml
 TMP_FILE=$(mktemp)
 
-
 help_text() {
     echo "USAGE: csv-generator --csv-version=<version> --namespace=<namespace> --operator-image=<operator image> [optional args]"
     echo ""

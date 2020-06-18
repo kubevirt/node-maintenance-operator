@@ -70,7 +70,6 @@ echo -e "\n---\n" >> _out/namespace-init.yaml
 cat deploy/role_binding.yaml >> _out/namespace-init.yaml
 echo -e "\n---\n" >> _out/namespace-init.yaml
 
-
 cp deploy/operator.yaml _out/operator.yaml
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
     sed -i "s,quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>,registry:5000/node-maintenance-operator:${TAG},g" _out/operator.yaml

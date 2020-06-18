@@ -16,7 +16,6 @@ fi
 
 DETECTED_SDK_VERSION=$($CURRENT_OPERATOR_SDK version  | awk '{ print $3 }' | sed 's/,$//')
 
-
 function check_need_upgrade {
 	local detectedversion="$2"
 	local desiredversion="$1"

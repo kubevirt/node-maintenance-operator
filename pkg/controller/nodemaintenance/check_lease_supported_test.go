@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
 func ExpectEqualWithNil(actual, expected interface{}) {
 	if expected == nil {
 		ExpectWithOffset(1, actual).To(BeNil())

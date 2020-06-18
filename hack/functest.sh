@@ -7,14 +7,12 @@ if [ -z "$KUBEVIRTCI_PATH" ]; then
     )"
 fi
 
-
 if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
     KUBEVIRTCI_CONFIG_PATH="$(
         cd "$(dirname "$BASH_SOURCE[0]")/"
         readlink -f ../_ci-configs
     )"
 fi
-
 
 KUBECTL_CMD="${KUBEVIRTCI_PATH}/kubectl.sh"
 
@@ -27,7 +25,6 @@ function new_test() {
 }
 
 new_test 'Test e2e Node Mainenance'
-
 
 echo "***globalMan***"
 cat _out/nodemaintenance_crd.yaml
@@ -45,14 +42,12 @@ echo "E2e tests passed"
 
 echo "check validation of openaAPIV3Schema"
 
-
 cleanup() {
 		$KUBECTL_CMD delete -f _out/namespace-init.yaml
 
 		$KUBECTL_CMD delete -f _out/nodemaintenance_crd.yaml
 }
 trap "cleanup" EXIT SIGINT
-
 
 $KUBECTL_CMD create -f _out/namespace-init.yaml
 
