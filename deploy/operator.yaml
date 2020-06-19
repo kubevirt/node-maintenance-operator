@@ -29,6 +29,12 @@ spec:
           # Replace this with the built image name
           image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
           imagePullPolicy: Always
+          readinessProbe:
+            exec:
+              command:
+              - /ready.sh
+            initialDelaySeconds: 10
+            periodSeconds: 10
           env:
             - name: WATCH_NAMESPACE
               valueFrom:

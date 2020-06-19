@@ -16,6 +16,7 @@ LABEL org.kubevirt.hco.csv-generator.v1="/usr/bin/csv-generator"
 COPY --from=builder /go/src/kubevirt.io/node-maintenance-operator/build/bin/user_setup /user_setup
 RUN /user_setup
 
+COPY deploy/ready.sh /ready.sh
 COPY deploy/crds /deploy/crds
 COPY manifests/generated /manifests/generated
 COPY build/csv-generator.sh /usr/bin/csv-generator
