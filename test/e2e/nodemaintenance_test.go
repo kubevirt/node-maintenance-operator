@@ -271,7 +271,7 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 	}
 
 	nodesList := &corev1.NodeList{}
-	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
+	err = f.Client.List(goctx.TODO(), nodesList, &client.ListOptions{})
 	if err != nil {
 		showDeploymentStatus(t, f, fmt.Errorf("Failed to list nodes %v", err))
 	}
@@ -463,7 +463,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.PodList, error) {
 	labelSelector := labels.SelectorFromSet(podLabel)
 	pods := &corev1.PodList{}
-	err := f.Client.List(goctx.TODO(), &client.ListOptions{LabelSelector: labelSelector}, pods)
+	err := f.Client.List(goctx.TODO(),  pods,  &client.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, fmt.Errorf("Can't get test pods %v", err)
 	}
