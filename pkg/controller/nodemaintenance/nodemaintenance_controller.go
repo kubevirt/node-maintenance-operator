@@ -230,7 +230,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			instance.Status.ErrorOnLeaseCount = 0
 		}
 	}
-	validQuorum, _, err := checkValidQuorum(r.drainer.Client, node)
+	validQuorum, err := checkValidQuorum(r.drainer.Client, node)
 	if err != nil {
 		err = fmt.Errorf("Can't check quorum validity: %v", err)
 		log.Error(err)

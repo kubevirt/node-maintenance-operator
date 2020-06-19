@@ -95,86 +95,12 @@ var _ = Describe("checkQuorumValidity", func() {
 					masterNode,
 				}
 				cs := k8sfakeclient.NewSimpleClientset(objs...)
-				isValidQuorum, isFallbackCheck, _ := checkValidQuorum(cs, masterNode)
+				isValidQuorum, err := checkValidQuorum(cs, masterNode)
 				Expect(isValidQuorum).To(Equal(c.isValidQuorum))
-				Expect(isFallbackCheck).To(Equal(false))
-
+				Expect(err).NotTo(HaveOccurred())
 			})
 		}
 	})
 })
 
-var _ = Describe("checkQuorumValidityFallback", func() {
-	type TestCaseDefinition struct {
-		info            string
-		currentHealthy  int32
-		requiredHealthy int32
-		disruptedPods   map[string]metav1.Time
-		isValidQuorum   bool
-	}
-	It("check fallback option of quorum check", func() {
-		testCases := []TestCaseDefinition{
-			{
-				info:            "quorum broken",
-				currentHealthy:  2,
-				requiredHealthy: 3,
-				isValidQuorum:   false,
-			},
-			{
 
-				info:            "quorum valid",
-				currentHealthy:  3,
-				requiredHealthy: 2,
-				isValidQuorum:   true,
-			},
-			{
-				info:            "quorum not broken with dirsupted pods",
-				currentHealthy:  4,
-				requiredHealthy: 2,
-				disruptedPods: map[string]metav1.Time{
-					"disruptedPod": metav1.Time{},
-				},
-				isValidQuorum: true,
-			},
-		}
-		for _, c := range testCases {
-			By("test:" + c.info)
-			Context(c.info, func() {
-
-				masterNode := &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "masternode",
-						Labels: map[string]string{
-							MasterNodeLabel: "",
-						},
-					},
-					Spec: corev1.NodeSpec{},
-				}
-				objs := []runtime.Object{
-							&policy.PodDisruptionBudget{
-								ObjectMeta: metav1.ObjectMeta{
-									Name: "etcpdb",
-									Namespace: NodeMaintenanceOperatorNamespace,
-								},
-								Spec: policy.PodDisruptionBudgetSpec{
-									MinAvailable: &intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: int32(c.requiredHealthy),
-									},
-								},
-								Status: policy.PodDisruptionBudgetStatus{
-									CurrentHealthy: c.currentHealthy,
-									DisruptedPods:  c.disruptedPods,
-								},
-							},
-							masterNode,
-				}
-				cs := k8sfakeclient.NewSimpleClientset(objs...)
-				isValidQuorum, isFallbackCheck, _ := checkValidQuorum(cs, masterNode)
-				Expect(isValidQuorum).To(Equal(c.isValidQuorum))
-				Expect(isFallbackCheck).To(Equal(true))
-
-			})
-		}
-	})
-})
