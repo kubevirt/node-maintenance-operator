@@ -27,6 +27,15 @@ rules:
   - watch
   - create
 - apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
   - ""
   resources:
   - nodes
