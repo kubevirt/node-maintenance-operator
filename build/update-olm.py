@@ -43,6 +43,38 @@ _SPEC = {
         },
     },
     'maturity': 'beta',
+
+    "webhookdefinitions": [
+      {
+        "admissionReviewVersions": [
+          "v1beta1"
+        ],
+        "containerPort": 4543,
+        "deploymentName": "node-maintenance-operator",
+        "failurePolicy": "Ignore",
+        "generateName": "nodemaintenance-validator.kubevirt.io",
+        "rules": [
+          {
+            "apiGroups": [
+              "nodemaintenance.kubevirt.io"
+            ],
+            "apiVersions": [
+              "v1beta1"
+            ],
+            "operations": [
+              "CREATE"
+            ],
+            "resources": [
+                "*"
+            ],
+          }
+        ],
+        "sideEffects": "None",
+        "type": "ValidatingAdmissionWebhook",
+        "webhookPath": "/validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenance",
+      }
+    ],
+
 }
 
 _KUBEVIRT_ICON_TYPE="image/png"

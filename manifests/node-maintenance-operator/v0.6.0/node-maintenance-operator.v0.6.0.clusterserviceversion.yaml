@@ -53,6 +53,15 @@ spec:
           - watch
           - create
         - apiGroups:
+          - admissionregistration.k8s.io
+          resources:
+          - validatingwebhookconfigurations
+          verbs:
+          - list
+          - watch
+          - update
+          - patch
+        - apiGroups:
           - ''
           resources:
           - nodes
@@ -146,6 +155,12 @@ spec:
                 image: quay.io/kubevirt/node-maintenance-operator:v0.6.0
                 imagePullPolicy: Always
                 name: node-maintenance-operator
+                readinessProbe:
+                  exec:
+                    command:
+                    - /ready.sh
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
                 resources: {}
               serviceAccountName: node-maintenance-operator
               tolerations:
@@ -184,3 +199,22 @@ spec:
       alm-owner-kubevirt: nodemaintenanceoperator
       operated-by: nodemaintenanceoperator
   version: 0.6.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1beta1
+    containerPort: 4543
+    deploymentName: node-maintenance-operator
+    failurePolicy: Ignore
+    generateName: nodemaintenance-validator.kubevirt.io
+    rules:
+    - apiGroups:
+      - nodemaintenance.kubevirt.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      resources:
+      - '*'
+    sideEffects: None
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenance
