@@ -33,7 +33,6 @@ log_to_file() {
 	exec &> >(tee -a test-olm.out)
 }
 
-
 start_registry() {
 	hreg_name='local-registry'
 	reg_port='5000'
@@ -157,7 +156,6 @@ EOF
 		;;
 	esac
 
-
 	cat >docker.tmp <<EOF
 FROM scratch
 
@@ -193,7 +191,6 @@ docker_tag $REG_IMG $REG_IMG
 # is it needed anywhere?
 kubectl create ns ${NMO_NAMESPACE}
 
-
 if [[ $OP == "kind" ]]; then
 	kind load docker-image ${LOCAL_REGISTRY}/node-maintenance-operator:latest
 	kind load docker-image ${LOCAL_REGISTRY}/node-maintenance-operator-registry:latest
@@ -212,7 +209,6 @@ spec:
   displayName: KubeVirt HyperConverged
   publisher: Red Hat
 EOF
-
 
 cat <<EOF | kubectl create -f -
 apiVersion: operators.coreos.com/v1alpha1

@@ -14,8 +14,11 @@ if [[ ! -x $CURRENT_OPERATOR_SDK ]]; then
 	set -e
 fi
 
-DETECTED_SDK_VERSION=$($CURRENT_OPERATOR_SDK version  | awk '{ print $3 }' | sed 's/,$//')
-
+if [[ "$CURRENT_OPERATOR_SDK" != "" ]]; then
+	DETECTED_SDK_VERSION=$($CURRENT_OPERATOR_SDK version  | awk '{ print $3 }' | sed 's/,$//')
+else
+	DETECTED_SDK_VERSION="0.0.0"
+fi
 function check_need_upgrade {
 	local detectedversion="$2"
 	local desiredversion="$1"

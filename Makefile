@@ -123,4 +123,10 @@ setupgithook:
 	./hack/precommit-hook.sh setup
 	./hack/commit-msg-hook.sh setup
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit
+olmtest:
+	./hack/test-olm.sh
+
+olmtestcleanup:
+	./hack/test-olm-cleanup.sh kind rm
+
+.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit olmtest olmtestcleanup

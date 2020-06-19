@@ -32,6 +32,5 @@ for node in $(kind get nodes); do
   kubectl annotate node "${node}" "kind.x-k8s.io/registry=localhost:${reg_port}";
 done
 
-
 echo "*** kind cluster running ***"
 
