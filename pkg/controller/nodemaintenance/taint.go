@@ -25,7 +25,7 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 
 	taintStr := ""
 	patch := ""
-	client := clientset.Core().Nodes()
+	client := clientset.CoreV1().Nodes()
 
 	if add {
 		newTaints := append([]corev1.Taint{}, MaintenanceTaints...)

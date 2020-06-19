@@ -103,10 +103,12 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 	}
 	r.drainer.Client = cs
 	r.drainer.DryRun = false
-
 	r.drainer.Out = writer{klog.Info}
 	r.drainer.ErrOut = writer{klog.Error}
 	r.drainer.OnPodDeletedOrEvicted = onPodDeletedOrEvicted
+
+	nodemaintenanceapi.SetHookClient(cs)
+
 	return nil
 }
 

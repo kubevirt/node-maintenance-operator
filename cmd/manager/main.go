@@ -21,12 +21,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 )
 
 // Change below variables to serve metrics on different host or port.
 var (
 	metricsHost       = "0.0.0.0"
 	metricsPort int32 = 8383
+	operatorMetricsPort int32 = 8686
 )
 var log = logf.Log.WithName("cmd")
 
@@ -107,12 +112,41 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create Service object to expose the metrics port.
-	_, err = metrics.ExposeMetricsPort(ctx, metricsPort)
+	// Add to the below struct any other metrics ports you want to expose.
+	servicePorts := []corev1.ServicePort{
+		{Port: metricsPort, Name: metrics.OperatorPortName, Protocol: corev1.ProtocolTCP, TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: metricsPort}},
+		{Port: operatorMetricsPort, Name: metrics.CRPortName, Protocol: corev1.ProtocolTCP, TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: operatorMetricsPort}},
+	}
+	// Create Service object to expose the metrics port(s).
+	service, err := metrics.CreateMetricsService(ctx, cfg, servicePorts)
 	if err != nil {
-		log.Info(err.Error())
+		log.Info("Could not create metrics Service", "error", err.Error())
 	}
 
+	// Get the namespace the operator is currently deployed in.
+	depOperatorNs, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		log.Error(err, "Failed to get operator namespace")
+		os.Exit(1)
+	}
+
+	// CreateServiceMonitors will automatically create the prometheus-operator ServiceMonitor resources
+	// necessary to configure Prometheus to scrape metrics from this operator.
+	services := []*corev1.Service{service}
+	_, err = metrics.CreateServiceMonitors(cfg, depOperatorNs, services)
+	if err != nil {
+		log.Info("Could not create ServiceMonitor object", "error", err.Error())
+		// If this operator is deployed to a cluster without the prometheus-operator running, it will return
+		// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
+		if err == metrics.ErrServiceMonitorNotPresent {
+			log.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
+		}
+	}
+
+	if err = (&nodemaintenanceapi.NodeMaintenance{}).SetupWebhookWithManager(ctx, mgr); err != nil {
+		log.Error(err, "unable to create webhook", "webhook", "HyperConverged")
+		os.Exit(1)
+	}
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
