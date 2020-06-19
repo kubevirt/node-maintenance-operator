@@ -36,7 +36,7 @@ cat _out/namespace-init.yaml
 find . -name .kubeconfig || true
 KUBE_CONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
 
-TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
+TEST_OPERATOR_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test -v ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml
 
 echo "E2e tests passed"
 
@@ -71,3 +71,11 @@ if [[ $VALIDATION_ERRORS != "0" ]]; then
 fi
 
 echo "check validation of openaAPIV3Schema passed"
+
+trap "make olmtestcleanup" EXIT SIGINT
+
+make olmtest
+make olmtestcleanup
+
+echo "webhook test passed"
+
