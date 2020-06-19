@@ -99,7 +99,7 @@ var _ = Describe("updateCondition", func() {
 		It("Node maintenanace should be initialized properly", func() {
 			r.initMaintenanceStatus(nm)
 			maintanance := &nodemaintenanceapi.NodeMaintenance{}
-			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+			err := cl.Get(context.TODO(), types.NamespacedName{ Name: nm.ObjectMeta.Name }, maintanance)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(maintanance.Status.Phase).To(Equal(nodemaintenanceapi.MaintenanceRunning))
 			Expect(len(maintanance.Status.PendingPods)).To(Equal(2))
@@ -111,7 +111,7 @@ var _ = Describe("updateCondition", func() {
 			nmCopy.Status.Phase = nodemaintenanceapi.MaintenanceRunning
 			r.initMaintenanceStatus(nmCopy)
 			maintanance := &nodemaintenanceapi.NodeMaintenance{}
-			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+			err := cl.Get(context.TODO(), types.NamespacedName{ Name: nm.ObjectMeta.Name }, maintanance)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(maintanance.Status.Phase).NotTo(Equal(nodemaintenanceapi.MaintenanceRunning))
 			Expect(len(maintanance.Status.PendingPods)).NotTo(Equal(2))
