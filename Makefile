@@ -18,7 +18,9 @@ TARGETS = \
 	goimports \
 	goimports-check \
 	vet \
+	setupgithook \
 	whitespace \
+	whitespace-commit \
 	whitespace-check \
 	manifests \
 	test
@@ -37,16 +39,19 @@ apis_sources=$(call rwildcard,pkg/apis,*.go)
 
 fmt: whitespace goimports
 
-goimports: install-goimports
+goimports:
 	GO111MODULE=on go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
 
-goimports-check: $(cmd_sources) $(pkg_sources) install-goimports
+goimports-check: $(cmd_sources) $(pkg_sources)
 	GO111MODULE=on go run golang.org/x/tools/cmd/goimports -d ./pkg ./cmd
 
 whitespace: $(all_sources)
 	./hack/whitespace.sh --fix
 
-check: whitespace-check vet goimports-check gen-operator-sdk gen-k8s-check verify-manifests test
+whitespace-commit: $(all_sources)
+	./hack/whitespace.sh --fix-commit
+
+check: setupgithook vet goimports-check gen-operator-sdk gen-k8s-check verify-manifests test
 
 whitespace-check: $(all_sources)
 	./hack/whitespace.sh
@@ -114,4 +119,8 @@ cluster-functest:
 cluster-clean:
 	./hack/clean.sh
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier install-goimports
+setupgithook:
+	./hack/precommit-hook.sh setup
+	./hack/prepare-commit-msg-hook.sh setup
+
+PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit
