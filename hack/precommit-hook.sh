@@ -2,14 +2,14 @@
 
 TOP_LEVEL=$(git rev-parse --show-toplevel)
 
-if [[ $1 == "setup" ]]; then
-	ln -fs  $TOP_LEVEL/hack/precommit-hook.sh $TOP_LEVEL/.git/hooks/pre-commit
-	exit 0
-fi
-
 if [[ $TOP_LEVEL == "" ]]; then
   echo "Error: this script must be called from a git repository"
   exit 1
+fi
+
+if [[ $1 == "setup" ]]; then
+	ln -fs  $TOP_LEVEL/hack/precommit-hook.sh $TOP_LEVEL/.git/hooks/pre-commit
+	exit 0
 fi
 
 # Redirect output to stderr.
