@@ -8,8 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	kubernetes "k8s.io/client-go/kubernetes"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 const OpenshiftMachineConfigNamespace = "openshift-machine-config-operator"
