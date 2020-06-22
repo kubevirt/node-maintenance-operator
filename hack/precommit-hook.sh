@@ -8,7 +8,9 @@ if [[ $TOP_LEVEL == "" ]]; then
 fi
 
 if [[ $1 == "setup" ]]; then
-	ln -fs  $TOP_LEVEL/hack/precommit-hook.sh $TOP_LEVEL/.git/hooks/pre-commit
+	if [[ ! -f $TOP_LEVEL/.git/hooks/pre-commit ]] && [[ ! -h $TOP_LEVEL/.git/hooks/pre-commit ]]; then
+		ln -s  $TOP_LEVEL/hack/precommit-hook.sh $TOP_LEVEL/.git/hooks/pre-commit
+	fi
 	exit 0
 fi
 
