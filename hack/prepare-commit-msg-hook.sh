@@ -16,27 +16,18 @@ fi
 
 COMMIT_MSG_FILE="$1"
 
-# check if commit message is empty
+# check if commit message is present
 HAS_SIGNOFF=$(grep -c 'Signed-off-by:' "${COMMIT_MSG_FILE}")
 
 if [[ $HAS_SIGNOFF == "0" ]]; then
-	UNAME=$(git config user.name)
-	UMAIL=$(git config user.email)
+	exec 1>&2
+	cat <<EOF
+Commit Signoff is missing from the commit message.
 
-	if [[ $UNAME != "" ]] && [[ $UMAIL != "" ]]; then
+Please add the signoff message with the following command:
 
-		COMMIT_COMMENTS=$(sed -n 's/\(^#.*$\)/\1/p' "${COMMIT_MSG_FILE}")
-
-		SIGNOFF_MSG="Signed-off-by: ${UNAME} <${UMAIL}>"
-
-		# strip comments
-		sed -i '/^#.*$/d' "${COMMIT_MSG_FILE}"
-
-		# add signoff
-		echo -e "\n${SIGNOFF_MSG}\n" >>${COMMIT_MSG_FILE}
-
-		# add comments back
-		echo "${COMMIT_COMMENTS}"  >>${COMMIT_MSG_FILE}
-	fi
+	git commit --amend --signoff
+EOF
+	exit 1
 fi
 

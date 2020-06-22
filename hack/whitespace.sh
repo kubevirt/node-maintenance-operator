@@ -16,7 +16,7 @@ function check_files {
 
 		if [[ "$IDEAL_FILE" != "$REAL_FILE" ]]; then
 			echo "need whitespace fix for file $fname"
-			#diff -u $(echo "$REAL_FILE") $(echo "$IDEAL_FILE")
+			diff -u <(echo "$REAL_FILE") <(echo "$IDEAL_FILE")
 		fi
 	done
 }
