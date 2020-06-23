@@ -132,15 +132,7 @@ make_olm_op_bundle_new() {
 
 	#cp manifests/node-maintenance-operator/node-maintenance-operator.package.yaml tmp-manifest/node-maintenance-operator/
 
-	cat >tmp-manifest/node-maintenance-operator/metadata/annotations.yaml <<EOF
-annotations:
-  operators.operatorframework.io.bundle.mediatype.v1: "registry+v1"
-  operators.operatorframework.io.bundle.manifests.v1: "manifests/"
-  operators.operatorframework.io.bundle.metadata.v1: "metadata/"
-  operators.operatorframework.io.bundle.package.v1: "node-maintenance-operator"
-  operators.operatorframework.io.bundle.channels.v1: "beta"
-  operators.operatorframework.io.bundle.channel.default.v1: "beta"
-EOF
+	./hack/test-olm-make-annotations.sh >tmp-manifest/node-maintenance-operator/metadata/annotations.yaml  	
 
 	case  "$OPT" in
 		minikube)
@@ -156,27 +148,11 @@ EOF
 		;;
 	esac
 
-	cat >docker.tmp <<EOF
-FROM scratch
-
-# We are pushing an operator-registry bundle
-# that has both metadata and manifests.
-LABEL operators.operatorframework.io.bundle.mediatype.v1=registry+v1
-LABEL operators.operatorframework.io.bundle.manifests.v1=manifests/
-LABEL operators.operatorframework.io.bundle.metadata.v1=metadata/
-LABEL operators.operatorframework.io.bundle.package.v1=node-maintenance-operator
-LABEL operators.operatorframework.io.bundle.channels.v1=beta
-LABEL operators.operatorframework.io.bundle.channel.default.v1=beta
-
-COPY ./tmp-manifest/node-maintenance-operator/manifests  /manifests/
-ADD ./tmp-manifest/node-maintenance-operator/metadata/annotations.yaml /metadata/annotations.yaml
-
-EOF
+	./hack/test-olm-make-docker.sh
 
 	docker build -f docker.tmp -t $NMOBUNDLE:latest .
 
 	docker_tag $NMOBUNDLE:latest $LOCAL_REGISTRY/$NMOBUNDLE:latest
-
 }
 
 run_bundle() {
@@ -197,32 +173,15 @@ if [[ $OP == "kind" ]]; then
 	kind load docker-image ${LOCAL_REGISTRY}/node-maintenance-operator-bundle:latest
 fi
 
-cat <<EOF | kubectl create -f -
-apiVersion: operators.coreos.com/v1alpha1
-kind: CatalogSource
-metadata:
-  name: nmocatalogsource
-  namespace: ${CATALOG_NAMESPACE}
-spec:
-  sourceType: grpc
-  image: ${REG_IMG}
-  displayName: KubeVirt HyperConverged
-  publisher: Red Hat
-EOF
+CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" REG_IMG="${REG_IMG}" ./hack/test-olm-make-catalog-source.sh
 
-cat <<EOF | kubectl create -f -
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: node-maintenance-operator
-  namespace: ${CATALOG_NAMESPACE}
-spec:
-  channel: "beta"
-  installPlanApproval: Automatic
-  name: node-maintenance-operator
-  source: nmocatalogsource
-  sourceNamespace: ${CATALOG_NAMESPACE}
-EOF
+CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" REG_IMG="${REG_IMG}" ./hack/test-olm-make-catalog-source.sh | kubectl create -f -
+
+
+CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" ./hack/test-olm-make-subscription.sh
+
+CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" ./hack/test-olm-make-subscription.sh | kubectl create -f -
+
 }
 
 test_nmo_webhook() {
@@ -244,15 +203,8 @@ test_nmo_webhook() {
  echo "*** create nmo with invalid node ***"
 
 set +e
-MSG=$(cat <<EOF  | kubectl create -f 2>&1 -
-apiVersion: nodemaintenance.kubevirt.io/v1beta1
-kind: NodeMaintenance
-metadata:
-  name: nodemaintenance-xyz
-spec:
-  nodeName: nodeMiau
-EOF
-)
+
+MSG=$(NMO_NAME="nodemaintenance-xyz" NODE_NAME="nodeMiau" ./hack/test-olm-make-nmo-on-node.sh  | kubectl create -f 2>&1 -)
 
 if [[ $? == 0 ]]; then
 	echo "test failed, succeeded to create an nmo object on non existing node. "
@@ -273,32 +225,14 @@ if [[ "$realNodeName" == "" ]]; then
 fi
 
 # create valid nmo
-
-MSG=$(cat <<EOF  | kubectl create -f 2>&1 -
-apiVersion: nodemaintenance.kubevirt.io/v1beta1
-kind: NodeMaintenance
-metadata:
-  name: nodemaintenance-x123
-spec:
-  nodeName: ${realNodeName}
-EOF
-)
+NMO_NAME="nodemaintenance-x123" NODE_NAME="${realNodeName}" ./hack/test-olm-make-nmo-on-node.sh | kubectl create -f 2>&1 -
 
 if [[ $? != 0 ]]; then
 	echo "test failed, can't create nmo on existing node. "
 	exit
 fi
 
-
-MSG=$(cat <<EOF  | kubectl create -f 2>&1 -
-apiVersion: nodemaintenance.kubevirt.io/v1beta1
-kind: NodeMaintenance
-metadata:
-  name: nodemaintenance-x1234
-spec:
-  nodeName: ${realNodeName}
-EOF
-)
+MSG=$(NMO_NAME="nodemaintenance-x1234" NODE_NAME="${realNodeName}" ./hack/test-olm-make-nmo-on-node.sh  | kubectl create -f 2>&1 -)
 
 if [[ $? == 0 ]]; then
 	echo "test failed, can create second nmo on existing node. "
