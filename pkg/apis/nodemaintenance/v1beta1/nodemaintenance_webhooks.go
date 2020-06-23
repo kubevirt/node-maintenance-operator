@@ -53,6 +53,13 @@ func (r *NodeMaintenance) ValidateCreate() error {
 		log.Errorf("Webhook : %v", rerr)
 		return rerr
 	}
+
+	workingOnNode, err := isNMOObjectWorkingOnNode(nodeName)
+	if workingOnNode {
+		rerr := fmt.Errorf("Can't create NMO object for node %s. NMO object already working with this node", nodeName)
+		log.Errorf("Webhook : %v", rerr)
+		return rerr
+	}
 	return nil
 }
 

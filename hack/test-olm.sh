@@ -254,10 +254,7 @@ spec:
 EOF
 )
 
-STAT=$?
-set -e
-
-if [[ $STAT == 0 ]]; then
+if [[ $? == 0 ]]; then
 	echo "test failed, succeeded to create an nmo object on non existing node. "
 	exit
 fi
@@ -265,7 +262,53 @@ fi
 CNT=$(echo "$MSG" | grep -c 'admission webhook "nodemaintenance-validator.kubevirt.io" denied the request')
 
 if [[  "$CNT" != "1" ]]; then
-	echo "Unexpected error message. actual message: <msg>${NMO}</msg>"
+	echo "Unexpected error message. actual message: <msg>${MSG}</msg>"
+	exit 1
+fi
+
+realNodeName=$(kubectl get nodes | sed '1d' | awk '{ print $1 }' | tail -n 1)
+if [[ "$realNodeName" == "" ]]; then
+	echo "can't get the real node name"
+	exit 1
+fi
+
+# create valid nmo
+
+MSG=$(cat <<EOF  | kubectl create -f 2>&1 -
+apiVersion: nodemaintenance.kubevirt.io/v1beta1
+kind: NodeMaintenance
+metadata:
+  name: nodemaintenance-x123
+spec:
+  nodeName: ${realNodeName}
+EOF
+)
+
+if [[ $? != 0 ]]; then
+	echo "test failed, can't create nmo on existing node. "
+	exit
+fi
+
+
+MSG=$(cat <<EOF  | kubectl create -f 2>&1 -
+apiVersion: nodemaintenance.kubevirt.io/v1beta1
+kind: NodeMaintenance
+metadata:
+  name: nodemaintenance-x1234
+spec:
+  nodeName: ${realNodeName}
+EOF
+)
+
+if [[ $? == 0 ]]; then
+	echo "test failed, can create second nmo on existing node. "
+	exit
+fi
+
+CNT=$(echo "$MSG" | grep -c 'NMO object already working with this node')
+
+if [[  "$CNT" != "1" ]]; then
+	echo "Unexpected error message. actual message: <msg>${MSG}</msg>"
 	exit 1
 fi
 }

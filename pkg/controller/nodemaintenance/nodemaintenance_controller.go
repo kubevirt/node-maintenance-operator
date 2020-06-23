@@ -107,8 +107,6 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 	r.drainer.ErrOut = writer{klog.Error}
 	r.drainer.OnPodDeletedOrEvicted = onPodDeletedOrEvicted
 
-	nodemaintenanceapi.SetHookClient(cs)
-
 	return nil
 }
 

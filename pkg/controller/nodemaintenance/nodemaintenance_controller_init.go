@@ -33,6 +33,8 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	if err == nil {
 		err = r.checkLeaseSupported()
 	}
+	nodemaintenanceapi.SetHookClient(mgr.GetClient())
+
 	return r, err
 }
 
