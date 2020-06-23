@@ -10,7 +10,6 @@ if [[ $OPT != "kind" ]] && [[ $OPT != "minikube" ]]; then
 fi
 
 LOCAL_OLM=olm-repo
-LOCAL_OPREG=operator-registry
 
 case "$OPT" in
 	minikube)
@@ -53,14 +52,6 @@ setup_src() {
 		popd
 
 	fi
-
-	if [[ ! -f $LOCAL_OPREG/repo_init ]]; then
-		git clone https://github.com/operator-framework/operator-registry $LOCAL_OPREG
-		pushd $LOCAL_OPREG
-		make
-		echo "" >repo_init
-		popd
-	fi
 }
 
 setup_utils() {
@@ -85,7 +76,12 @@ setup_utils() {
 			;;
 	esac
 
-	export PATH=$PWD/bin:$PWD/$LOCAL_OPREG/bin:$PATH
+	if [[ ! -x bin/opm ]]; then
+		curl -L https://github.com/operator-framework/operator-registry/releases/download/v1.12.5/linux-amd64-opm -o bin/opm
+		chmod +x bin/opm
+	fi
+
+	export PATH=$PWD/bin:$PATH
 }
 
 start_cluster() {
