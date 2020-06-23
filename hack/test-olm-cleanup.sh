@@ -10,7 +10,6 @@ if [[ $OPT != "kind" ]] && [[ $OPT != "minikube" ]]; then
 	exit 1
 fi
 
-
 LOCAL_OLM=olm-repo
 LOCAL_OPREG=operator-registry
 

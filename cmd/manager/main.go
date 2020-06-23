@@ -144,7 +144,7 @@ func main() {
 	}
 
 	if err = (&nodemaintenanceapi.NodeMaintenance{}).SetupWebhookWithManager(ctx, mgr); err != nil {
-		log.Error(err, "unable to create webhook", "webhook", "HyperConverged")
+		log.Error(err, "unable to create webhook", "webhook")
 		os.Exit(1)
 	}
 	log.Info("Starting the Cmd.")

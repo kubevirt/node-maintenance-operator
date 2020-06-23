@@ -7,12 +7,6 @@ export GOPATH=$(pwd)/go
 export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 mkdir -p $GOPATH
 
-echo "Install Go 1.13.5"
-export GIMME_GO_VERSION=1.13.5
-mkdir -p /gimme
-curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | HOME=/gimme bash >> /etc/profile.d/gimme.sh
-source /etc/profile.d/gimme.sh
-
 echo "Install operator repository to the right place"
 mkdir -p $GOPATH/src/kubevirt.io
 mkdir -p $GOPATH/pkg
