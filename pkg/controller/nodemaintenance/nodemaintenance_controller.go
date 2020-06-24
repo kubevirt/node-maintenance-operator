@@ -256,35 +256,31 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	return reconcile.Result{}, nil
 }
 
+func makeBoolRef(val bool) (*bool) {
+	return &val;
+}
 
-func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev1.Node) (bool) {
+func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev1.Node) {
 
-	objectRefIsSet := false
 	for _, ref := range instance.ObjectMeta.GetOwnerReferences() {
 		if ref.APIVersion == node.TypeMeta.APIVersion && ref.Kind == node.TypeMeta.Kind && ref.Name == node.ObjectMeta.GetName() && ref.UID == node.ObjectMeta.GetUID() {
-			objectRefIsSet = true
-			break
+			return
 		}
 	}
 
-	if !objectRefIsSet {
-		log.Info("setting owner ref to node")
+	log.Info("setting owner ref to node")
 
-		blockOwnerDeletion := false
-		controllerDeletion := false
-		nodeMeta := node.TypeMeta
-		ref := metav1.OwnerReference{
-				APIVersion:         nodeMeta.APIVersion,
-				Kind:               nodeMeta.Kind,
-				Name:               node.ObjectMeta.GetName(),
-				UID:                node.ObjectMeta.GetUID(),
-				BlockOwnerDeletion: &blockOwnerDeletion, // false - deletion of node doesn't have to wait for nmo CR deletion
-				Controller:         &controllerDeletion, // false - can delete nmo without deleting the node
-			}
+	nodeMeta := node.TypeMeta
+	ref := metav1.OwnerReference{
+			APIVersion:         nodeMeta.APIVersion,
+			Kind:               nodeMeta.Kind,
+			Name:               node.ObjectMeta.GetName(),
+			UID:                node.ObjectMeta.GetUID(),
+			BlockOwnerDeletion: makeBoolRef(false),
+			Controller:         makeBoolRef(false),
+		}
 
-		instance.ObjectMeta.SetOwnerReferences( append(instance.ObjectMeta.GetOwnerReferences(), ref) )
-	}
-	return !objectRefIsSet
+	instance.ObjectMeta.SetOwnerReferences( append(instance.ObjectMeta.GetOwnerReferences(), ref) )
 }
 
 func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) {

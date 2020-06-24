@@ -112,8 +112,7 @@ var _ = Describe("updateCondition", func() {
 			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
 			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			hasSetRef := setOwnerRefToNode(maintanance, node)
-			Expect(hasSetRef).To(Equal(true))
+			setOwnerRefToNode(maintanance, node)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
 			ref := maintanance.ObjectMeta.GetOwnerReferences()[0]
@@ -121,8 +120,7 @@ var _ = Describe("updateCondition", func() {
 			Expect(ref.UID).To(Equal(node.ObjectMeta.UID))
 			Expect(ref.APIVersion).To(Equal(node.TypeMeta.APIVersion))
 			Expect(ref.Kind).To(Equal(node.TypeMeta.Kind))
-			hasSetRef = setOwnerRefToNode(maintanance, node)
-			Expect(hasSetRef).To(Equal(false))
+			setOwnerRefToNode(maintanance, node)
 			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
 		})
 		It("Should not init Node maintenanace if already set", func() {
