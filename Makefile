@@ -121,6 +121,6 @@ cluster-clean:
 
 setupgithook:
 	./hack/precommit-hook.sh setup
-	./hack/prepare-commit-msg-hook.sh setup
+	./hack/commit-msg-hook.sh setup
 
 PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit
