@@ -3,13 +3,15 @@
 set -ex
 
 OPT=${1:-kind}
+USE_OLM_INSTALL=1
+OLM_RELEASE_VERSION="0.15.1"
+LOCAL_OLM=olm-repo
 
 if [[ $OPT != "kind" ]] && [[ $OPT != "minikube" ]]; then
 	echo "error: argument must be either kind or minikube"
 	exit 1
 fi
 
-LOCAL_OLM=olm-repo
 
 case "$OPT" in
 	minikube)
@@ -44,13 +46,14 @@ start_registry() {
 }
 
 setup_src() {
-	if [[ ! -f $LOCAL_OLM/repo_init ]]; then
-		git clone https://github.com/operator-framework/operator-lifecycle-manager.git $LOCAL_OLM
-		pushd $LOCAL_OLM
-		#git checkout origin/release-4.5 -b release-4.5
-		echo "" >repo_init
-		popd
-
+	if [[ $USE_OLM_INSTALL == "" ]]; then
+		if [[ ! -f $LOCAL_OLM/repo_init ]]; then
+			git clone https://github.com/operator-framework/operator-lifecycle-manager.git $LOCAL_OLM
+			pushd $LOCAL_OLM
+			git checkout origin/release-4.5 -b release-4.5
+			echo "" >repo_init
+			popd
+		fi
 	fi
 }
 
@@ -81,6 +84,19 @@ setup_utils() {
 		chmod +x bin/opm
 	fi
 
+
+	if [[ $USE_OLM_INSTALL != "" ]]; then
+		if [[ ! -x bin/install-olm.sh ]]; then
+			curl -L https://github.com/operator-framework/operator-lifecycle-manager/releases/download/${OLM_RELEASE_VERSION}/install.sh -o bin/install-olm.sh
+			chmod +x bin/install-olm.sh
+		fi
+	else
+		pushd $LOCAL_OLM
+		make run-local
+		kubectl get nodes
+		popd
+	fi
+	
 	export PATH=$PWD/bin:$PATH
 }
 
@@ -95,10 +111,7 @@ start_cluster() {
 		minikube ssh 'sudo bash -c "echo '$HOST_IP' localhost.localdomain >>/etc/hosts"'
 	fi
 
-	pushd $LOCAL_OLM
-	make run-local
-	kubectl get nodes
-	popd
+	install-olm.sh ${OLM_RELEASE_VERSION}
 }
 
 docker_tag() {
