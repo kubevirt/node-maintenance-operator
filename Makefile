@@ -68,7 +68,7 @@ gen-k8s: $(apis_sources)
 gen-k8s-check: $(apis_sources)
 	./hack/verify-codegen.sh
 
-container-build: container-build-operator container-build-registry
+container-build: container-build-operator container-build-registry build-must-gather
 
 container-build-operator: csv-generator
 	docker build -f build/Dockerfile -t $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG) .
@@ -123,4 +123,7 @@ setupgithook:
 	./hack/precommit-hook.sh setup
 	./hack/commit-msg-hook.sh setup
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit
+build-must-gather:
+	./must-gather/build.sh
+
+.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit build-must-gather
