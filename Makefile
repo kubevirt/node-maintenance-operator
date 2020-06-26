@@ -81,13 +81,17 @@ test-courier:
 	echo "bundle dir: $(BUNDLE_DIR_VERSION)"
 	export BUNDLE_DIR_VERSION; docker build -f build/Dockerfile.test-courier -t test-courier . --build-arg dir=$(BUNDLE_DIR_VERSION)
 
-container-push: container-push-operator container-push-registry
+container-push: container-push-operator container-push-registry container-push-must-gather
 
 container-push-operator:
 	docker push $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG)
 
 container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
+
+container-push-must-gather:
+	echo "env: IMAGE_TAG="$(IMAGE_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" MUST_GATHER_IMAGE="$(MUST_GATHER_IMAGE)" OPERATOR_IMAGE="$(OPERATOR_IMAGE)" REGISTRY_IMAGE="$(REGISTRY_IMAGE)
+	docker push ${IMAGE_REGISTRY}/${MUST_GATHER_IMAGE}:${IMAGE_TAG}
 
 csv-generator: gen-operator-sdk
 	./build/make-csv-generator.sh
@@ -126,6 +130,5 @@ setupgithook:
 
 build-must-gather:
 	IMAGE_TAG=$(IMAGE_TAG) ./must-gather/build.sh
-	docker push ${IMAGE_REGISTRY}/${MUST_GATHER_IMAGE}:${IMAGE_TAG}
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit build-must-gather
+.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit build-must-gather container-push-must-gather
