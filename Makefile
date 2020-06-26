@@ -6,6 +6,7 @@ IMAGE_TAG ?= latest
 CURRENT_IMAGE_TAG=v0.6.0
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
+MUST_GATHER_IMAGE ?= must-gather-lifecycle
 TARGETCOVERAGE=60
 
 KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
@@ -125,5 +126,6 @@ setupgithook:
 
 build-must-gather:
 	IMAGE_TAG=$(IMAGE_TAG) ./must-gather/build.sh
+	docker push ${IMAGE_REGISTRY}/${MUST_GATHER_IMAGE}:${IMAGE_TAG}
 
 .PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit build-must-gather
