@@ -124,6 +124,6 @@ setupgithook:
 	./hack/commit-msg-hook.sh setup
 
 build-must-gather:
-	./must-gather/build.sh
+	IMAGE_TAG=$(IMAGE_TAG) ./must-gather/build.sh
 
 .PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit build-must-gather

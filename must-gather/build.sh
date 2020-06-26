@@ -1,7 +1,9 @@
 #!/bin/bash
 
-set -ex
+set -eax
+
+echo "imag tag: ${IMAGE_TAG}"
 
 pushd must-gather
-make docker-build
+make IMAGE_TAG=${IMAGE_TAG}
 popd
