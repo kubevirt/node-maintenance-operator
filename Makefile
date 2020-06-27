@@ -69,7 +69,7 @@ gen-k8s: $(apis_sources)
 gen-k8s-check: $(apis_sources)
 	./hack/verify-codegen.sh
 
-container-build: container-build-operator container-build-registry build-must-gather
+container-build: container-build-operator container-build-registry container-build-must-gather
 
 container-build-operator: csv-generator
 	docker build -f build/Dockerfile -t $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG) .
@@ -90,7 +90,6 @@ container-push-registry:
 	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
 
 container-push-must-gather:
-	echo "env: IMAGE_TAG="$(IMAGE_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" MUST_GATHER_IMAGE="$(MUST_GATHER_IMAGE)" OPERATOR_IMAGE="$(OPERATOR_IMAGE)" REGISTRY_IMAGE="$(REGISTRY_IMAGE)
 	docker push ${IMAGE_REGISTRY}/${MUST_GATHER_IMAGE}:${IMAGE_TAG}
 
 csv-generator: gen-operator-sdk
@@ -128,7 +127,7 @@ setupgithook:
 	./hack/precommit-hook.sh setup
 	./hack/commit-msg-hook.sh setup
 
-build-must-gather:
-	IMAGE_TAG=$(IMAGE_TAG) ./must-gather/build.sh
+container-build-must-gather:
+	IMAGE_REGISTRY=$(IMAGE_REGISTRY) IMAGE_TAG=$(IMAGE_TAG) docker build -f must-gather/Dockerfile -t ${IMAGE_REGISTRY}/${MUST_GATHER_IMAGE}:${IMAGE_TAG} must-gather
 
-.PHONY: all check fmt test container-build container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace-commit build-must-gather container-push-must-gather
+.PHONY: all check fmt test container-build container-build-must-gather container-push-must-gather container-push manifests verify-manifests cluster-up cluster-down cluster-sync cluster-functest cluster-clean pull-ci-changes test-courier setupgithook whitespace whitespace-commit
