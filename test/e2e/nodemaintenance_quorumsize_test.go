@@ -19,7 +19,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func createEtcPDB(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) (*policy.PodDisruptionBudget, *corev1.Namespace, error) {
+func createEtcPDB(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) (*policy.PodDisruptionBudget, *corev1.Namespace, bool, bool, error) {
+	namespaceCreated := false
+	pdbCreated := false
 
 	nsobject := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{
@@ -35,7 +37,11 @@ func createEtcPDB(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) 
 	}
 	err := f.Client.Create(goctx.TODO(), nsobject, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
 	if err != nil {
-		return nil, nil, fmt.Errorf("can't create namespace : %v", err)
+		if !errors.IsAlreadyExists(err) {
+			return nil, nil, namespaceCreated, pdbCreated, fmt.Errorf("can't create namespace : %v", err)
+		}
+	} else {
+		namespaceCreated = true
 	}
 
 	objectName  := "etcpdb"
@@ -59,14 +65,16 @@ func createEtcPDB(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) 
 	err = f.Client.Create(goctx.TODO(), object, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
 	if err != nil {
 		f.Client.Delete(goctx.TODO(), nsobject)
-		return nil, nil, err
+		return nil, nil, namespaceCreated, pdbCreated, err
+	} else {
+		pdbCreated = true
 	}
-	return object, nsobject, nil
+	return object, nsobject, namespaceCreated, pdbCreated, nil
 }
 
 func checkQuorumSizeViolation(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 
-	pdb, nsobject, err := createEtcPDB(t , f , ctx )
+	pdb, nsobject, namespaceCreated, pdbCreated, err:= createEtcPDB(t , f , ctx )
 	if err != nil {
 		showDeploymentStatus(t, f, fmt.Errorf("can't create test pdb :  %v", err))
 	}
@@ -86,7 +94,6 @@ func checkQuorumSizeViolation(t *testing.T, f *framework.Framework, ctx *framewo
 	if err != nil {
 		t.Fatal(err)
 	}
-
 
 	node := &corev1.Node{}
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
@@ -176,7 +183,6 @@ func checkQuorumSizeViolation(t *testing.T, f *framework.Framework, ctx *framewo
 		showDeploymentStatus(t, f, fmt.Errorf("%s: Failed to verify that nmo has been deleted %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
 	}
 
-
 	node = &corev1.Node{}
 	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
 	if err != nil {
@@ -197,15 +203,18 @@ func checkQuorumSizeViolation(t *testing.T, f *framework.Framework, ctx *framewo
 	t.Logf("test deployment deleted")
 	t.Logf("test checkQuorumSizeViolation completed successfully")
 
-	err = f.Client.Delete(goctx.TODO(), pdb)
-	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("can't delete test pdb : %v", err))
+	if pdbCreated {
+		err = f.Client.Delete(goctx.TODO(), pdb)
+		if err != nil {
+			showDeploymentStatus(t, f, fmt.Errorf("Could not delete pdb : %v", err))
+		}
 	}
-	err = f.Client.Delete(goctx.TODO(), nsobject)
-	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("can't delete namespace : %v", err))
+	if namespaceCreated {
+		err = f.Client.Delete(goctx.TODO(), nsobject)
+		if err != nil {
+			showDeploymentStatus(t, f, fmt.Errorf("Could not delete namespace : %v", err))
+		}
 	}
 	return nil
 }
-
 

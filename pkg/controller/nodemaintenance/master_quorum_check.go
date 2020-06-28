@@ -62,4 +62,3 @@ func checkValidQuorumPdb(client kubernetes.Interface) (bool, error) {
 	return isValidQuorum, nil
 }
 
-
