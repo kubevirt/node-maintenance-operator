@@ -113,7 +113,6 @@ var _ = Describe("updateCondition", func() {
 			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			setOwnerRefToNode(maintanance, node)
-			Expect(err).NotTo(HaveOccurred())
 			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
 			ref := maintanance.ObjectMeta.GetOwnerReferences()[0]
 			Expect(ref.Name).To(Equal(node.ObjectMeta.Name))

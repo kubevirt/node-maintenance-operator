@@ -256,8 +256,8 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	return reconcile.Result{}, nil
 }
 
-func makeBoolRef(val bool) (*bool) {
-	return &val;
+func makeBoolRef(val bool) *bool {
+	return &val
 }
 
 func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev1.Node) {
