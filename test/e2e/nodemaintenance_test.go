@@ -32,7 +32,8 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
-	testIterations		 = 4
+	testIterations		 =  3
+	testDeploymentReplicas = 20
 )
 
 func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
@@ -180,13 +181,38 @@ func  checkInvalidLease(t *testing.T, f *framework.Framework, nodeName string) e
 	return nil
 }
 
+func countNodes(t *testing.T, f *framework.Framework,) (int, string, error) {
+	nodesList := &corev1.NodeList{}
+	err := f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
+	if err != nil {
+		showDeploymentStatus(t, f, fmt.Errorf("Failed to list nodes %v", err))
+		return -1, "", err
+	}
+
+	computeNodesNumber := 0
+	workerNodeName := ""
+
+	for _, node := range nodesList.Items {
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+			computeNodesNumber++
+			workerNodeName = node.ObjectMeta.Name
+		}
+	}
+	return computeNodesNumber, workerNodeName, nil
+}
+
 func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
 		return fmt.Errorf("could not get namespace: %v", err)
 	}
 
-	err = createSimpleDeployment(t, f, ctx, namespace)
+	computeNodesNumber, workerNodeName, err := countNodes(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createSimpleDeployment(t, f, ctx, namespace, workerNodeName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,27 +296,12 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		showDeploymentStatus(t, f, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-	nodesList := &corev1.NodeList{}
-	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
-	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("Failed to list nodes %v", err))
-	}
-
-	computeNodesNumber := 0
-
-	for _, node := range nodesList.Items {
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
-			computeNodesNumber++
-		}
-	}
-
 	err = checkValidLease(t, f, nodeName)
 	if err != nil {
 		showDeploymentStatus(t, f, fmt.Errorf("no valid lease after nmo completion: %v", err))
 	}
 
 	if computeNodesNumber > 2 {
-		// Check that the deployment has 1 replica running after maintenance
 		err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
 		if err != nil {
 			showDeploymentStatus(t, f, fmt.Errorf("failed to wait for deployment. error %v", err))
@@ -344,7 +355,7 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 
 	// Check that the deployment has 1 replica running after maintenance is removed.
 	t.Logf("%s: wait for deployment.", time.Now().Format("2006-01-02 15:04:05.000000"))
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, testDeploymentReplicas, retryInterval, timeout)
 	if err != nil {
 		showDeploymentStatus(t, f, fmt.Errorf("%s: failed to wait for deployment. error %v.", err, time.Now().Format("2006-01-02 15:04:05.000000")))
 	}
@@ -398,8 +409,8 @@ func deleteSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	})
 }
 
-func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string) error {
-	replicas := rune(1)
+func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string, nodeName string) error {
+	replicas := rune(testDeploymentReplicas)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -427,7 +438,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 									{
 										MatchExpressions: []corev1.NodeSelectorRequirement{
 											{
-												Key:      "node-role.kubernetes.io/master",
+												Key:      "node-role.kubernetes.io/" + nodeName,
 												Operator: corev1.NodeSelectorOpDoesNotExist,
 											},
 										},
@@ -442,6 +453,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 						Command: []string{"/bin/sh"},
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
+					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
 				},
 			},
 		},
@@ -453,7 +465,7 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 		return err
 	}
 	// wait for testPodDeployment to reach 1 replicas
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, testDeploymentReplicas, retryInterval, timeout)
 	if err != nil {
 		return err
 	}
