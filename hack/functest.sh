@@ -27,7 +27,15 @@ function new_test() {
 new_test 'Test e2e Node Mainenance'
 
 # Run tests
+<<<<<<< HEAD
 export KUBECONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
 TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test ./test/e2e/...
+=======
+
+find . -name .kubeconfig || true
+KUBE_CONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
+
+TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test -v ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
+>>>>>>> e2e test: always show logs at the end of a test run
 
 echo "E2e tests passed"

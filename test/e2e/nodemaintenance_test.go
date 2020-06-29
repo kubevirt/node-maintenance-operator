@@ -344,6 +344,7 @@ func nodeMaintenanceTest(t *testing.T) error {
 			t.Fatalf("failed to enter maintenance mode. error %v", err);
 		}
 	}
+	showDeploymentStatus(t, f, nil)
 
 	return nil
 }
