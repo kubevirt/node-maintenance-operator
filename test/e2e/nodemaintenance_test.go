@@ -32,7 +32,8 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
-	testIterations		 = 4
+	testIterations		 =  3
+	testDeploymentReplicas = 20
 )
 
 func getCurrentOperatorPods() (*corev1.Pod, error) {
@@ -150,13 +151,34 @@ func  checkInvalidLease(t *testing.T, nodeName string) error {
 	return nil
 }
 
-func  enterAndExitMaintenanceMode(t *testing.T) error {
-	namespace := os.Getenv("TEST_NAMESPACE")
-	if len(namespace) == 0 {
-		return fmt.Errorf("could not get namespace")
+func countNodes(t *testing.T, f *framework.Framework,) (int, string, error) {
+	nodesList := &corev1.NodeList{}
+	err := f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
+	if err != nil {
+		showDeploymentStatus(t, f, fmt.Errorf("Failed to list nodes %v", err))
+		return -1, "", err
 	}
 
-	err := createSimpleDeployment(t, namespace)
+	computeNodesNumber := 0
+	workerNodeName := ""
+
+	for _, node := range nodesList.Items {
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+			computeNodesNumber++
+			workerNodeName = node.ObjectMeta.Name
+		}
+	}
+	return computeNodesNumber, workerNodeName, nil
+}
+
+	}
+
+	computeNodesNumber, workerNodeName, err := countNodes(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createSimpleDeployment(t, f, ctx, namespace, workerNodeName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,27 +262,14 @@ func  enterAndExitMaintenanceMode(t *testing.T) error {
 		showDeploymentStatus(t, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-	nodesList := &corev1.NodeList{}
 	err = Client.List(context.TODO(), nodesList, &client.ListOptions{})
-	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
-	}
-
-	computeNodesNumber := 0
-
-	for _, node := range nodesList.Items {
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
-			computeNodesNumber++
-		}
-	}
-
 	err = checkValidLease(t, nodeName)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("no valid lease after nmo completion: %v", err))
 	}
 
 	if computeNodesNumber > 2 {
-		// Check that the deployment has 1 replica running after maintenance
 		err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
 		if err != nil {
 			showDeploymentStatus(t, fmt.Errorf("failed to wait for deployment. error %v", err))
@@ -368,8 +377,8 @@ func deleteSimpleDeployment(t *testing.T, namespace string) error {
 	})
 }
 
-func createSimpleDeployment(t *testing.T, namespace string) error {
-	replicas := rune(1)
+func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string, nodeName string) error {
+	replicas := rune(testDeploymentReplicas)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -397,7 +406,7 @@ func createSimpleDeployment(t *testing.T, namespace string) error {
 									{
 										MatchExpressions: []corev1.NodeSelectorRequirement{
 											{
-												Key:      "node-role.kubernetes.io/master",
+												Key:      "node-role.kubernetes.io/" + nodeName,
 												Operator: corev1.NodeSelectorOpDoesNotExist,
 											},
 										},
@@ -412,6 +421,7 @@ func createSimpleDeployment(t *testing.T, namespace string) error {
 						Command: []string{"/bin/sh"},
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
+					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
 				},
 			},
 		},
