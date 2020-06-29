@@ -376,6 +376,7 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 			t.Fatalf("failed to enter maintenance mode. error %v", err);
 		}
 	}
+	showDeploymentStatus(t, f, nil)
 
 	return nil
 }
