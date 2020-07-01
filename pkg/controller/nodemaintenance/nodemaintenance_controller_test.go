@@ -106,6 +106,22 @@ var _ = Describe("updateCondition", func() {
 			Expect(maintanance.Status.EvictionPods).To(Equal(2))
 			Expect(maintanance.Status.TotalPods).To(Equal(2))
 		})
+		It("owner ref should be set properly", func() {
+			r.initMaintenanceStatus(nm)
+			maintanance := &nodemaintenanceapi.NodeMaintenance{}
+			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			setOwnerRefToNode(maintanance, node)
+			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
+			ref := maintanance.ObjectMeta.GetOwnerReferences()[0]
+			Expect(ref.Name).To(Equal(node.ObjectMeta.Name))
+			Expect(ref.UID).To(Equal(node.ObjectMeta.UID))
+			Expect(ref.APIVersion).To(Equal(node.TypeMeta.APIVersion))
+			Expect(ref.Kind).To(Equal(node.TypeMeta.Kind))
+			setOwnerRefToNode(maintanance, node)
+			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
+		})
 		It("Should not init Node maintenanace if already set", func() {
 			nmCopy := nm.DeepCopy()
 			nmCopy.Status.Phase = nodemaintenanceapi.MaintenanceRunning

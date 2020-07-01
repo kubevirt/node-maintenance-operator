@@ -169,9 +169,9 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		reqLogger.Infof("Deletion timestamp not zero")
 
 		// The object is being deleted
-		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) {
+		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) || ContainsString(instance.ObjectMeta.Finalizers, metav1.FinalizerOrphanDependents)  {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
-			if err := r.stopNodeMaintenance(instance.Spec.NodeName); err != nil {
+			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName); err != nil {
 				reqLogger.Infof("error stopping node maintenance: %v", err)
 				if errors.IsNotFound(err) == false {
 					return r.reconcileAndError(instance, err)
@@ -200,6 +200,8 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	if err != nil {
 		return r.reconcileAndError(instance, err)
 	}
+
+	setOwnerRefToNode(instance, node)
 
 	updateOwnedLeaseFailed, err := r.obtainLease(node)
 	if err != nil && updateOwnedLeaseFailed {
@@ -254,6 +256,33 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	return reconcile.Result{}, nil
 }
 
+func makeBoolRef(val bool) *bool {
+	return &val
+}
+
+func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev1.Node) {
+
+	for _, ref := range instance.ObjectMeta.GetOwnerReferences() {
+		if ref.APIVersion == node.TypeMeta.APIVersion && ref.Kind == node.TypeMeta.Kind && ref.Name == node.ObjectMeta.GetName() && ref.UID == node.ObjectMeta.GetUID() {
+			return
+		}
+	}
+
+	log.Info("setting owner ref to node")
+
+	nodeMeta := node.TypeMeta
+	ref := metav1.OwnerReference{
+			APIVersion:         nodeMeta.APIVersion,
+			Kind:               nodeMeta.Kind,
+			Name:               node.ObjectMeta.GetName(),
+			UID:                node.ObjectMeta.GetUID(),
+			BlockOwnerDeletion: makeBoolRef(false),
+			Controller:         makeBoolRef(false),
+		}
+
+	instance.ObjectMeta.SetOwnerReferences( append(instance.ObjectMeta.GetOwnerReferences(), ref) )
+}
+
 func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) {
 	if !r.isLeaseSupported {
 		return false, nil
@@ -297,9 +326,18 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node ) er
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) stopNodeMaintenance(nodeName string) error {
+func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string) error {
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
+		// if CR is gathered as result of garbage collection: the node may have been deleted, but the CR has not yet been deleted, still we must clean up the lease!
+		if errors.IsNotFound(err) {
+			if r.isLeaseSupported {
+				if err := invalidateLease(r.client, nodeName); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		return err
 	}
 	return r.stopNodeMaintenanceImp(node)
