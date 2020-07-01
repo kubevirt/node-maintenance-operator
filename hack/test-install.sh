@@ -84,7 +84,7 @@ setup_utils() {
 	fi
 
 	if [[ $USE_OLM_INSTALL != "" ]]; then
-		if [[ ! -x bin/install-olm.sh ]]; then
+            if [[ ! -x bin/install-olm.sh ]]; then
 			curl -L https://github.com/operator-framework/operator-lifecycle-manager/releases/download/${OLM_RELEASE_VERSION}/install.sh -o bin/install-olm.sh
 			chmod +x bin/install-olm.sh
 		fi
@@ -167,22 +167,26 @@ uninstall_from_deployment() {
 
 install_with_olm() {
 
-cat <<EOF | kubectl create -f -
+local nspace="$1"
+
+if [[ $nspace != "node-maintenance-operator" ]]; then
+    cat <<EOF | kubectl create -f -
 apiVersion: v1
 kind: Namespace
 metadata:
   annotations:
   labels:
     kubevirt.io: ""
-  name: node-maintenance-operator2
+  name:  ${nspace}
 EOF
+fi
 
 cat <<EOF | kubectl create -f -
 apiVersion: operators.coreos.com/v1alpha2
 kind: OperatorGroup
 metadata:
   name: node-maintenance-operator
-  namespace: node-maintenance-operator2
+  namespace: ${nspace}
 EOF
 
 cat <<EOF | kubectl create -f -
@@ -203,7 +207,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
   name: node-maintenance-operator-subscription
-  namespace: node-maintenance-operator2
+  namespace: ${nspace}
 spec:
   channel: beta
   name: node-maintenance-operator
@@ -214,7 +218,7 @@ EOF
 
  retry_count=0
  while [[ $retry_count -lt 30 ]]; do
-   nmo_pod=$(kubectl get pods -n node-maintenance-operator2 | grep node-maintenance-operator | head -1 | awk '{ print $1 }')
+   nmo_pod=$(kubectl get pods -n ${nspace} | grep node-maintenance-operator | head -1 | awk '{ print $1 }')
    if [[ "$nmo_pod" != "" ]]; then
 	  break
    fi
@@ -222,44 +226,18 @@ EOF
    ((retry_count+=1))
  done
 
-    kubectl wait --for=condition=available --timeout=600s deployment/node-maintenance-operator -n node-maintenance-operator2
+    kubectl wait --for=condition=available --timeout=600s deployment/node-maintenance-operator -n ${nspace}
 
-    kubectl describe pod -n node-maintenance-operator2  | grep Image
+    kubectl describe pod -n ${nspace} | grep Image
 
 }
-
-#run_bundle() {
-#
-#NMO_NAMESPACE="node-maintenance-operator"
-#REG_IMG=$LOCAL_REGISTRY/$NMOREG:latest
-#
-#opm index add --debug --bundles $LOCAL_REGISTRY/$NMOBUNDLE:latest --tag $REG_IMG -c docker
-#
-#docker_tag $REG_IMG $REG_IMG
-#
-## is it needed anywhere?
-#kubectl create ns ${NMO_NAMESPACE}
-#
-#if [[ $OP == "kind" ]]; then
-#	kind load docker-image ${LOCAL_REGISTRY}/node-maintenance-operator:latest
-#	kind load docker-image ${LOCAL_REGISTRY}/node-maintenance-operator-registry:latest
-#	kind load docker-image ${LOCAL_REGISTRY}/node-maintenance-operator-bundle:latest
-#fi
-#
-#CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" REG_IMG="${REG_IMG}" ./hack/test-olm-make-catalog-source.sh
-#
-#CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" REG_IMG="${REG_IMG}" ./hack/test-olm-make-catalog-source.sh | kubectl create -f -
-#
-#
-#CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" ./hack/test-olm-make-subscription.sh
-#
-#CATALOG_NAMESPACE="${CATALOG_NAMESPACE}" ./hack/test-olm-make-subscription.sh | kubectl create -f -
-#
-#}
-
 log_to_file
 
 create_cr_object() {
+
+    local namespace_one="$1"
+    local namespace_two="$2"
+
     cat  <<EOF | kubectl create -f -
 apiVersion: nodemaintenance.kubevirt.io/v1beta1
 kind: NodeMaintenance
@@ -271,11 +249,12 @@ spec:
 EOF
  sleep 2
 
- kubectl logs -n node-maintenance-operator2 $( kubectl get pods -n node-maintenance-operator2 | sed '1d' | awk '{ print $1 }')
+ kubectl logs -n ${namespace_one} $(kubectl get pods -n ${namespace_one} | sed '1d' | head -1 | awk '{ print $1 }')
 
- kubectl logs -n node-maintenance-operator $( kubectl get pods -n node-maintenance-operator | sed '1d' | awk '{ print $1 }')
+ kubectl logs -n ${namespace_two} $(kubectl get pods -n ${namespace_two} | sed '1d' | tail -1 | awk '{ print $1 }')
 
 }
+
 if [[ $OPT == "minikube" ]]; then
 	start_registry
 fi
@@ -283,8 +262,7 @@ setup_src
 setup_utils
 start_cluster
 install_from_deployment
-install_with_olm
-create_cr_object
+install_with_olm "node-maintenance-operator2"
+create_cr_object "node-maintenance-operator" "node-maintenance-operator2"
 
 echo "***  All systems running. liftoff. ***"
-
