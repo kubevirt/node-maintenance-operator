@@ -2,10 +2,17 @@
 
 set -ex
 
+log_to_file() {
+	exec &> >(tee -a test-install.out)
+}
+
+log_to_file
+
 OPT=${1:-kind}
 USE_OLM_INSTALL=1
 OLM_RELEASE_VERSION="0.15.1"
 LOCAL_OLM=olm-repo
+REG=${IMAGE_REGISTRY:-quay.io/kubevirt}
 
 if [[ $OPT != "kind" ]] && [[ $OPT != "minikube" ]]; then
 	echo "error: argument must be either kind or minikube"
@@ -23,15 +30,9 @@ case "$OPT" in
 		;;
 esac
 
-NMOBUNDLE=node-maintenance-operator-bundle
-NMOREG=node-maintenance-operator-registry
+NMOREG=node-maintenance-operator-registry-test
 NMO=node-maintenance-operator
 CATALOG_NAMESPACE="olm"
-REGISTRY=quay.io/kubevirt
-
-log_to_file() {
-	exec &> >(tee -a test-install.out)
-}
 
 start_registry() {
 	hreg_name='local-registry'
@@ -137,7 +138,7 @@ make_deployment_def() {
 	echo -e "\n---\n" >>${OFILE}
 	cat deploy/role_binding.yaml >>${OFILE}
 	echo -e "\n---\n" >>${OFILE}
-	cat deploy/operator.yaml | sed  's#quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>#'${install_img}'#' >>${OFILE}
+	cat deploy/operator.yaml | sed  's#'${REG}'/node-maintenance-operator:<IMAGE_VERSION>#'${install_img}'#' >>${OFILE}
 	echo -e "\n---\n" >>${OFILE}
 	cat deploy/crds/nodemaintenance_crd.yaml  >>${OFILE}
 }
@@ -145,7 +146,9 @@ make_deployment_def() {
 install_from_deployment() {
     local OFILE=tmp.yml
 
-    docker_tag $REGISTRY/$NMO $LOCAL_REGISTRY/$NMO
+    docker images
+
+    docker_tag $REG/$NMO $LOCAL_REGISTRY/$NMO
 
     make_deployment_def	 $LOCAL_REGISTRY/$NMO  "${OFILE}"
 
@@ -165,7 +168,38 @@ uninstall_from_deployment() {
     kubectl delete -f ${OFILE}
 }
 
+make_local_olm_registry() {
+
+    manifestDir="manifests/node-maintenance-operator"
+    installDir="tmp-manifest-install/node-maintenance-operator"
+
+    currentCSV=$(grep currentCSV ${manifestDir}/node-maintenance-operator.package.yaml   | sed -n 's/.*node-maintenance-operator\.\(.*\)$/\1/p')
+
+    rm -rf tmp-manifest-install || true
+
+    mkdir tmp-manifest-install
+    mkdir -p ${installDir}/${currentCSV}/
+    cp ${manifestDir}//node-maintenance-operator.package.yaml ${installDir}/
+    cp ${manifestDir}/${currentCSV}/* tmp-manifest-install/node-maintenance-operator/${currentCSV}/
+
+    sed -i -e 's#'${REG}'/node-maintenance-operator:'${currentCSV}'#localhost:5000/node-maintenance-operator:latest#' ${installDir}/${currentCSV}/node-maintenance-operator.${currentCSV}.clusterserviceversion.yaml
+
+    sed -i -e 's#'${REG}'/node-maintenance-operator#localhost:5000/node-maintenance-operator#' ${installDir}/${currentCSV}/node-maintenance-operator.${currentCSV}.clusterserviceversion.yaml
+
+    docker build -f build/Dockerfile.registry.test -t ${LOCAL_REGISTRY}/${NMOREG}:latest  .
+
+    #rm -rf tmp-manifest-install
+
+}
+
 install_with_olm() {
+
+    docker_tag $REG/$NMO $LOCAL_REGISTRY/$NMO
+
+if [[ $OPT == "kind" ]]; then
+	kind load docker-image ${LOCAL_REGISTRY}/${NMO}:latest
+	kind load docker-image ${LOCAL_REGISTRY}/${NMOREG}:latest
+fi
 
 local nspace="$1"
 
@@ -197,7 +231,7 @@ metadata:
   namespace: olm
 spec:
   sourceType: grpc
-  image: quay.io/kubevirt/node-maintenance-operator-registry:v0.6.0
+  image: ${LOCAL_REGISTRY}/${NMOREG}:latest
   displayName: node-maintenance-operator
   publisher: Red hat
 EOF
@@ -231,7 +265,6 @@ EOF
     kubectl describe pod -n ${nspace} | grep Image
 
 }
-log_to_file
 
 create_cr_object() {
 
@@ -249,10 +282,38 @@ spec:
 EOF
  sleep 2
 
- kubectl logs -n ${namespace_one} $(kubectl get pods -n ${namespace_one} | sed '1d' | head -1 | awk '{ print $1 }')
+ retry_count=0
+ phase=""
+ while [[ $retry_count -lt 10 ]] && [[ $phase != '"Succeeded"' ]] ; do
+     phase=$(kubectl  get  NodeMaintenance  nodemaintenance-xyz -o json  | jq '.status.phase')
+     sleep 2
+ done
 
- kubectl logs -n ${namespace_two} $(kubectl get pods -n ${namespace_two} | sed '1d' | tail -1 | awk '{ print $1 }')
+ if [[ $phase != '"Succeeded"' ]]; then
+     echo "Error: failed to do maintenance"
+     exit 1
+  fi
 
+  logs_one=$(kubectl logs -n ${namespace_one} $(kubectl get pods -n ${namespace_one} | sed '1d' | head -1 | awk '{ print $1 }'))
+
+  logs_two=$(kubectl logs -n ${namespace_two} $(kubectl get pods -n ${namespace_two} | sed '1d' | tail -1 | awk '{ print $1 }'))
+
+  echo "${logs_one}"
+  echo "${logs_two}"
+
+ has_reconcile_one=$(echo "${logs_one}" | grep Reconcile | wc -l)
+
+ has_reconcile_two=$(echo "${logs_two}" | grep Reconcile | wc -l)
+
+  if [[ ${has_reconcile_one} != "0" ]] && [[ ${has_reconcile_two} != "0" ]]; then
+      echo "error: both controller instances reconciled"
+      exit 1
+  fi
+
+  if [[ ${has_reconcile_one} == "0" ]] && [[ ${has_reconcile_two} == "0" ]]; then
+      echo "error: no controller instances reconciled"
+      exit 1
+  fi
 }
 
 if [[ $OPT == "minikube" ]]; then
@@ -262,6 +323,7 @@ setup_src
 setup_utils
 start_cluster
 install_from_deployment
+make_local_olm_registry
 install_with_olm "node-maintenance-operator2"
 create_cr_object "node-maintenance-operator" "node-maintenance-operator2"
 
