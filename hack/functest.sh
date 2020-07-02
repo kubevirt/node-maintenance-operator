@@ -71,3 +71,21 @@ if [[ $VALIDATION_ERRORS != "0" ]]; then
 fi
 
 echo "check validation of openaAPIV3Schema passed"
+
+echo "check coordination of different installations start"
+
+trap "make installtestcleanup" EXIT SIGINT
+
+registry="$IMAGE_REGISTRY"
+if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
+    registry_port=$(docker ps | grep -Po '\d+(?=->5000)')
+    registry=localhost:$registry_port
+
+    export IMAGE_REGISTRY=$registry
+fi
+
+make installtest
+make installtestcleanup
+
+echo "check coordination of different installations passed"
+
