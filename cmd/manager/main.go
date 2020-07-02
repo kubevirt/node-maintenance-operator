@@ -10,8 +10,8 @@ import (
 	"kubevirt.io/node-maintenance-operator/pkg/apis"
 	"kubevirt.io/node-maintenance-operator/pkg/controller"
 	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
+	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance/leader"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
-	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
@@ -75,7 +75,7 @@ func main() {
 	ctx := context.TODO()
 
 	// Become the leader before proceeding
-	err = leader.Become(ctx, "node-maintenance-operator-lock")
+	err = leader.Become(ctx, "openshift-kni-lifecycle-node-maintenance-operator-lock")
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
