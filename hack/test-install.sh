@@ -6,13 +6,14 @@ log_to_file() {
 	exec &> >(tee -a test-install.out)
 }
 
-log_to_file
+#log_to_file
 
 OPT=${1:-kind}
 USE_OLM_INSTALL=1
 OLM_RELEASE_VERSION="0.15.1"
 LOCAL_OLM=olm-repo
 REG=${IMAGE_REGISTRY:-quay.io/kubevirt}
+RTAG=${TAG:-latest}
 
 if [[ $OPT != "kind" ]] && [[ $OPT != "minikube" ]]; then
 	echo "error: argument must be either kind or minikube"
@@ -138,32 +139,39 @@ make_deployment_def() {
 	echo -e "\n---\n" >>${OFILE}
 	cat deploy/role_binding.yaml >>${OFILE}
 	echo -e "\n---\n" >>${OFILE}
-	cat deploy/operator.yaml | sed  's#'${REG}'/node-maintenance-operator:<IMAGE_VERSION>#'${install_img}'#' >>${OFILE}
+	cat deploy/operator.yaml | sed 's#quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>#'${install_img}'#' >>${OFILE}
 	echo -e "\n---\n" >>${OFILE}
 	cat deploy/crds/nodemaintenance_crd.yaml  >>${OFILE}
+}
+
+prepare_images() {
+    docker images
+
+    docker_tag $REG/$NMO $LOCAL_REGISTRY/$NMO:${RTAG}
+
+if [[ $OPT == "kind" ]]; then
+	kind load docker-image ${LOCAL_REGISTRY}/${NMO}:${RTAG}
+	kind load docker-image ${LOCAL_REGISTRY}/${NMOREG}:${RTAG}
+fi
+
 }
 
 install_from_deployment() {
     local OFILE=tmp.yml
 
-    docker images
-
-    docker_tag $REG/$NMO $LOCAL_REGISTRY/$NMO
-
-    make_deployment_def	 $LOCAL_REGISTRY/$NMO  "${OFILE}"
+    make_deployment_def	"$LOCAL_REGISTRY/$NMO:$RTAG"  "${OFILE}"
 
     kubectl create -f ${OFILE} --allow-missing-template-keys=true
 
     kubectl wait --for=condition=available --timeout=600s deployment/node-maintenance-operator -n node-maintenance-operator
 
     kubectl describe pod -n node-maintenance-operator  | grep Image
-
 }
 
 uninstall_from_deployment() {
     local OFILE=tmp.yml
 
-    make_deployment_def	 $LOCAL_REGISTRY/$NMO  "${OFILE}"
+    make_deployment_def	"$LOCAL_REGISTRY/$NMO:$RTAG"  "${OFILE}"
 
     kubectl delete -f ${OFILE}
 }
@@ -182,24 +190,17 @@ make_local_olm_registry() {
     cp ${manifestDir}//node-maintenance-operator.package.yaml ${installDir}/
     cp ${manifestDir}/${currentCSV}/* tmp-manifest-install/node-maintenance-operator/${currentCSV}/
 
-    sed -i -e 's#'${REG}'/node-maintenance-operator:'${currentCSV}'#localhost:5000/node-maintenance-operator:latest#' ${installDir}/${currentCSV}/node-maintenance-operator.${currentCSV}.clusterserviceversion.yaml
+    sed -i -e 's#quay.io/kubevirt/node-maintenance-operator:'${currentCSV}'#'${LOCAL_REGISTRY}/${NMO}:${RTAG}'#' ${installDir}/${currentCSV}/node-maintenance-operator.${currentCSV}.clusterserviceversion.yaml
 
-    sed -i -e 's#'${REG}'/node-maintenance-operator#localhost:5000/node-maintenance-operator#' ${installDir}/${currentCSV}/node-maintenance-operator.${currentCSV}.clusterserviceversion.yaml
+    sed -i -e 's#quay.io/kubevirt/node-maintenance-operator#'${LOCAL_REGISTRY}/${NMO}'#' ${installDir}/${currentCSV}/node-maintenance-operator.${currentCSV}.clusterserviceversion.yaml
 
-    docker build -f build/Dockerfile.registry.test -t ${LOCAL_REGISTRY}/${NMOREG}:latest  .
+  docker build -f build/Dockerfile.registry.test -t ${LOCAL_REGISTRY}/${NMOREG}:${RTAG}  .
 
     #rm -rf tmp-manifest-install
 
 }
 
 install_with_olm() {
-
-    docker_tag $REG/$NMO $LOCAL_REGISTRY/$NMO
-
-if [[ $OPT == "kind" ]]; then
-	kind load docker-image ${LOCAL_REGISTRY}/${NMO}:latest
-	kind load docker-image ${LOCAL_REGISTRY}/${NMOREG}:latest
-fi
 
 local nspace="$1"
 
@@ -301,9 +302,11 @@ EOF
   echo "${logs_one}"
   echo "${logs_two}"
 
- has_reconcile_one=$(echo "${logs_one}" | grep Reconcile | wc -l)
+ set +e
+ has_reconcile_one=$(echo "${logs_one}" | grep -c Reconcile)
 
- has_reconcile_two=$(echo "${logs_two}" | grep Reconcile | wc -l)
+ has_reconcile_two=$(echo "${logs_two}" | grep -c Reconcile)
+ set -e
 
   if [[ ${has_reconcile_one} != "0" ]] && [[ ${has_reconcile_two} != "0" ]]; then
       echo "error: both controller instances reconciled"
@@ -322,8 +325,9 @@ fi
 setup_src
 setup_utils
 start_cluster
-install_from_deployment
 make_local_olm_registry
+prepare_images
+install_from_deployment
 install_with_olm "node-maintenance-operator2"
 create_cr_object "node-maintenance-operator" "node-maintenance-operator2"
 
