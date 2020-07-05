@@ -1,4 +1,4 @@
-FROM quay.io/openshift/origin-must-gather:4.3.0 as builder
+FROM quay.io/openshift/origin-must-gather:4.6.0 as builder
 
 FROM centos:7
 
