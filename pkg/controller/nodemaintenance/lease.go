@@ -110,7 +110,7 @@ func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime time.Time) (boo
 		return true, lease.Spec.AcquireTime == nil
 	}
 
-	deadline = deadline.Add(2 * drainerTimeoutInSeconds * time.Second)
+	deadline = deadline.Add(2 * drainerTimeout)
 
 	// about to expire, update the lease but no the acquire time (second rvalue)
 	return dueTime.Before(deadline), false

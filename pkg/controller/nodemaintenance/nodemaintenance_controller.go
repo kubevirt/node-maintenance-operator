@@ -23,12 +23,12 @@ import (
 
 const (
 	MaxAllowedErrorToUpdateOwnedLease = 3
-    drainerTimeoutInSeconds = 30
+    drainerTimeout = 30 * time.Second
 	LeaseDurationInSeconds = 3600
 	LeaseHolderIdentity    = "node-maintenance"
 	LeaseNamespaceDefault  = "node-maintenance-operator"
 	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
-	WaitOnDrainErrorInSeconds = 5
+	WaitOnDrainError = 5 * time.Second
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -92,7 +92,7 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	// TODO - add logical value or attach from the maintancene CR
 	//The length of time to wait before giving up, zero means infinite
-	r.drainer.Timeout = drainerTimeoutInSeconds * time.Second
+	r.drainer.Timeout = drainerTimeout
 
 	// TODO - consider pod selectors (only for VMIs + others ?)
 	//Label selector to filter pods on the node
@@ -163,7 +163,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		if !ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) {
 			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer)
 			if err := r.client.Update(context.TODO(), instance); err != nil {
-				return r.reconcileAndError(instance, err)
+				return r.onReconcileError(instance, err)
 			}
 		}
 	} else {
@@ -175,14 +175,14 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName); err != nil {
 				reqLogger.Infof("error stopping node maintenance: %v", err)
 				if errors.IsNotFound(err) == false {
-					return r.reconcileAndError(instance, err)
+					return r.onReconcileError(instance, err)
 				}
 			}
 
 			// Remove our finalizer from the list and update it.
 			instance.ObjectMeta.Finalizers = RemoveString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer)
 			if err := r.client.Update(context.Background(), instance); err != nil {
-				return r.reconcileAndError(instance, err)
+				return r.onReconcileError(instance, err)
 			}
 		}
 		return reconcile.Result{}, nil
@@ -191,7 +191,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	err = r.initMaintenanceStatus(instance)
 	if err != nil {
 		reqLogger.Errorf("Failed to update NodeMaintenance with \"Running\" status. Error: %v", err)
-		return r.reconcileAndError(instance, err)
+		return r.onReconcileError(instance, err)
 	}
 
 	nodeName := instance.Spec.NodeName
@@ -199,7 +199,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	reqLogger.Infof("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason)
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
-		return r.reconcileAndError(instance, err)
+		return r.onReconcileError(instance, err)
 	}
 
 	setOwnerRefToNode(instance, node)
@@ -213,15 +213,15 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Uncordon the node
 			err = r.stopNodeMaintenanceImp(node)
 			if err != nil {
-				return r.reconcileAndError(instance,fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
+				return r.onReconcileError(instance,fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
 			}
 			instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
 		}
-		return r.reconcileAndError(instance,fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
+		return r.onReconcileError(instance,fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
 	}
 	if err != nil {
 		instance.Status.ErrorOnLeaseCount = 0
-		return r.reconcileAndError(instance, err)
+		return r.onReconcileError(instance, err)
 	}  else {
 		if instance.Status.Phase != nodemaintenanceapi.MaintenanceRunning || instance.Status.ErrorOnLeaseCount != 0 {
 			instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
@@ -232,19 +232,19 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
 	if err != nil {
-		return r.reconcileAndError(instance, err)
+		return r.onReconcileError(instance, err)
 	}
 
 	if err = drain.RunCordonOrUncordon(r.drainer, node, true); err != nil {
-		return r.reconcileAndError(instance, err)
+		return r.onReconcileError(instance, err)
 	}
 
 	reqLogger.Infof("Evict all Pods from Node: %s", nodeName)
 
 	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
 		reqLogger.Infof("not all pods evicted: %s : %v", nodeName, err)
-		waitOnReconcile := time.Duration(WaitOnDrainErrorInSeconds * time.Second)
-		return r.reconcileAndErrorExt(instance, err, &waitOnReconcile)
+		waitOnReconcile := WaitOnDrainError
+		return r.onReconcileErrorWithRequeue(instance, err, &waitOnReconcile)
 	}
 	reqLogger.Infof("All pods evicted: %s", nodeName)
 
@@ -253,7 +253,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	err = r.client.Status().Update(context.TODO(), instance)
 	if err != nil {
 		reqLogger.Errorf("Failed to update NodeMaintenance with \"Succeeded\" status. Error: %v", err)
-		return r.reconcileAndError(instance, err)
+		return r.onReconcileError(instance, err)
 	}
 	reqLogger.Infof("Reconcile completed for Node: %s", nodeName)
 
@@ -386,7 +386,7 @@ func (r *ReconcileNodeMaintenance) initMaintenanceStatus(nm *nodemaintenanceapi.
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) reconcileAndErrorExt(nm *nodemaintenanceapi.NodeMaintenance, err error, duration *time.Duration) (reconcile.Result, error) {
+func (r *ReconcileNodeMaintenance) onReconcileErrorWithRequeue(nm *nodemaintenanceapi.NodeMaintenance, err error, duration *time.Duration) (reconcile.Result, error) {
 	nm.Status.LastError = err.Error()
 
 	if nm.Spec.NodeName != "" {
@@ -406,7 +406,7 @@ func (r *ReconcileNodeMaintenance) reconcileAndErrorExt(nm *nodemaintenanceapi.N
 	return reconcile.Result{}, err
 }
 
-func (r *ReconcileNodeMaintenance) reconcileAndError(nm *nodemaintenanceapi.NodeMaintenance, err error) (reconcile.Result, error) {
-	return r.reconcileAndErrorExt(nm, err, nil)
+func (r *ReconcileNodeMaintenance) onReconcileError(nm *nodemaintenanceapi.NodeMaintenance, err error) (reconcile.Result, error) {
+	return r.onReconcileErrorWithRequeue(nm, err, nil)
 
 }
