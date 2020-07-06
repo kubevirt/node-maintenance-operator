@@ -1,6 +1,6 @@
-FROM quay.io/openshift/origin-must-gather:4.6.0 as builder
+FROM quay.io/openshift/origin-must-gather:4.6.0 AS builder
 
-FROM centos:7
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 COPY --from=builder /usr/bin/oc /usr/bin/oc
 COPY --from=builder /usr/bin/sed /usr/bin/sed
