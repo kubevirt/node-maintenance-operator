@@ -6,6 +6,8 @@ COPY --from=builder /usr/bin/oc /usr/bin/oc
 COPY --from=builder /usr/bin/sed /usr/bin/sed
 COPY --from=builder /usr/bin/awk /usr/bin/awk
 COPY --from=builder /usr/bin/grep /usr/bin/grep
+COPY --from=builder /usr/bin/rsync /usr/bin/rsync
+COPY --from=builder /usr/bin/tar /usr/bin/tar
 
 # Save original gather script
 COPY --from=builder /usr/bin/gather /usr/bin/gather_original
