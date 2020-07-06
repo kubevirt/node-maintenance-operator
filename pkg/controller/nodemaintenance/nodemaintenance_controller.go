@@ -7,18 +7,18 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/api/errors"
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
+	"k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/drain"
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"kubevirt.io/node-maintenance-operator/pkg/drain"
 )
 
 const (
@@ -102,7 +102,7 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 		return err
 	}
 	r.drainer.Client = cs
-	r.drainer.DryRun = false
+	r.drainer.DryRunStrategy = util.DryRunNone
 
 	r.drainer.Out = writer{klog.Info}
 	r.drainer.ErrOut = writer{klog.Error}
@@ -344,7 +344,7 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string
 }
 
 func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, error) {
-	node, err := r.drainer.Client.CoreV1().Nodes().Get( nodeName, metav1.GetOptions{})
+	node, err := r.drainer.Client.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		log.Errorf("Node: %s cannot be found. Error: %v", nodeName, err)
 		return nil, err
@@ -367,8 +367,11 @@ func (r *ReconcileNodeMaintenance) initMaintenanceStatus(nm *nodemaintenanceapi.
 		}
 		nm.Status.EvictionPods = len(nm.Status.PendingPods)
 
-		podlist, err := r.drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{
-			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nm.Spec.NodeName}).String()})
+		podlist, err := r.drainer.Client.CoreV1().Pods(metav1.NamespaceAll).List(
+			context.Background(),
+			metav1.ListOptions{
+				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nm.Spec.NodeName}).String(),
+			})
 		if err != nil {
 			return err
 		}
