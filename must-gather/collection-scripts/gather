@@ -3,6 +3,8 @@
 CMD=/usr/bin/oc
 STYLE=json
 
+COLLECTION_PATH="/must-gather"
+
 show_header() {
 	local title="$1"
 
@@ -11,10 +13,15 @@ show_header() {
 }
 
 run_command() {
-	local cmd="$1"
+    local cmd="$1"
+    local ofile="$2"
 
 	echo "Command: $cmd"
-	$cmd
+    if [[ $ofile == "" ]]; then
+        $cmd
+    else
+        $cmd | tee $ofile
+    fi
 	echo ""
 }
 
@@ -31,13 +38,17 @@ show_operator_info() {
 	show_header "${title} crd's"
 
 	run_command "${CMD} get crds ${crd_name} -o wide"
-	run_command "${CMD} get crds ${crd_name} -o ${STYLE}"
+    run_command "${CMD} get crds ${crd_name} -o ${STYLE}" "${COLLECTION_PATH}/crd.yaml"
+
+    show_header "${title} active cr objects"
+
+    run_command "${CMD} oc get NodeMaintenance -o ${STYLE}" "${COLLECTION_PATH}/cr_objects.txt"
 
 	namespace=$(get_namespace "${operator_short_name}")
 	if [[ $namespace != "" ]]; then
 
 		show_header "${title} pod deployment. namespace ${namespace}"
-		run_command "${CMD} describe deployment ${operator_short_name} -n ${namespace}"
+		run_command "${CMD} describe deployment ${operator_short_name} -n ${namespace}" "${COLLECTION_PATH}/deployment.txt"
 
 		show_header "${title} pod logs"
 
@@ -50,7 +61,7 @@ show_operator_info() {
 		show_header "$title pod logs"
 		while read -r line; do
 			pod_name=$(echo "$line" | /usr/bin/awk '{ print $1 }')
-			run_command "${CMD} logs ${pod_name} -n ${namespace}"
+			run_command "${CMD} logs ${pod_name} -n ${namespace}" "${COLLECTION_PATH}/${pod_name}.log"
 		done <<< $(echo "${PODS}" | /usr/bin/sed '1d')
 	fi
 }
