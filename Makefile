@@ -1,9 +1,9 @@
 all: fmt check
 
-OPERATOR_SDK_VERSION = v0.17.0
+OPERATOR_SDK_VERSION = v0.18.2
 IMAGE_REGISTRY ?= quay.io/kubevirt
 IMAGE_TAG ?= latest
-CURRENT_IMAGE_TAG=v0.6.0
+OPERATOR_VERSION=v0.7.0
 OPERATOR_IMAGE ?= node-maintenance-operator
 REGISTRY_IMAGE ?= node-maintenance-operator-registry
 TARGETCOVERAGE=60
@@ -95,7 +95,7 @@ gen-operator-sdk:
 	./hack/gen-operator-sdk.sh ${OPERATOR_SDK_VERSION}
 
 verify-manifests: csv-generator
-	./build/verify-manifests.sh ${CURRENT_IMAGE_TAG}
+	./build/verify-manifests.sh ${OPERATOR_VERSION}
 
 manifests: csv-generator
 	./build/make-manifests.sh ${IMAGE_TAG}
