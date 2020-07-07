@@ -12,12 +12,13 @@ if [ "${TAG}" == "latest" ]; then
 fi
 
 VERSION=${TAG#v}
+OPERATOR="${IMAGE_REGISTRY}/${OPERATOR_IMAGE}:${VERSION}"
 
 rm -rf ${OUT_DIR}
 mkdir -p ${OUT_DIR}
 
 cp deploy/operator.yaml ${OUT_DIR}/operator.yaml
-sed -i "s/<IMAGE_VERSION>/${VERSION}/g" ${OUT_DIR}/operator.yaml
+sed -i "s/REPLACE_IMAGE/${OPERATOR}/g" ${OUT_DIR}/operator.yaml
 
-cp manifests/node-maintenance-operator/${TAG}/* ${OUT_DIR}/
+cp manifests/node-maintenance-operator/${TAG}/manifests/* ${OUT_DIR}/
 

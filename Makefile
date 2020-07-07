@@ -1,11 +1,31 @@
 all: fmt check
 
 OPERATOR_SDK_VERSION = v0.18.2
+export OPERATOR_SDK_VERSION
+OPM_VERSION = v1.12.7
+export OPM_VERSION
+
+# The last released version (without v)
+OPERATOR_VERSION_LAST=0.6.0
+export OPERATOR_VERSION_LAST
+# The version of the next release (without v)
+OPERATOR_VERSION_NEXT=0.7.0
+export OPERATOR_VERSION_NEXT
+# The OLM channel this operator should be default of
+OLM_CHANNEL=4.6
+export OLM_CHANNEL
+
 IMAGE_REGISTRY ?= quay.io/kubevirt
+export IMAGE_REGISTRY
 IMAGE_TAG ?= latest
-OPERATOR_VERSION=v0.7.0
+export IMAGE_TAG
 OPERATOR_IMAGE ?= node-maintenance-operator
-REGISTRY_IMAGE ?= node-maintenance-operator-registry
+export OPERATOR_IMAGE
+BUNDLE_IMAGE ?= node-maintenance-operator-bundle
+export BUNDLE_IMAGE
+INDEX_IMAGE ?= node-maintenance-operator-index
+export INDEX_IMAGE
+
 TARGETCOVERAGE=60
 
 KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
@@ -63,7 +83,7 @@ test:
 	./hack/coverage.sh $(GINKGO) $(TARGETCOVERAGE)
 
 gen-k8s: $(apis_sources)
-	./hack/gen-k8s.sh generate k8s
+	./hack/gen-k8s.sh
 
 gen-k8s-check: $(apis_sources)
 	./hack/verify-codegen.sh
@@ -71,37 +91,44 @@ gen-k8s-check: $(apis_sources)
 gen-crds: $(apis_sources)
 	./hack/gen-crds.sh
 
-container-build: container-build-operator container-build-registry
+container-build: container-build-operator container-build-bundle container-build-index
 
 container-build-operator: csv-generator
 	docker build -f build/Dockerfile -t $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG) .
 
-container-build-registry:
-	docker build -f build/Dockerfile.registry -t $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG) .
+container-build-bundle:
+	docker build -f build/bundle.Dockerfile -t $(IMAGE_REGISTRY)/$(BUNDLE_IMAGE):$(IMAGE_TAG) .
 
-test-courier:
-	echo "bundle dir: $(BUNDLE_DIR_VERSION)"
-	export BUNDLE_DIR_VERSION; docker build -f build/Dockerfile.test-courier -t test-courier . --build-arg dir=$(BUNDLE_DIR_VERSION)
+container-generate-index:
+	./hack/gen-index.sh
 
-container-push: container-push-operator container-push-registry
+container-build-index: container-generate-index
+	docker build -f build/index.Dockerfile -t $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG) .
+
+container-push: container-push-operator container-push-bundle container-push-index
 
 container-push-operator:
 	docker push $(IMAGE_REGISTRY)/$(OPERATOR_IMAGE):$(IMAGE_TAG)
 
-container-push-registry:
-	docker push $(IMAGE_REGISTRY)/$(REGISTRY_IMAGE):$(IMAGE_TAG)
+container-push-bundle:
+	docker push $(IMAGE_REGISTRY)/$(BUNDLE_IMAGE):$(IMAGE_TAG)
+
+container-push-index:
+	docker push $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG)
 
 csv-generator: gen-operator-sdk
-	./build/make-csv-generator.sh
+	./hack/gen-bundle.sh
 
 gen-operator-sdk:
-	./hack/gen-operator-sdk.sh ${OPERATOR_SDK_VERSION}
+	./hack/gen-operator-sdk.sh
 
-verify-manifests: csv-generator
-	./build/verify-manifests.sh ${OPERATOR_VERSION}
+gen-opm:
+	./hack/gen-opm.sh
+
+verify-manifests:
+	./hack/verify-manifests.sh
 
 manifests: csv-generator
-	./build/make-manifests.sh ${IMAGE_TAG}
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:

@@ -2,22 +2,32 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: "[\n  {\n    \"apiVersion\": \"nodemaintenance.kubevirt.io/v1beta1\"\
-      ,\n    \"kind\": \"NodeMaintenance\",\n    \"metadata\": {\n      \"name\":\
-      \ \"nodemaintenance-xyz\"\n    },\n    \"spec\": {\n      \"nodeName\": \"node02\"\
-      ,\n      \"reason\": \"Test node maintenance\"\n    }\n  }\n]"
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "nodemaintenance.kubevirt.io/v1beta1",
+          "kind": "NodeMaintenance",
+          "metadata": {
+            "name": "nodemaintenance-xyz"
+          },
+          "spec": {
+            "nodeName": "node02",
+            "reason": "Test node maintenance"
+          }
+        }
+      ]
     capabilities: Basic Install
     categories: OpenShift Optional
     containerImage: quay.io/kubevirt/node-maintenance-operator
     description: Node-maintenance-operator maintains nodes in cluster
     repository: https://github.com/kubevirt/node-maintenance-operator
-  name: node-maintenance-operator.vPLACEHOLDER_CSV_VERSION
-  namespace: node-maintenance-operator
+  name: node-maintenance-operator.v0.7.0
+  namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: NodeMaintenance is the Schema for the nodemaintenances API kubebuilder:subresource:status
+    - description: NodeMaintenance is the Schema for the nodemaintenances API
       kind: NodeMaintenance
       name: nodemaintenances.nodemaintenance.kubevirt.io
       version: v1beta1
@@ -31,7 +41,7 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
-          - ''
+          - ""
           resources:
           - services
           - endpoints
@@ -52,7 +62,7 @@ spec:
           - watch
           - create
         - apiGroups:
-          - ''
+          - ""
           resources:
           - nodes
           verbs:
@@ -62,7 +72,7 @@ spec:
           - patch
           - watch
         - apiGroups:
-          - ''
+          - ""
           resources:
           - pods
           verbs:
@@ -70,13 +80,13 @@ spec:
           - list
           - watch
         - apiGroups:
-          - ''
+          - ""
           resources:
           - pods/eviction
           verbs:
           - create
         - apiGroups:
-          - ''
+          - ""
           resources:
           - namespaces
           verbs:
@@ -142,7 +152,7 @@ spec:
                       fieldPath: metadata.name
                 - name: OPERATOR_NAME
                   value: node-maintenance-operator
-                image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
+                image: quay.io/kubevirt/node-maintenance-operator:latest
                 imagePullPolicy: Always
                 name: node-maintenance-operator
                 resources: {}
@@ -182,4 +192,4 @@ spec:
     matchLabels:
       alm-owner-kubevirt: nodemaintenanceoperator
       operated-by: nodemaintenanceoperator
-  version: PLACEHOLDER_CSV_VERSION
+  version: 0.7.0
