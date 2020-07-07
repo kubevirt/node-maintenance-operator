@@ -31,7 +31,11 @@ cp "${PACKAGE_TEMPLATE}" "${WORKING_DIR}/"
 ${OPERATOR_SDK} generate csv --csv-version "${OPERATOR_VERSION_NEXT}" --update-crds
 
 # Replace operator image
-OPERATOR="${IMAGE_REGISTRY}/${OPERATOR_IMAGE}:${IMAGE_TAG}"
+# OVERRIDE_MANIFEST_REGISTRY is set if we need another registry during runtime in the manifest than during build time when pushing images
+# That is needed e.g. for KubeVirtCI: at build time we push to a local registry at localhost:<some_port>, during runtime we need to pull
+# from registry:5000
+REGISTRY="${OVERRIDE_MANIFEST_REGISTRY:-$IMAGE_REGISTRY}"
+OPERATOR="${REGISTRY}/${OPERATOR_IMAGE}:${IMAGE_TAG}"
 sed -i "s|REPLACE_IMAGE|${OPERATOR}|g" "${WORKING_CSV}"
 
 # Remove replace directive

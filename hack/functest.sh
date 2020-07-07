@@ -26,11 +26,6 @@ function new_test() {
 
 new_test 'Test e2e Node Mainenance'
 
-echo "***globalMan***"
-cat _out/nodemaintenance_crd.yaml
-
-echo "***namespacedMan***"
-cat _out/namespace-init.yaml
 # Run tests
 
 find . -name .kubeconfig || true
