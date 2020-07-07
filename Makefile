@@ -68,6 +68,9 @@ gen-k8s: $(apis_sources)
 gen-k8s-check: $(apis_sources)
 	./hack/verify-codegen.sh
 
+gen-crds: $(apis_sources)
+	./hack/gen-crds.sh
+
 container-build: container-build-operator container-build-registry
 
 container-build-operator: csv-generator

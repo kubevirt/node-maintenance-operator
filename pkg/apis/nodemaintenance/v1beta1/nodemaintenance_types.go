@@ -32,7 +32,8 @@ type NodeMaintenanceSpec struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // NodeMaintenance is the Schema for the nodemaintenances API
-// kubebuilder:subresource:status
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:path=nodemaintenances,scope=Cluster
 // +k8s:openapi-gen=true
 type NodeMaintenance struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -53,7 +54,7 @@ type NodeMaintenanceList struct {
 
 // NodeMaintenanceStatus defines the observed state of NodeMaintenance
 type NodeMaintenanceStatus struct {
-	// Phase is the represtation of the maintenanace progress (Running,Succeeded)
+	// Phase is the represtation of the maintenanace progress (Running,Succeeded,Failed)
 	Phase MaintenancePhase `json:"phase,omitempty"`
 	// LastError represents the latest error if any in the latest reconciliation
 	LastError string `json:"lastError,omitempty"`
