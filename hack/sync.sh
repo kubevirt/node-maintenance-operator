@@ -14,6 +14,8 @@ if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
     )"
 fi
 
+export KUBECONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
+
 source $KUBEVIRTCI_PATH/hack/common.sh
 
 OLM_NS=openshift-marketplace

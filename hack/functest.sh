@@ -27,42 +27,7 @@ function new_test() {
 new_test 'Test e2e Node Mainenance'
 
 # Run tests
-
-find . -name .kubeconfig || true
-KUBE_CONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
-
-TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test ./test/e2e/... -root=$(pwd) -kubeconfig=${KUBE_CONFIG} -globalMan _out/nodemaintenance_crd.yaml --namespacedMan _out/namespace-init.yaml -singleNamespace
+export KUBECONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
+TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test ./test/e2e/...
 
 echo "E2e tests passed"
-
-echo "check validation of openaAPIV3Schema"
-
-cleanup() {
-		$KUBECTL_CMD delete -f _out/namespace-init.yaml
-
-		$KUBECTL_CMD delete -f _out/nodemaintenance_crd.yaml
-}
-trap "cleanup" EXIT SIGINT
-
-$KUBECTL_CMD create -f _out/namespace-init.yaml
-
-$KUBECTL_CMD create -f _out/nodemaintenance_crd.yaml
-
-echo "validate CRD"
-
-VALIDATE_CRD=$($KUBECTL_CMD get -o yaml crd nodemaintenances.nodemaintenance.kubevirt.io || true)
-if [[ $VALIDATE_CRD == "" ]]; then
-	echo "can't validate CRD, check if the CRD is installed"
-	exit 1
-fi
-
-VALIDATION_ERRORS=$(echo "$VALIDATE_CRD" | grep -c "spec.validation.openAPIV3Schema" || true)
-
-if [[ $VALIDATION_ERRORS != "0" ]]; then
-	echo "validation of CRD failed"
-	echo "Validation errors:"
-	echo "$VALIDATION_ERRORS"
-	exit 1
-fi
-
-echo "check validation of openaAPIV3Schema passed"
