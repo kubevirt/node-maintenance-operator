@@ -3,6 +3,7 @@
 
 set -exuo pipefail
 
+CI=${CI:-"false"}
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 provision_dir="$1"
 
@@ -18,10 +19,17 @@ function cleanup {
   export KUBEVIRTCI_PROVISION_CHECK=1
   export KUBEVIRT_PROVIDER="k8s-${provision_dir}"
   export KUBEVIRT_NUM_NODES=2
+  export KUBEVIRT_NUM_SECONDARY_NICS=2
   trap cleanup EXIT ERR SIGINT SIGTERM SIGQUIT
   bash -x ./cluster-up/up.sh
-  ${ksh} wait --for=condition=Ready pod --all
-  ${ksh} wait --for=condition=Ready pod -n kube-system --all
+  ${ksh} wait --for=condition=Ready pod --timeout=200s --all
+  ${ksh} wait --for=condition=Ready pod --timeout=200s -n kube-system --all
   ${ksh} get nodes
   ${ksh} get pods -A
+
+  # Run conformance test only at CI and if the provider has them activated
+  conformance_config=$DIR/${provision_dir}/conformance.json
+  if [ "${CI}" == "true" -a -f $conformance_config ]; then
+    hack/conformance.sh $conformance_config
+  fi
 )
