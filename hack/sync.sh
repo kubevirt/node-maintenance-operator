@@ -30,7 +30,7 @@ if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
   set +e
   ${OPERATOR_SDK} olm status
   if [[ $? != 0 ]] ; then
-    ${OPERATOR_SDK} olm install
+    ${OPERATOR_SDK} olm install --verbose --timeout 5m
     if [[ $? != 0 ]] ; then
       echo "Failed to install OLM!"
       exit 1
@@ -52,7 +52,7 @@ fi
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
 
     registry_port=$(docker ps | grep -Po '\d+(?=->5000)')
-    registry_ip=$(docker ps | grep dnsmasq | awk '{ print $1 }' | xargs docker inspect | grep registry | gawk '{ match($0, /:([0-9.]+)"/, arr); print arr[1]}')
+    registry_ip=$(docker ps | grep dnsmasq | awk '{ print $1 }' | xargs docker inspect | grep registry | sed -r 's/^.*:([0-9.]+)".*$/\1/g')
     registry=localhost:$registry_port
 
     IMAGE_REGISTRY=$registry OVERRIDE_MANIFEST_REGISTRY="registry:5000" make csv-generator container-build container-push

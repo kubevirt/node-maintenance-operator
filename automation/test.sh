@@ -29,10 +29,10 @@ cd $GOPATH/src/kubevirt.io/node-maintenance-operator
 
 kubectl() { cluster/kubectl.sh "$@"; }
 
-export CLUSTER_PROVIDER=$TARGET
+export KUBEVIRT_PROVIDER=$TARGET
 
 # Make sure that the VM is properly shut down on exit
-trap '{ make cluster-down; }' EXIT SIGINT SIGTERM SIGSTOP
+trap '{ make cluster-down; }' EXIT SIGINT SIGTERM
 
 make cluster-down
 make cluster-up

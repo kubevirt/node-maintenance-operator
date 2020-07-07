@@ -2,23 +2,24 @@ package nodemaintenance
 
 import (
 	"context"
-	reflect "reflect"
+	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-
 	k8sfakeclient "k8s.io/client-go/kubernetes/fake"
-
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	nmoapis "kubevirt.io/node-maintenance-operator/pkg/apis"
+	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 )
 
 var _ = Describe("updateCondition", func() {
@@ -29,13 +30,14 @@ var _ = Describe("updateCondition", func() {
 	var cs *k8sfakeclient.Clientset
 	var req reconcile.Request
 
-	setFakeClients := func() {
+	setFakeClients := func(s *runtime.Scheme) {
 		var objs []runtime.Object
 
 		nm, objs = getCommonTestObjs()
 
 		clObjs := append(objs, nm)
-		cl = fake.NewFakeClient(clObjs...)
+
+		cl = fake.NewFakeClientWithScheme(s, clObjs...)
 		cs = k8sfakeclient.NewSimpleClientset(objs...)
 	}
 
@@ -54,13 +56,6 @@ var _ = Describe("updateCondition", func() {
 	}
 
 	reconcileMaintenance := func(nm *nodemaintenanceapi.NodeMaintenance) {
-		// Mock request to simulate Reconcile() being called on an event for a
-		// watched resource .
-		req = reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name: nm.ObjectMeta.Name,
-			},
-		}
 		r.Reconcile(req)
 	}
 
@@ -81,36 +76,42 @@ var _ = Describe("updateCondition", func() {
 	BeforeEach(func() {
 
 		s := scheme.Scheme
-		s.AddKnownTypes(nodemaintenanceapi.SchemeGroupVersion, nm)
+		nmoapis.AddToScheme(s)
 
-		setFakeClients()
-
-		//kubeSharedInformer := informers.NewSharedInformerFactoryWithOptions(cs, 2*time.Minute)
-		//fakePodInformer := kubeSharedInformer.Core().V1().Pods()
+		setFakeClients(s)
 
 		// Create a ReconcileNodeMaintenance object with the scheme and fake client
 		r = &ReconcileNodeMaintenance{client: cl, scheme: s}
 		initDrainer(r, &rest.Config{})
 		r.drainer.Client = cs
+
+		// Mock request to simulate Reconcile() being called on an event for a
+		// watched resource .
+		req = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name: nm.ObjectMeta.Name,
+			},
+		}
+
 	})
 
 	Context("Node maintenanace controller initialization test", func() {
 
 		It("Node maintenanace should be initialized properly", func() {
 			r.initMaintenanceStatus(nm)
-			maintanance := &nodemaintenanceapi.NodeMaintenance{}
-			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
+			maintenance := &nodemaintenanceapi.NodeMaintenance{}
+			err := cl.Get(context.TODO(), req.NamespacedName, maintenance)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(maintanance.Status.Phase).To(Equal(nodemaintenanceapi.MaintenanceRunning))
-			Expect(len(maintanance.Status.PendingPods)).To(Equal(2))
-			Expect(maintanance.Status.EvictionPods).To(Equal(2))
-			Expect(maintanance.Status.TotalPods).To(Equal(2))
+			Expect(maintenance.Status.Phase).To(Equal(nodemaintenanceapi.MaintenanceRunning))
+			Expect(len(maintenance.Status.PendingPods)).To(Equal(2))
+			Expect(maintenance.Status.EvictionPods).To(Equal(2))
+			Expect(maintenance.Status.TotalPods).To(Equal(2))
 		})
 		It("owner ref should be set properly", func() {
 			r.initMaintenanceStatus(nm)
 			maintanance := &nodemaintenanceapi.NodeMaintenance{}
 			err := cl.Get(context.TODO(), req.NamespacedName, maintanance)
-			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			node, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			setOwnerRefToNode(maintanance, node)
 			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
@@ -139,10 +140,10 @@ var _ = Describe("updateCondition", func() {
 
 	Context("Node maintenanace controller taint function test", func() {
 		It("should add kubevirt NoSchedule taint and keep other existing taints", func() {
-			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			node, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			AddOrRemoveTaint(cs, node, true)
-			taintedNode, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			taintedNode, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(taintExist(taintedNode, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(true))
 			Expect(taintExist(taintedNode, "node.kubernetes.io/unschedulable", corev1.TaintEffectNoSchedule)).To(Equal(true))
@@ -151,15 +152,15 @@ var _ = Describe("updateCondition", func() {
 		})
 
 		It("should remove kubevirt NoSchedule taint and keep other existing taints", func() {
-			node, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			node, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(taintExist(node, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(BeFalse())
 			AddOrRemoveTaint(cs, node, true)
-			taintedNode, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			taintedNode, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(taintExist(taintedNode, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(true))
 			AddOrRemoveTaint(cs, taintedNode, false)
-			unTaintedNode, err := cs.CoreV1().Nodes().Get("node01", metav1.GetOptions{})
+			unTaintedNode, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(taintExist(unTaintedNode, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(BeFalse())
 			Expect(taintExist(unTaintedNode, "test", corev1.TaintEffectPreferNoSchedule)).To(Equal(true))
@@ -176,14 +177,14 @@ var _ = Describe("updateCondition", func() {
 		It("should reconcile and cordon node", func() {
 			reconcileMaintenance(nm)
 			checkSuccesfulReconcile()
-			node, err := cs.CoreV1().Nodes().Get(nm.Spec.NodeName, metav1.GetOptions{})
+			node, err := cs.CoreV1().Nodes().Get(context.TODO(), nm.Spec.NodeName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(node.Spec.Unschedulable).To(Equal(true))
 		})
 		It("should reconcile and taint node", func() {
 			reconcileMaintenance(nm)
 			checkSuccesfulReconcile()
-			node, err := cs.CoreV1().Nodes().Get(nm.Spec.NodeName, metav1.GetOptions{})
+			node, err := cs.CoreV1().Nodes().Get(context.TODO(), nm.Spec.NodeName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(taintExist(node, "kubevirt.io/drain", corev1.TaintEffectNoSchedule)).To(Equal(true))
 		})

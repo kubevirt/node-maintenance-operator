@@ -14,7 +14,7 @@ if [[ ! -x $CURRENT_OPM ]]; then
   set -e
 fi
 
-DETECTED_OPM_VERSION=$($CURRENT_OPM version | gawk '{ match($0, /OpmVersion:"([0-9.]+)"/, arr); print "v" arr[1] }')
+DETECTED_OPM_VERSION=$($CURRENT_OPM version | sed -r 's/^.*OpmVersion:"([0-9.]+)".*$/\1/g')
 
 function check_need_upgrade {
 	local detectedversion="$2"
