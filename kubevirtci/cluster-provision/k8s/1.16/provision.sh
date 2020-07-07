@@ -12,7 +12,7 @@ swapoff -a
 sed -i '/ swap / s/^/#/' /etc/fstab
 
 # Disable spectre and meltdown patches
-sed -i 's/quiet"/quiet spectre_v2=off nopti hugepagesz=2M hugepages=64"/' /etc/default/grub
+echo 'GRUB_CMDLINE_LINUX="${GRUB_CMDLINE_LINUX} spectre_v2=off nopti hugepagesz=2M hugepages=64"' >> /etc/default/grub
 grub2-mkconfig -o /boot/grub2/grub.cfg
 
 systemctl stop firewalld || :
@@ -219,3 +219,8 @@ docker pull quay.io/k8scsi/csi-provisioner:v1.0.1
 docker pull quay.io/k8scsi/csi-snapshotter:v1.0.1
 docker pull quay.io/cephcsi/rbdplugin:v1.0.0
 docker pull quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
+
+# Create a properly labelled tmp directory for testing
+mkdir -p /provision/kubevirt.io/tests
+chcon -t container_file_t /provision/kubevirt.io/tests
+echo "tmpfs /provision/kubevirt.io/tests tmpfs rw,context=system_u:object_r:container_file_t:s0 0 1" >> /etc/fstab

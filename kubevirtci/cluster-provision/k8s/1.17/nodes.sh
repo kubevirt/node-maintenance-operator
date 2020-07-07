@@ -2,6 +2,17 @@
 
 set -ex
 
+# Ensure that hugepages are there
+# Hugetlb holds total huge page size in kB including both 2M or 1G hugepages
+HUGETLB=`cat /proc/meminfo | sed -e "s/ //g" | grep "Hugetlb:"`
+HUGEPAGE=(${HUGETLB//:/ })
+HUGEPAGE_PARTS=(${HUGEPAGE[-1]//kB/ })
+HUGEPAGE_TOTAL=${HUGEPAGE_PARTS[0]}
+if [[ $HUGEPAGE_TOTAL -lt $((64 * 2048)) ]]; then
+    echo "Minimum of 64 2M Hugepages is required"
+    exit 1
+fi
+
 timeout=30
 interval=5
 while ! hostnamectl  |grep Transient ; do
