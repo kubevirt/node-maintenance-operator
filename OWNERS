@@ -1,9 +1,24 @@
 filters:
   ".*":
     reviewers:
-      - yanirq
-      - ksimon1
-      - beekhof
+      - davidvossel
+      - rmohr
+      - slintes
+      - cynepco3hahue
+      - vladikr
+      - dhiller
+      - qinqon
+      - oshoval
+      - phoracek
+      - ormergi
+      - danielBelenky
     approvers:
-      - yanirq
-      - ksimon1
+      - davidvossel
+      - rmohr
+      - slintes
+      - cynepco3hahue
+      - vladikr
+      - dhiller
+      - qinqon
+      - phoracek
+      - danielBelenky

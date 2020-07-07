@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -e
+
+declare -A IMAGES
+IMAGES[gocli]="gocli@sha256:2ce75db868bbf2811395dfe4f73a68160d2ad700b1e08aeee6956b4943ceb237"
+if [ -z $KUBEVIRTCI_PROVISION_CHECK ]; then
+    IMAGES[k8s-fedora-1.17.0]="k8s-fedora-1.17.0@sha256:aebf67b8b1b499c721f4d98a7ab9542c680553a14cbc144d1fa701fe611f3c0d"
+    IMAGES[k8s-1.18]="k8s-1.18@sha256:91ea0c4e10a356fe315049e4e56801ce62b73b5b5d901e6e0eccbcc171070674"
+    IMAGES[k8s-1.17]="k8s-1.17@sha256:17fec14930cae00bda913cb690c46b9738dbc9b06b11b858a58369d7f9419688"
+    IMAGES[k8s-1.16]="k8s-1.16@sha256:1e153fb62c9a30ce6bc6ddc1af21bb28a56b780ec93ab15e113d729bf664469a"
+    IMAGES[k8s-1.15]="k8s-1.15@sha256:c58cb9d79968590f24e070bc2517088d44fa2f83ba73e989a7e0f690ad08460b"
+    IMAGES[k8s-1.14]="k8s-1.14@sha256:46e449b292dcb420f0944cac0a7a5c667c6f19bba2a4192737380e8e77f27ed0"
+    IMAGES[okd-4.1]="okd-4.1@sha256:e7e3a03bb144eb8c0be4dcd700592934856fb623d51a2b53871d69267ca51c86"
+    IMAGES[okd-4.2]="okd-4.2@sha256:a830064ca7bf5c5c2f15df180f816534e669a9a038fef4919116d61eb33e84c5"
+    IMAGES[okd-4.3]="okd-4.3@sha256:63abc3884002a615712dfac5f42785be864ea62006892bf8a086ccdbca8b3d38"
+    IMAGES[ocp-4.3]="ocp-4.3@sha256:d293f0bca338136ed136b08851de780d710c9e40e2a1d18e5a5595491dbdd1ea"
+    IMAGES[ocp-4.4]="ocp-4.4@sha256:42497f3a848c2847e3caeff6fbb7f4bb28ee48b692c0541ec7099392067a0387"
+fi
+export IMAGES
+
+IMAGE_SUFFIX=""
+if [[ $KUBEVIRT_PROVIDER =~ (ocp|okd).* ]]; then
+    IMAGE_SUFFIX="-provision"
+fi
+
+image="${IMAGES[$KUBEVIRT_PROVIDER]:-${KUBEVIRT_PROVIDER}${IMAGE_SUFFIX}:latest}"
+export image
