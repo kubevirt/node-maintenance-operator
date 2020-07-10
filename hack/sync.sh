@@ -19,7 +19,7 @@ export KUBECONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
 source $KUBEVIRTCI_PATH/hack/common.sh
 
 OLM_NS=openshift-marketplace
-TARGET_NS=openshift-cnv
+TARGET_NS=openshift-node-maintenance
 
 # Deploy OLM if needed
 if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
@@ -39,7 +39,7 @@ if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
   set -e
 
   OLM_NS=olm
-  TARGET_NS=node-maintenance-operator
+  TARGET_NS=node-maintenance
 fi
 
 registry="$IMAGE_REGISTRY"
