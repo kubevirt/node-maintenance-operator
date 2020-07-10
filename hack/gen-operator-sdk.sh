@@ -4,14 +4,14 @@ set -ex
 
 SELF=$( realpath $0 )
 BASEPATH=$( dirname $SELF )
-TARGET_SDK_VERSION="${1:-v0.16.0}"
+TARGET_SDK_VERSION="${1:-$OPERATOR_SDK_VERSION}"
 
 CURRENT_OPERATOR_SDK=${BASEPATH}/../operator-sdk
 
 if [[ ! -x $CURRENT_OPERATOR_SDK ]]; then
-    set +e
-	CURRENT_OPERATOR_SDK=$(which operator-sdk)
-	set -e
+  set +e
+  CURRENT_OPERATOR_SDK=$(which operator-sdk)
+  set -e
 fi
 
 DETECTED_SDK_VERSION=$($CURRENT_OPERATOR_SDK version  | awk '{ print $3 }' | sed 's/,$//')
@@ -53,3 +53,16 @@ if [[ $need_upgrade == "1" ]]; then
 
 fi
 
+# set OPERATOR_SDK var
+if [ -x "${BASEPATH}/../operator-sdk" ]; then
+  OPERATOR_SDK="${BASEPATH}/../operator-sdk"
+else
+  which operator-sdk &> /dev/null || {
+    echo "operator-sdk not found (see https://github.com/operator-framework/operator-sdk)"
+    exit 1
+  }
+  OPERATOR_SDK="operator-sdk"
+fi
+
+echo "operator-sdk version: "
+${OPERATOR_SDK} version

@@ -1,28 +1,28 @@
 package e2e
 
 import (
-	goctx "context"
+	"bytes"
+	"context"
 	"fmt"
+	"io"
+	"os"
 	"reflect"
 	"testing"
 	"time"
-	apis "kubevirt.io/node-maintenance-operator/pkg/apis"
-	operator "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
-	nmo "kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
-	coordv1beta1 "k8s.io/api/coordination/v1beta1"
-	"bytes"
-	"io"
-	framework "github.com/operator-framework/operator-sdk/pkg/test"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"github.com/operator-framework/operator-sdk/pkg/test/e2eutil"
+
 	appsv1 "k8s.io/api/apps/v1"
+	coordv1beta1 "k8s.io/api/coordination/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operator "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	nmo "kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 )
 
 var (
@@ -35,9 +35,9 @@ var (
 	testIterations		 = 4
 )
 
-func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error) {
+func getCurrentOperatorPods() (*corev1.Pod, error) {
 
-	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
 	if err != nil {
 		return nil, err
 	}
@@ -49,9 +49,9 @@ func getCurrentOperatorPods(KubeClient kubernetes.Interface) (*corev1.Pod, error
 	return &pods.Items[0], nil
 }
 
-func showDeploymentStatus(t *testing.T, f *framework.Framework, callerError error) {
+func showDeploymentStatus(t *testing.T, callerError error) {
 
-	pod, err := getCurrentOperatorPods(f.KubeClient)
+	pod, err := getCurrentOperatorPods()
 	if err != nil {
 		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
 		return
@@ -59,8 +59,8 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework, callerError erro
 	podName := pod.ObjectMeta.Name
 	podLogOpts := corev1.PodLogOptions{}
 
-	req := f.KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
-	podLogs, err := req.Stream()
+	req := KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
+	podLogs, err := req.Stream(context.Background())
 	if err != nil {
 		t.Errorf("showDeployment: can't get log stream error=%v", err)
 	}
@@ -81,16 +81,6 @@ func showDeploymentStatus(t *testing.T, f *framework.Framework, callerError erro
 }
 
 func TestNodeMainenance(t *testing.T) {
-	nodeMainenanceList := &operator.NodeMaintenanceList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "NodeMaintenance",
-			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
-		},
-	}
-	err := framework.AddToFrameworkScheme(apis.AddToScheme, nodeMainenanceList)
-	if err != nil {
-		t.Fatalf("failed to add custom resource scheme to framework: %v", err)
-	}
 	// run subtests
 	t.Run("NodeMaintenance-group", func(t *testing.T) {
 		t.Run("Cluster", ClusterTest)
@@ -98,35 +88,15 @@ func TestNodeMainenance(t *testing.T) {
 }
 
 func ClusterTest(t *testing.T) {
-	//t.Parallel()
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup()
-	err := ctx.InitializeClusterResources(&framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
-	if err != nil {
-		t.Fatalf("failed to initialize cluster resources: %v", err)
-	}
-	t.Log("Initialized cluster resources")
-	namespace, err := ctx.GetNamespace()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// get global framework variables
-	f := framework.Global
-	// wait for node- maintanence-operator to be ready
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, "node-maintenance-operator", 1, retryInterval, timeout)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err = nodeMaintenanceTest(t, f, ctx); err != nil {
+	if err := nodeMaintenanceTest(t); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func  checkValidLease(t *testing.T, f *framework.Framework, nodeName string) error {
+func  checkValidLease(t *testing.T, nodeName string) error {
 	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
-	err := f.Client.Get(goctx.TODO(), nName, lease)
+	err := Client.Get(context.TODO(), nName, lease)
 	if err != nil {
 		return fmt.Errorf("can't get lease node %s : %v", nodeName, err)
 	}
@@ -156,10 +126,10 @@ func  checkValidLease(t *testing.T, f *framework.Framework, nodeName string) err
 	return nil
 }
 
-func  checkInvalidLease(t *testing.T, f *framework.Framework, nodeName string) error {
+func  checkInvalidLease(t *testing.T, nodeName string) error {
 	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
-	err := f.Client.Get(goctx.TODO(), nName, lease)
+	err := Client.Get(context.TODO(), nName, lease)
 	if err != nil {
 		return fmt.Errorf("can't get lease node %s : %v", nodeName, err)
 	}
@@ -180,18 +150,18 @@ func  checkInvalidLease(t *testing.T, f *framework.Framework, nodeName string) e
 	return nil
 }
 
-func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
-	namespace, err := ctx.GetNamespace()
-	if err != nil {
-		return fmt.Errorf("could not get namespace: %v", err)
+func  enterAndExitMaintenanceMode(t *testing.T) error {
+	namespace := os.Getenv("TEST_NAMESPACE")
+	if len(namespace) == 0 {
+		return fmt.Errorf("could not get namespace")
 	}
 
-	err = createSimpleDeployment(t, f, ctx, namespace)
+	err := createSimpleDeployment(t, namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	nodeName, err := getCurrentDeploymentHostName(t, f)
+	nodeName, err := getCurrentDeploymentHostName(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +183,7 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 	}
 
 	// Create node maintenance CR
-	err = f.Client.Create(goctx.TODO(), nodeMaintenance, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
+	err = Client.Create(context.TODO(), nodeMaintenance)
 	if err != nil {
 		t.Fatalf("Can't create CRD: %v", err)
 	}
@@ -221,7 +191,7 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 	// Get Running phase first
 	if err := wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
-		err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+		err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
 		if err != nil {
 			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
 			return false, nil
@@ -234,13 +204,13 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		}
 		return true, nil
 	}); err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("%s: Failed to verify running phase: %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
+		showDeploymentStatus(t, fmt.Errorf("%s: Failed to verify running phase: %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
 	}
 
 	// Wait for the maintanance operation to complete successfuly
 	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
-		err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+		err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
 		if err != nil {
 			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
 			return false, nil
@@ -250,30 +220,30 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		}
 		return true, nil
 	}); err != nil {
-		checkFailureStatus(t, f)
-		showDeploymentStatus(t, f, fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
+		checkFailureStatus(t)
+		showDeploymentStatus(t, fmt.Errorf("Failed to successfuly complete maintanance operation after defined test timeout (120s)"))
 	}
 
 	node := &corev1.Node{}
-	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
+	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("Failed to get CRD after entering main. mode : %v", err))
+		showDeploymentStatus(t, fmt.Errorf("Failed to get CRD after entering main. mode : %v", err))
 	}
 
 	if node.Spec.Unschedulable == false {
-		checkFailureStatus(t, f)
-		showDeploymentStatus(t, f, fmt.Errorf("Node %s should have been unschedulable ", nodeName))
+		checkFailureStatus(t)
+		showDeploymentStatus(t, fmt.Errorf("Node %s should have been unschedulable ", nodeName))
 	}
 
 	if !kubevirtTaintExist(node) {
-		checkFailureStatus(t, f)
-		showDeploymentStatus(t, f, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
+		checkFailureStatus(t)
+		showDeploymentStatus(t, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
 	nodesList := &corev1.NodeList{}
-	err = f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
+	err = Client.List(context.TODO(), nodesList, &client.ListOptions{})
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("Failed to list nodes %v", err))
+		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
 	}
 
 	computeNodesNumber := 0
@@ -284,25 +254,25 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 		}
 	}
 
-	err = checkValidLease(t, f, nodeName)
+	err = checkValidLease(t, nodeName)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("no valid lease after nmo completion: %v", err))
+		showDeploymentStatus(t, fmt.Errorf("no valid lease after nmo completion: %v", err))
 	}
 
 	if computeNodesNumber > 2 {
 		// Check that the deployment has 1 replica running after maintenance
-		err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+		err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
 		if err != nil {
-			showDeploymentStatus(t, f, fmt.Errorf("failed to wait for deployment. error %v", err))
+			showDeploymentStatus(t, fmt.Errorf("failed to wait for deployment. error %v", err))
 		}
 
-		newNodeName, err := getCurrentDeploymentHostName(t, f)
+		newNodeName, err := getCurrentDeploymentHostName(t)
 		if err != nil {
-			showDeploymentStatus(t, f, err)
+			showDeploymentStatus(t, err)
 		}
 
 		if newNodeName == nodeName {
-			showDeploymentStatus(t, f, fmt.Errorf("Deployment was done on node %s that should be under maintanence", nodeName))
+			showDeploymentStatus(t, fmt.Errorf("Deployment was done on node %s that should be under maintanence", nodeName))
 		}
 	}
 
@@ -310,46 +280,46 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 
 	nodeMaintenanceDelete := &operator.NodeMaintenance{}
 
-	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: nodeMaintenance.Namespace, Name: nodeMaintenance.Name}, nodeMaintenanceDelete)
+	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: nodeMaintenance.Namespace, Name: nodeMaintenance.Name}, nodeMaintenanceDelete)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("Failed to get CRD. error %v", err))
+		showDeploymentStatus(t, fmt.Errorf("Failed to get CRD. error %v", err))
 	}
 
 	// Delete the node maintenance custom resource
-	err = f.Client.Delete(goctx.TODO(), nodeMaintenanceDelete)
+	err = Client.Delete(context.TODO(), nodeMaintenanceDelete)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("Could not delete node maintenance CR : %v", err))
+		showDeploymentStatus(t, fmt.Errorf("Could not delete node maintenance CR : %v", err))
 	}
 
 	time.Sleep(60 * time.Second)
 
 	node = &corev1.Node{}
-	err = f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
+	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("can't get CRD. error %v", err))
+		showDeploymentStatus(t, fmt.Errorf("can't get CRD. error %v", err))
 	}
 
 	if node.Spec.Unschedulable == true {
-		showDeploymentStatus(t, f, fmt.Errorf("Node %s should have been schedulable", nodeName))
+		showDeploymentStatus(t, fmt.Errorf("Node %s should have been schedulable", nodeName))
 	}
 
 	if kubevirtTaintExist(node) {
-		showDeploymentStatus(t, f, fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName) )
+		showDeploymentStatus(t, fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName) )
 	}
 
-	err = checkInvalidLease(t, f, nodeName)
+	err = checkInvalidLease(t, nodeName)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("valid lease after nmo completion %v", err))
+		showDeploymentStatus(t, fmt.Errorf("valid lease after nmo completion %v", err))
 	}
 
 	// Check that the deployment has 1 replica running after maintenance is removed.
 	t.Logf("%s: wait for deployment.", time.Now().Format("2006-01-02 15:04:05.000000"))
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+	err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("%s: failed to wait for deployment. error %v.", err, time.Now().Format("2006-01-02 15:04:05.000000")))
+		showDeploymentStatus(t, fmt.Errorf("%s: failed to wait for deployment. error %v.", err, time.Now().Format("2006-01-02 15:04:05.000000")))
 	}
 
-	err = deleteSimpleDeployment(t, f, ctx, namespace)
+	err = deleteSimpleDeployment(t, namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,10 +328,10 @@ func  enterAndExitMaintenanceMode(t *testing.T, f *framework.Framework, ctx *fra
 	return nil
 }
 
-func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.TestCtx) error {
+func nodeMaintenanceTest(t *testing.T) error {
 
 	for i:=0; i < testIterations; i+=1 {
-		if err := enterAndExitMaintenanceMode(t, f, ctx); err != nil {
+		if err := enterAndExitMaintenanceMode(t); err != nil {
 			t.Fatalf("failed to enter maintenance mode. error %v", err);
 		}
 	}
@@ -369,25 +339,25 @@ func nodeMaintenanceTest(t *testing.T, f *framework.Framework, ctx *framework.Te
 	return nil
 }
 
-func deleteSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string) error {
+func deleteSimpleDeployment(t *testing.T, namespace string) error {
 
 	deploymentToDelete := &appsv1.Deployment{}
 
 	namespaceName := types.NamespacedName{Namespace: namespace, Name: testDeployment}
-	err := f.Client.Get(goctx.TODO(), namespaceName, deploymentToDelete)
+	err := Client.Get(context.TODO(), namespaceName, deploymentToDelete)
 	if err != nil {
 		t.Logf("Failed to get deploymten %v error %v", namespaceName, err)
 		return err
 	}
 
-	err = f.Client.Delete(goctx.TODO(), deploymentToDelete)
+	err = Client.Delete(context.TODO(), deploymentToDelete)
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete  %v: %v", namespaceName, err)
 	}
 
 	return wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
 
-				err = f.Client.Get(goctx.TODO(), namespaceName, deploymentToDelete)
+				err = Client.Get(context.TODO(), namespaceName, deploymentToDelete)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						return true, nil
@@ -398,7 +368,7 @@ func deleteSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	})
 }
 
-func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string) error {
+func createSimpleDeployment(t *testing.T, namespace string) error {
 	replicas := rune(1)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -448,22 +418,22 @@ func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework
 	}
 
 	// use TestCtx's create helper to create the object and add a cleanup function for the new object
-	err := f.Client.Create(goctx.TODO(), dep, &framework.CleanupOptions{TestContext: ctx, Timeout: cleanupTimeout, RetryInterval: cleanupRetryInterval})
+	err := Client.Create(context.TODO(), dep)
 	if err != nil {
 		return err
 	}
 	// wait for testPodDeployment to reach 1 replicas
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, testDeployment, 1, retryInterval, timeout)
+	err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.PodList, error) {
+func getCurrentDeploymentPods(t *testing.T) (*corev1.PodList, error) {
 	labelSelector := labels.SelectorFromSet(podLabel)
 	pods := &corev1.PodList{}
-	err := f.Client.List(goctx.TODO(), &client.ListOptions{LabelSelector: labelSelector}, pods)
+	err := Client.List(context.TODO(), pods, &client.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, fmt.Errorf("Can't get test pods %v", err)
 	}
@@ -475,8 +445,8 @@ func getCurrentDeploymentPods(t *testing.T, f *framework.Framework) (*corev1.Pod
 	return pods, nil
 }
 
-func getCurrentDeploymentHostName(t *testing.T, f *framework.Framework) (string, error) {
-	pods, err := getCurrentDeploymentPods(t, f)
+func getCurrentDeploymentHostName(t *testing.T) (string, error) {
+	pods, err := getCurrentDeploymentPods(t)
 	if err != nil {
 		return "", err
 	}
@@ -501,9 +471,9 @@ func kubevirtTaintExist(node *corev1.Node) bool {
 	return false
 }
 
-func checkFailureStatus(t *testing.T, f *framework.Framework) {
+func checkFailureStatus(t *testing.T) {
 	nm := &operator.NodeMaintenance{}
-	err := f.Client.Get(goctx.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+	err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
 	if err != nil {
 		t.Logf("Failed to get %s nodeMaintenance: %v", nm.Name, err)
 		return
@@ -515,7 +485,7 @@ func checkFailureStatus(t *testing.T, f *framework.Framework) {
 		t.Logf("Status.LastError on %s nodeMaintenance should have a value", nm.Name)
 	}
 	if len(nm.Status.PendingPods) > 0 {
-		pods, err := getCurrentDeploymentPods(t, f)
+		pods, err := getCurrentDeploymentPods(t)
 		if err != nil {
 			t.Logf("Failed to get deployment pods %v", err)
 		} else {
@@ -527,3 +497,29 @@ func checkFailureStatus(t *testing.T, f *framework.Framework) {
 		}
 	}
 }
+
+func waitForDeployment(t *testing.T, namespace, name string, replicas int, retryInterval, timeout time.Duration) error {
+	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+		deployment, err := KubeClient.AppsV1().Deployments(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				t.Logf("Waiting for availability of Deployment: %s in Namespace: %s \n", name, namespace)
+				return false, nil
+			}
+			return false, err
+		}
+
+		if int(deployment.Status.AvailableReplicas) >= replicas {
+			return true, nil
+		}
+		t.Logf("Waiting for full availability of %s deployment (%d/%d)\n", name,
+			deployment.Status.AvailableReplicas, replicas)
+		return false, nil
+	})
+	if err != nil {
+		return err
+	}
+	t.Logf("Deployment available (%d/%d)\n", replicas, replicas)
+	return nil
+}
+

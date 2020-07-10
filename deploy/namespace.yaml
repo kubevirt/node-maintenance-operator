@@ -1,6 +1,6 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: node-maintenance-operator
+  name: SUBSCRIPTION_NAMESPACE
   labels:
-    name: node-maintenance-operator
+    name: SUBSCRIPTION_NAMESPACE

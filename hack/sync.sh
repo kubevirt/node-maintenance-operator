@@ -14,7 +14,33 @@ if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
     )"
 fi
 
+export KUBECONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
+
 source $KUBEVIRTCI_PATH/hack/common.sh
+
+OLM_NS=openshift-marketplace
+TARGET_NS=openshift-node-maintenance
+
+# Deploy OLM if needed
+if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
+  SELF=$( realpath $0 )
+  BASEPATH=$( dirname $SELF )
+  . "${BASEPATH}/gen-operator-sdk.sh"
+
+  set +e
+  ${OPERATOR_SDK} olm status
+  if [[ $? != 0 ]] ; then
+    ${OPERATOR_SDK} olm install --verbose --timeout 5m
+    if [[ $? != 0 ]] ; then
+      echo "Failed to install OLM!"
+      exit 1
+    fi
+  fi
+  set -e
+
+  OLM_NS=olm
+  TARGET_NS=node-maintenance
+fi
 
 registry="$IMAGE_REGISTRY"
 TAG="${1:-$IMAGE_TAG}"
@@ -26,9 +52,10 @@ fi
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
 
     registry_port=$(docker ps | grep -Po '\d+(?=->5000)')
+    registry_ip=$(docker ps | grep dnsmasq | awk '{ print $1 }' | xargs docker inspect | grep registry | sed -r 's/^.*:([0-9.]+)".*$/\1/g')
     registry=localhost:$registry_port
 
-    IMAGE_REGISTRY=$registry make container-build-operator container-push-operator
+    IMAGE_REGISTRY=$registry OVERRIDE_MANIFEST_REGISTRY="registry:5000" make csv-generator container-build container-push
 
     nodes=()
     if [[ $KUBEVIRT_PROVIDER =~ okd.* ]]; then
@@ -52,31 +79,79 @@ if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
     done
 
 else
-    make container-build-operator container-push-operator
+    make container-build container-push
 fi
 
 # Cleanup previously generated manifests
-rm -rf _out/
-mkdir -p _out/
+deploy_dir=_out
+rm -rf v ${deploy_dir}/
+mkdir -p ${deploy_dir}/
 
-# Create node-maintenance-operator namespace
-${KUBEVIRTCI_PATH}/kubectl.sh create -f deploy/namespace.yaml
+# copy manifests
+cp deploy/namespace.yaml ${deploy_dir}/
+cp deploy/catalogsource.yaml ${deploy_dir}/
+cp deploy/operatorgroup.yaml ${deploy_dir}/
+cp deploy/subscription.yaml ${deploy_dir}/
 
-# Combine service_account, rbac, operator manifest into namespaced manifest
-cp deploy/service_account.yaml _out/namespace-init.yaml
-echo -e "\n---\n" >> _out/namespace-init.yaml
-cat deploy/role.yaml >> _out/namespace-init.yaml
-echo -e "\n---\n" >> _out/namespace-init.yaml
-cat deploy/role_binding.yaml >> _out/namespace-init.yaml
-echo -e "\n---\n" >> _out/namespace-init.yaml
-
-cp deploy/operator.yaml _out/operator.yaml
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
-    sed -i "s,quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>,registry:5000/node-maintenance-operator:${TAG},g" _out/operator.yaml
+    sed -i "s,REPLACE_INDEX_IMAGE,registry:5000/node-maintenance-operator-index:${TAG},g" ${deploy_dir}/catalogsource.yaml
 else
-    sed -i "s,quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>,${registry}/node-maintenance-operator:${TAG},g" _out/operator.yaml
+    sed -i "s,REPLACE_INDEX_IMAGE,${registry}/node-maintenance-operator-index:${TAG},g" ${deploy_dir}/catalogsource.yaml
 fi
-cat _out/operator.yaml >> _out/namespace-init.yaml
-rm _out/operator.yaml
 
-cp deploy/crds/nodemaintenance_crd.yaml _out/nodemaintenance_crd.yaml
+sed -i "s,MARKETPLACE_NAMESPACE,${OLM_NS},g" ${deploy_dir}/*.yaml
+sed -i "s,SUBSCRIPTION_NAMESPACE,${TARGET_NS},g" ${deploy_dir}/*.yaml
+sed -i "s,CHANNEL,\"${OLM_CHANNEL}\",g" ${deploy_dir}/*.yaml
+
+# Deploy
+success=0
+iterations=0
+sleep_time=10
+max_iterations=30 # results in 5 minute timeout
+
+until [[ $success -eq 1 ]] || [[ $iterations -eq $max_iterations ]]
+do
+
+  echo "[INFO] Deploying NMO via OLM"
+  set +e
+
+  # be verbose on last iteration only
+  if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
+    ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir
+  else
+    ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir &> /dev/null
+  fi
+  CHECK_1=$?
+
+  if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
+    ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s
+  else
+    ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s &> /dev/null
+  fi
+  CHECK_2=$?
+
+  if [[ ${CHECK_1} != 0 ]] || [[ ${CHECK_2} != 0 ]]; then
+
+    iterations=$((iterations + 1))
+    iterations_left=$((max_iterations - iterations))
+    if [[ $iterations_left != 0  ]]; then
+      echo "[WARN] Deployment did not fully succeed yet, retrying in $sleep_time sec, $iterations_left retries left"
+      sleep $sleep_time
+    else
+      echo "[WARN] At least one deployment failed, giving up"
+    fi
+
+  else
+    # All resources deployed successfully
+    success=1
+  fi
+  set -e
+
+done
+
+if [[ $success -eq 0 ]]; then
+  echo "[ERROR] Deployment failed, giving up."
+  exit 1
+fi
+
+echo "[INFO] Deployment successful."

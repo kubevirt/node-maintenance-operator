@@ -1,7 +1,9 @@
 package nodemaintenance
 
 import (
+	"context"
 	"fmt"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +27,7 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 
 	taintStr := ""
 	patch := ""
-	client := clientset.Core().Nodes()
+	client := clientset.CoreV1().Nodes()
 
 	if add {
 		newTaints := append([]corev1.Taint{}, MaintenanceTaints...)
@@ -62,7 +64,7 @@ func AddOrRemoveTaint(clientset kubernetes.Interface, node *corev1.Node, add boo
 
 	test := fmt.Sprintf(`{ "op": "test", "path": "/spec/taints", "value": %s }`, string(oldTaints))
 	log.Infof("Patching taints on Node: %s", node.Name)
-	_, err = client.Patch(node.Name, types.JSONPatchType, []byte(fmt.Sprintf("[ %s, %s ]", test, patch)))
+	_, err = client.Patch(context.Background(), node.Name, types.JSONPatchType, []byte(fmt.Sprintf("[ %s, %s ]", test, patch)), v1.PatchOptions{})
 	if err != nil {
 		return fmt.Errorf("patching node taints failed: %v", err)
 	}

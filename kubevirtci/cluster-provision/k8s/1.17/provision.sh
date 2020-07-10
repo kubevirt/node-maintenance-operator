@@ -2,19 +2,47 @@
 
 set -ex
 
+function docker_pull_retry() {
+    retry=0
+    maxRetries=5
+    retryAfterSeconds=3
+    until [ ${retry} -ge ${maxRetries} ]; do
+        docker pull $@ && break
+        retry=$((${retry} + 1))
+        echo "Retrying ${FUNCNAME} [${retry}/${maxRetries}] in ${retryAfterSeconds}(s)"
+        sleep ${retryAfterSeconds}
+    done
+
+    if [ ${retry} -ge ${maxRetries} ]; then
+        echo "${FUNCNAME} Failed after ${maxRetries} attempts!"
+        exit 1
+    fi
+}
+
+kubeadmn_patches_path="/provision/kubeadm-patches"
+
+# Need to have the latest kernel
+dnf update -y kernel
+
 # Resize root partition
 dnf install -y cloud-utils-growpart
-growpart /dev/vda 1
-xfs_growfs -d /
+if growpart /dev/vda 1; then
+    xfs_growfs -d /
+fi
 
-cni_manifest="/tmp/cni.yaml"
+mkdir -p /provision
+
+cni_manifest="/provision/cni.yaml"
+cp /tmp/cni.yaml $cni_manifest
+
+cp /tmp/local-volume.yaml /provision/local-volume.yaml
 
 # Disable swap
 swapoff -a
 sed -i '/ swap / s/^/#/' /etc/fstab
 
 # Disable spectre and meltdown patches
-sed -i 's/quiet"/quiet spectre_v2=off nopti hugepagesz=2M hugepages=64"/' /etc/default/grub
+echo 'GRUB_CMDLINE_LINUX="${GRUB_CMDLINE_LINUX} spectre_v2=off nopti hugepagesz=2M hugepages=64"' >> /etc/default/grub
 grub2-mkconfig -o /boot/grub2/grub.cfg
 
 systemctl stop firewalld || :
@@ -26,6 +54,9 @@ yum -y remove firewalld
 # Required for iscsi demo to work.
 yum -y install iscsi-initiator-utils
 
+# To prevent preflight issue realted to tc not found
+dnf install -y tc
+
 # Install docker required packages.
 dnf -y install yum-utils \
     device-mapper-persistent-data \
@@ -33,6 +64,13 @@ dnf -y install yum-utils \
 
 # Add Docker repository.
 dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+
+# Install package(s) that trigger the enablement of the container-tools yum module
+dnf -y install container-selinux
+
+# Disable the container-tools module, as it forces containerd.io to an ancient version,
+#   which in turn forces docker-ce to an older version, making it incompatible with docker-ce-cli...
+dnf -y module disable container-tools
 
 # Install Docker CE.
 dnf install -y docker-ce --nobest
@@ -71,7 +109,7 @@ gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cl
 EOF
 
 # Install Kubernetes packages.
-dnf install --nogpgcheck --disableexcludes=kubernetes -y \
+dnf install --skip-broken --nobest --nogpgcheck --disableexcludes=kubernetes -y \
     kubeadm-${version} \
     kubelet-${version} \
     kubectl-${version} \
@@ -118,9 +156,9 @@ echo "net.netfilter.nf_conntrack_max=1000000" >> /etc/sysctl.conf
 
 systemctl restart NetworkManager
 
-mkdir -p /tmp/kubeadm-patches/
+mkdir -p $kubeadmn_patches_path
 
-cat >/tmp/kubeadm-patches/kustomization.yaml <<EOF
+cat >$kubeadmn_patches_path/kustomization.yaml <<EOF
 patchesJson6902:
 - target:
     version: v1
@@ -148,7 +186,7 @@ patchesJson6902:
   path: add-security-context.yaml
 EOF
 
-cat >/tmp/kubeadm-patches/add-security-context.yaml <<EOF
+cat >$kubeadmn_patches_path/add-security-context.yaml <<EOF
 - op: add
   path: /spec/securityContext
   value:
@@ -156,7 +194,7 @@ cat >/tmp/kubeadm-patches/add-security-context.yaml <<EOF
       type: spc_t
 EOF
 
-cat >/tmp/kubeadm-patches/add-security-context-deployment-patch.yaml <<EOF
+cat >$kubeadmn_patches_path/add-security-context-deployment-patch.yaml <<EOF
 spec:
   template:
     spec:
@@ -168,9 +206,10 @@ EOF
 
 default_cidr="192.168.0.0/16"
 pod_cidr="10.244.0.0/16"
-kubeadm init --pod-network-cidr=$pod_cidr --kubernetes-version v${version} --token abcdef.1234567890123456 --experimental-kustomize /tmp/kubeadm-patches/
 
-kubectl --kubeconfig=/etc/kubernetes/admin.conf patch deployment coredns -n kube-system -p "$(cat /tmp/kubeadm-patches/add-security-context-deployment-patch.yaml)"
+kubeadm init --pod-network-cidr=$pod_cidr --kubernetes-version v${version} --token abcdef.1234567890123456 --experimental-kustomize $kubeadmn_patches_path/
+
+kubectl --kubeconfig=/etc/kubernetes/admin.conf patch deployment coredns -n kube-system -p "$(cat $kubeadmn_patches_path/add-security-context-deployment-patch.yaml)"
 sed -i -e "s?$default_cidr?$pod_cidr?g" $cni_manifest
 kubectl --kubeconfig=/etc/kubernetes/admin.conf create -f "$cni_manifest"
 
@@ -295,17 +334,38 @@ chmod -R 777 /var/local/kubevirt-storage/local-volume
 chcon -R unconfined_u:object_r:svirt_sandbox_file_t:s0 /mnt/local-storage/
 
 # Pre pull fluentd image used in logging
-docker pull fluent/fluentd:v1.2-debian
-docker pull fluent/fluentd-kubernetes-daemonset:v1.2-debian-syslog
+docker_pull_retry fluent/fluentd:v1.2-debian
+docker_pull_retry fluent/fluentd-kubernetes-daemonset:v1.2-debian-syslog
 
 # Pre pull images used in Ceph CSI
-docker pull quay.io/k8scsi/csi-attacher:v1.0.1
-docker pull quay.io/k8scsi/csi-provisioner:v1.0.1
-docker pull quay.io/k8scsi/csi-snapshotter:v1.0.1
-docker pull quay.io/cephcsi/rbdplugin:v1.0.0
-docker pull quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
+docker_pull_retry quay.io/k8scsi/csi-attacher:v1.0.1
+docker_pull_retry quay.io/k8scsi/csi-provisioner:v1.0.1
+docker_pull_retry quay.io/k8scsi/csi-snapshotter:v1.0.1
+docker_pull_retry quay.io/cephcsi/rbdplugin:v1.0.0
+docker_pull_retry quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
 
 # Pre pull cluster network addons operator images and store manifests
 # so we can use them at cluster-up
 cp -rf /tmp/cnao/ /opt/
-for i in $(grep -A 2 "IMAGE" /opt/cnao/operator.yaml |grep value | awk '{print $2}'); do docker pull $i; done
+for i in $(grep -A 2 "IMAGE" /opt/cnao/operator.yaml | grep value | awk '{print $2}'); do docker_pull_retry $i; done
+
+# Pre pull local-volume-provisioner
+for i in $(grep -A 2 "IMAGE" /provision/local-volume.yaml | grep value | awk -F\" '{print $2}'); do docker_pull_retry $i; done
+
+# Create a properly labelled tmp directory for testing
+mkdir -p /provision/kubevirt.io/tests
+chcon -t container_file_t /provision/kubevirt.io/tests
+echo "tmpfs /provision/kubevirt.io/tests tmpfs rw,context=system_u:object_r:container_file_t:s0 0 1" >> /etc/fstab
+
+dnf install -y NetworkManager-config-server
+
+# Cleanup the existing NetworkManager profiles so the VM instances will come
+# up with the default profiles. (Base VM image includes non default settings)
+rm -f /etc/sysconfig/network-scripts/ifcfg-*
+nmcli connection add con-name eth0 ifname eth0 type ethernet
+
+# Temporarily disable dontaudit SELinux rules to see all the denials
+semodule -DB
+
+# Remove machine-id, allowing unique ID/s for its instances.
+rm -f /etc/machine-id ; touch /etc/machine-id
