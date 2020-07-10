@@ -1,131 +1,60 @@
 # Node Maintenance Operator
+
 node-maintenance-operator is an operator generated from the [operator-sdk](https://github.com/operator-framework/operator-sdk).
 The purpose of this operator is to watch for new or deleted custom resources called NodeMaintenance which indicate that a node in the cluster should either:
- - NodeMaintenance CR created: move node into maintenance, cordon the node - set it as unschedulable and evict the pods (which can be evicted) from that node.
+  - NodeMaintenance CR created: move node into maintenance, cordon the node - set it as unschedulable and evict the pods (which can be evicted) from that node.
   - NodeMaintenance CR deleted: remove pod from maintenance and uncordon the node - set it as schedulable
 
 > *Note*:  The current behavior of the  operator is to mimic `kubectl drain <node name>` as performed in [Kubevirt - evict all VMs and Pods on a node ](https://kubevirt.io/user-guide/docs/latest/administration/node-eviction.html#how-to-evict-all-vms-and-pods-on-a-node)
 
 ## Build and run the operator
-Before running the operator, the NodeMaintenance CRD and namespace must be registered with the Openshift/Kubernetes apiserver:
 
-```sh
-$ kubectl create -f deploy/crds/nodemaintenance_crd.yaml
-$ kubectl create -f deploy/namespace.yaml
-```
-
-Once this is done, there are two ways to run the operator:
+There are two ways to run the operator:
 
 - As a Deployment inside a Openshift/Kubernetes cluster
 - As Go program outside a cluster
 
-## Deploy operator using OLM
+### Deploy operator using OLM
 
 For more information on the [Operator Lifecycle
 Manager](https://github.com/operator-framework/operator-lifecycle-manager) and
 Cluster Service Versions checkout out ["Building a Cluster Service
-Version"](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/Documentation/design/building-your-csv.md).
+Version"](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/building-your-csv.md)
+and the [OLM Book](https://operator-framework.github.io/olm-book/).
 
-1) Build and push operator and operator-registry image.
+Information about the "bundle" and "index" images can be found at [Operator Registry](https://github.com/operator-framework/operator-registry).
 
-```shell
-./build/make-manifests.sh <VERSION>
-make container-build
-make container-push
-```
+This project uses [KubeVirtCI](https://github.com/kubevirt/kubevirtci) for spinning up a cluster for development
+and in CI. If you want to use an existing cluster, just run `export KUBEVIRT_PROVIDER=external` and ensure that
+the `KUBECONFIG` env var points to your cluster configuration. In case the cluster is an OpenShift cluster the
+operator will deployed directly on it. In case of a plain Kubernetes cluster OLM will be installed first.
 
-2) Create the node-maintenance-operator Namespace.
-
-```shell
-oc create -f olm-deploy-manifests/nm-ns.yaml
-
-cat <<EOF | oc create -f -
-apiVersion: v1
-kind: Namespace
-metadata:
-  annotations:
-  labels:
-    kubevirt.io: ""
-  name: node-maintenance-operator
-EOF
-```
-
-3) Create the operator group.
+#### Start the cluster
 
 ```shell
-oc create -f olm-deploy-manifests/nm-op-group.yaml
-
-cat <<EOF | oc create -f -
-apiVersion: operators.coreos.com/v1alpha2
-kind: OperatorGroup
-metadata:
-  name: node-maintenance-operator
-  namespace: node-maintenance-operator
-EOF
+make cluster-up
 ```
 
-4)  Using the `node-maintenance-operator-registry` container image built in step 1,
-create a CatalogSource. This object tells OLM about the operator.
+> *Note:* This also needs be run for external clusters, it will setup some configuration
+
+#### Build, push and deploy Node Maintenance Operator
 
 ```shell
-oc create -f olm-deploy-manifests/nm-catalog-source.yaml
+# If you use an external cluster, define the image registry you want to use.
+# KubeVirtCI clusters will use a registry running in the cluster itself, so you can skip the next line.
+export IMAGE_REGISTRY=quay.io/<username>
 
-cat <<EOF | oc create -f -
-apiVersion: operators.coreos.com/v1alpha1
-kind: CatalogSource
-metadata:
-  name: node-maintenance-operator
-  namespace: openshift-marketplace
-spec:
-  sourceType: grpc
-  image: quay.io/kubevirt/node-maintenance-operator-registry:<VERSION>
-  displayName: node-maintenance-operator
-  publisher: Red hat
-EOF
+make cluster-sync
 ```
 
-5) Subscribe to the node-maintenance-operator.
+This will execute several steps for you:
+- generate manifests (`make make csv-generator`)
+- build and push images (`make container-build container-push`)
+- customize deployment manifests and place them into `_out/`
+- deploy manifest in the cluster and wait until the deployment is ready
+- for more details see `hack/sync.sh`
 
-```shell
-oc create -f olm-deploy-manifests/nm-sub.yaml
-
-cat <<EOF | oc create -f -
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: node-maintenance-operator-subscription
-  namespace: node-maintenance-operator
-spec:
-  channel: beta
-  name: node-maintenance-operator
-  source: node-maintenance-operator
-  sourceNamespace: openshift-marketplace
-  startingCSV: node-maintenance-operator.<VERSION>
-EOF
-```
-
-### 1. Run as a Deployment inside the cluster
-
-The Deployment manifest is generated at `deploy/operator.yaml`. Be sure to update the deployment image if there are changes as shown [here](https://github.com/operator-framework/operator-sdk/blob/master/doc/user-guide.md#1-run-as-a-deployment-inside-the-cluster).
-
-Setup RBAC and deploy the node-maintenance-operator:
-
-```sh
-$ kubectl create -f deploy/service_account.yaml
-$ kubectl create -f deploy/role.yaml
-$ kubectl create -f deploy/role_binding.yaml
-$ kubectl create -f deploy/operator.yaml
-```
-
-Verify that the node-maintenance-operator is up and running:
-
-```sh
-$ kubectl get deployment
-NAME                     DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-node-maintenance-operator      1         1         1            1           1m
-```
-
-### 2. Run locally outside the cluster
+### Run locally outside the cluster
 
 This method is preferred during development cycle to deploy and test faster.
 
@@ -135,7 +64,8 @@ Set the name of the operator in an environment variable:
 export OPERATOR_NAME=node-maintenance-operator
 ```
 
-Run the operator locally with the default Kubernetes config file present at `$HOME/.kube/config` or  with specificing kubeconfig via the flag `--kubeconfig=<path/to/kubeconfig>`:
+Run the operator locally with the default Kubernetes config file present at `$HOME/.kube/config` or
+with specificing kubeconfig via the flag `--kubeconfig=<path/to/kubeconfig>`:
 
 ```sh
 $ operator-sdk up local --kubeconfig="<path/to/kubeconfig>"
@@ -150,11 +80,13 @@ INFO[0000] Using namespace default.
 ```
 
 ## Setting Node Maintenance
+
 ### Set Maintenance on - Create a NodeMaintenance CR
-To set maintenance on a node a `NodeMaintenance` CR should be created.
-A `NodeMaintenance` CR contains:
-- Name: The name of the node which will be put into maintenance
-- Reason: the reason for the node maintenance
+
+To set maintenance on a node a `NodeMaintenance` CustomResource should be created.
+The `NodeMaintenance` CR spec contains:
+- nodeName: The name of the node which will be put into maintenance
+- reason: the reason for the node maintenance
 
 Create the example `NodeMaintenance` CR found at `deploy/crds/nodemaintenance_cr.yaml`:
 
@@ -182,6 +114,7 @@ $ kubectl apply -f deploy/crds/nodemaintenance_cr.yaml
 ```
 
 ### Set Maintenance off - Delete the NodeMaintenance CR
+
 To remove maintenance from a node a `NodeMaintenance` CR with the node's name  should be deleted.
 
 ```sh
@@ -204,6 +137,7 @@ $ kubectl delete -f deploy/crds/nodemaintenance_cr.yaml
 ```
 
 ## NodeMaintenance Status
+
 The NodeMaintenance CR can contain the following status fields:
 
 ```yaml
@@ -236,27 +170,14 @@ The phase is updated for each processing attempt on the CR.
 
 ## Tests
 
-Running e2e tests:
+### Run unit test
 
-### Local
-Before running the tests, the NodeMaintenance CRD and namespace must be registered with the Openshift/Kubernetes apiserver:
+`make test`
 
-```sh
-$ kubectl create -f deploy/crds/nodemaintenance_crd.yaml
-$ kubectl create -f deploy/crds/namespace.yaml
-```
+### Run e2e tests
 
-Chang the `<IMAGE_VERSION>` under `deploy/operator.yaml` image link to the desired version:
-
-```
-image: quay.io/kubevirt/node-maintenance-operator:<IMAGE_VERSION>
-```
-
-Run the operator tests locally with the default Kubernetes config file present at `$HOME/.kube/config` or  with specificing kubeconfig via the flag `--kubeconfig=<path/to/kubeconfig>` and a namespace `--namespace=<namespace>`:
-
-```sh
-operator-sdk test local ./test/e2e --kubeconfig=<path/to/kubeconfig> --namespace="node-maintenance-operator"
-```
+1. Deploy the operator using OLM and KubeVirtCI as explained above
+2. run `make cluster-functest`
 
 ## Next Steps
 - Handle unremoved pods and daemonsets
