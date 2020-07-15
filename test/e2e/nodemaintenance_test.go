@@ -32,7 +32,6 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
-	testIterations		 =  3
 	testDeploymentReplicas = 20
 )
 
@@ -78,19 +77,6 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 		t.Fatalf("error: %v operator logs: %s", callerError, str)
 	} else {
 		t.Logf("operator logs %s", str)
-	}
-}
-
-func TestNodeMainenance(t *testing.T) {
-	// run subtests
-	t.Run("NodeMaintenance-group", func(t *testing.T) {
-		t.Run("Cluster", ClusterTest)
-	})
-}
-
-func ClusterTest(t *testing.T) {
-	if err := nodeMaintenanceTest(t); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -339,16 +325,13 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	return nil
 }
 
-func nodeMaintenanceTest(t *testing.T) error {
+func TestNodeMaintenance(t *testing.T) {
 
-	for i:=0; i < testIterations; i+=1 {
-		if err := enterAndExitMaintenanceMode(t); err != nil {
-			t.Fatalf("failed to enter maintenance mode. error %v", err);
-		}
+	if err := enterAndExitMaintenanceMode(t); err != nil {
+		showDeploymentStatus(t, nil)
+		t.Fatalf("failed to enter maintenance mode. error %v", err)
 	}
-	showDeploymentStatus(t, nil)
 
-	return nil
 }
 
 func deleteSimpleDeployment(t *testing.T, namespace string) error {

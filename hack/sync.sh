@@ -14,7 +14,9 @@ if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
     )"
 fi
 
-export KUBECONFIG=${KUBECONFIG:-$(${KUBEVIRTCI_PATH}/kubeconfig.sh)}
+if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
+  export KUBECONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)
+fi
 
 source $KUBEVIRTCI_PATH/hack/common.sh
 
