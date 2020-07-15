@@ -102,7 +102,7 @@ func  checkValidLease(t *testing.T, nodeName string) error {
 		return fmt.Errorf("can't get lease node %s : %v", nodeName, err)
 	}
 
-	if lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds != nmo.LeaseDurationInSeconds {
+	if lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds != int32(nmo.LeaseDuration.Seconds()) {
 		return fmt.Errorf("checkValidLease wrong LeaseDurationInSeconds")
 	}
 	if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != nmo.LeaseHolderIdentity {
@@ -151,11 +151,11 @@ func  checkInvalidLease(t *testing.T, nodeName string) error {
 	return nil
 }
 
-func countNodes(t *testing.T, f *framework.Framework,) (int, string, error) {
+func countNodes(t *testing.T) (int, string, error) {
 	nodesList := &corev1.NodeList{}
-	err := f.Client.List(goctx.TODO(), &client.ListOptions{}, nodesList)
+	err := Client.List(context.TODO(), nodesList, &client.ListOptions{})
 	if err != nil {
-		showDeploymentStatus(t, f, fmt.Errorf("Failed to list nodes %v", err))
+		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
 		return -1, "", err
 	}
 
@@ -171,14 +171,18 @@ func countNodes(t *testing.T, f *framework.Framework,) (int, string, error) {
 	return computeNodesNumber, workerNodeName, nil
 }
 
+func enterAndExitMaintenanceMode(t *testing.T) error {
+	namespace := os.Getenv("TEST_NAMESPACE")
+	if len(namespace) == 0 {
+		return fmt.Errorf("could not get namespace")
 	}
 
-	computeNodesNumber, workerNodeName, err := countNodes(t, f)
+	computeNodesNumber, workerNodeName, err := countNodes(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = createSimpleDeployment(t, f, ctx, namespace, workerNodeName)
+	err = createSimpleDeployment(t, namespace, workerNodeName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,8 +266,6 @@ func countNodes(t *testing.T, f *framework.Framework,) (int, string, error) {
 		showDeploymentStatus(t, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-	err = Client.List(context.TODO(), nodesList, &client.ListOptions{})
-		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
 	err = checkValidLease(t, nodeName)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("no valid lease after nmo completion: %v", err))
@@ -344,7 +346,7 @@ func nodeMaintenanceTest(t *testing.T) error {
 			t.Fatalf("failed to enter maintenance mode. error %v", err);
 		}
 	}
-	showDeploymentStatus(t, f, nil)
+	showDeploymentStatus(t, nil)
 
 	return nil
 }
@@ -378,7 +380,7 @@ func deleteSimpleDeployment(t *testing.T, namespace string) error {
 	})
 }
 
-func createSimpleDeployment(t *testing.T, f *framework.Framework, ctx *framework.TestCtx, namespace string, nodeName string) error {
+func createSimpleDeployment(t *testing.T, namespace string, nodeName string) error {
 	replicas := rune(testDeploymentReplicas)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
