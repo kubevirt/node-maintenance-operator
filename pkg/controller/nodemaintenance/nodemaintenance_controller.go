@@ -24,7 +24,7 @@ import (
 const (
 	MaxAllowedErrorToUpdateOwnedLease = 3
     drainerTimeout = 30 * time.Second
-	LeaseDurationInSeconds = 3600
+	LeaseDuration = 3600 * time.Second
 	LeaseHolderIdentity    = "node-maintenance"
 	LeaseNamespaceDefault  = "node-maintenance-operator"
 	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
@@ -293,7 +293,7 @@ func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) 
 	}
 
 	log.Info("Lease object supported, obtaining lease")
-	lease, needUpdate, err := createOrGetExistingLease(r.client, node, LeaseDurationInSeconds)
+	lease, needUpdate, err := createOrGetExistingLease(r.client, node, LeaseDuration)
 
 	if err != nil {
 		log.Errorf("failed to create or get existing lease error=%v", err)
@@ -304,7 +304,8 @@ func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) 
 
 		log.Info("update lease")
 
-		if _, err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, time.Now(), LeaseDurationInSeconds); err != nil {
+		now := metav1.NowMicro()
+		if err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, &now, LeaseDuration); err != nil {
 				return updateOwnedLeaseFailed, err
 		}
 	}
