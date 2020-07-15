@@ -33,7 +33,8 @@ fi
 
 # let's track errors on our own here for being able to write a nice comment afterwards
 set +e
-TEST_NAMESPACE=node-maintenance-operator GOFLAGS="-mod=vendor" go test -v ./test/e2e/...
+# FIXME use a different namespace for test deployments, and create / destroy it before / after test execution
+TEST_NAMESPACE=node-maintenance GOFLAGS="-mod=vendor" go test -v ./test/e2e/...
 
 if [[ $? != 0 ]] ; then
   echo "E2e tests FAILED"

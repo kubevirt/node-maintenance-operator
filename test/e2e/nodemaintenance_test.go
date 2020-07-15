@@ -37,7 +37,8 @@ var (
 
 func getCurrentOperatorPods() (*corev1.Pod, error) {
 
-	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	// FIXME get the correct namespace dynamically, on openshift we will be in another one...
+	pods, err := KubeClient.CoreV1().Pods("node-maintenance").List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +60,7 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 	podName := pod.ObjectMeta.Name
 	podLogOpts := corev1.PodLogOptions{}
 
-	req := KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
+	req := KubeClient.CoreV1().Pods(pod.Namespace).GetLogs(podName, &podLogOpts)
 	podLogs, err := req.Stream(context.Background())
 	if err != nil {
 		t.Errorf("showDeployment: can't get log stream error=%v", err)
@@ -74,13 +75,15 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 	str := buf.String()
 
 	if callerError != nil {
-		t.Fatalf("error: %v operator logs: %s", callerError, str)
+		t.Fatalf("error: %v operator logs:\n%s", callerError, str)
 	} else {
-		t.Logf("operator logs %s", str)
+		t.Logf("operator logs:\n%s", str)
 	}
 }
 
 func  checkValidLease(t *testing.T, nodeName string) error {
+
+	// FIXME this won't work: nmo.LeaseNamespace is overwritten by the operator during runtime, and we will never see that here...
 	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
 	err := Client.Get(context.TODO(), nName, lease)

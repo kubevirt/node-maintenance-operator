@@ -26,7 +26,7 @@ const (
     drainerTimeout = 30 * time.Second
 	LeaseDuration = 3600 * time.Second
 	LeaseHolderIdentity    = "node-maintenance"
-	LeaseNamespaceDefault  = "node-maintenance-operator"
+	LeaseNamespaceDefault  = "node-maintenance"
 	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
 	WaitOnDrainError = 5 * time.Second
 )
