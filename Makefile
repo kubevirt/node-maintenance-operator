@@ -132,7 +132,7 @@ manifests: csv-generator
 	./hack/release-manifests.sh ${IMAGE_TAG}
 
 cluster-up:
-	KUBEVIRT_NUM_NODES=3 $(KUBEVIRTCI_PATH)/up.sh
+	KUBEVIRT_NUM_NODES=2 $(KUBEVIRTCI_PATH)/up.sh
 
 cluster-down:
 	$(KUBEVIRTCI_PATH)/down.sh

@@ -16,6 +16,12 @@ import (
 	kubernetes "k8s.io/client-go/kubernetes"
 )
 
+const (
+	LeaseDuration = 3600 * time.Second
+	LeaseHolderIdentity    = "node-maintenance"
+	LeaseNamespaceDefault  = "node-maintenance"
+	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
+)
 func checkLeaseSupportedInternal(cs kubernetes.Interface) (bool, error) {
 
 	groupList, err := cs.Discovery().ServerGroups()
@@ -96,7 +102,7 @@ func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime metav1.MicroTim
 		return true, lease.Spec.AcquireTime == nil
 	}
 
-	deadline := currentTime.Add(2 * drainerTimeout)
+	deadline := currentTime.Add(2 * DrainerTimeout)
 
 	// about to expire, update the lease but no the acquire time (second rvalue)
 	return dueTime.Before(deadline), false

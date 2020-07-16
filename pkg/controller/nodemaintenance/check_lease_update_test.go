@@ -35,7 +35,7 @@ var _ = Describe("checkLeaseUpdate", func() {
 	// if current time is after this time, the lease is expired
 	leaseExpiredTime := NowTime.Add(-LeaseDuration).Add(-1 * time.Second)
 	// if lease expires after this time, it should be renewed
-	renewTriggerTime := NowTime.Add(-LeaseDuration).Add(2 * drainerTimeout)
+	renewTriggerTime := NowTime.Add(-LeaseDuration).Add(2 * DrainerTimeout)
 
 	DescribeTable("check lease supported",
 		func(initialLease *coordv1beta1.Lease, expectedLease *coordv1beta1.Lease, expectedError error) {

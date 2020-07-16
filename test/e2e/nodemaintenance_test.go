@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"k8s.io/utils/pointer"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +34,6 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
-	testDeploymentReplicas = 20
 )
 
 func getCurrentOperatorPods() (*corev1.Pod, error) {
@@ -50,12 +51,11 @@ func getCurrentOperatorPods() (*corev1.Pod, error) {
 	return &pods.Items[0], nil
 }
 
-func showDeploymentStatus(t *testing.T, callerError error) {
-
+func getOperatorLogs(t *testing.T) string {
 	pod, err := getCurrentOperatorPods()
 	if err != nil {
 		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
-		return
+		return ""
 	}
 	podName := pod.ObjectMeta.Name
 	podLogOpts := corev1.PodLogOptions{}
@@ -72,12 +72,17 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 	if err != nil {
 		t.Errorf("showDeployment: can't copy log stream error=%v", err)
 	}
-	str := buf.String()
+	return buf.String()
+}
+
+func showDeploymentStatus(t *testing.T, callerError error) {
+
+	logs := getOperatorLogs(t)
 
 	if callerError != nil {
-		t.Fatalf("error: %v operator logs:\n%s", callerError, str)
+		t.Fatalf("error: %v operator logs:\n%s", callerError, logs)
 	} else {
-		t.Logf("operator logs:\n%s", str)
+		t.Logf("operator logs:\n%s", logs)
 	}
 }
 
@@ -220,6 +225,19 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		return true, nil
 	}); err != nil {
 		showDeploymentStatus(t, fmt.Errorf("%s: Failed to verify running phase: %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
+	}
+
+	// Wait for operator log showing it reconciles with fixed duration
+	// caused by drain, caused by termination graceperiod > drain timeout
+	t.Log("Waiting for drain timeout log")
+	if err = wait.PollImmediate(5*time.Second, 2*time.Minute, func()(bool, error) {
+		logs := getOperatorLogs(t)
+		if strings.Contains(logs, nmo.FixedDurationReconcileLog) {
+			return true, nil
+		}
+		return false, nil
+	}); err != nil {
+		showDeploymentStatus(t, fmt.Errorf("%s: Didn't run into drain timeout: %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
 	}
 
 	// Wait for the maintanance operation to complete successfuly
@@ -367,7 +385,6 @@ func deleteSimpleDeployment(t *testing.T, namespace string) error {
 }
 
 func createSimpleDeployment(t *testing.T, namespace string, nodeName string) error {
-	replicas := rune(testDeploymentReplicas)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -378,7 +395,7 @@ func createSimpleDeployment(t *testing.T, namespace string, nodeName string) err
 			Namespace: namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: pointer.Int32Ptr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: podLabel,
 			},
@@ -411,6 +428,8 @@ func createSimpleDeployment(t *testing.T, namespace string, nodeName string) err
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
 					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
+					// make sure we run into the drain timeout at least once
+					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nmo.DrainerTimeout.Seconds()) +10),
 				},
 			},
 		},

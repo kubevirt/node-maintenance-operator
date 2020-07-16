@@ -23,12 +23,9 @@ import (
 
 const (
 	MaxAllowedErrorToUpdateOwnedLease = 3
-    drainerTimeout = 30 * time.Second
-	LeaseDuration = 3600 * time.Second
-	LeaseHolderIdentity    = "node-maintenance"
-	LeaseNamespaceDefault  = "node-maintenance"
-	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
-	WaitOnDrainError = 5 * time.Second
+    DrainerTimeout                    = 30 * time.Second
+	WaitDurationOnDrainError          = 5 * time.Second
+	FixedDurationReconcileLog = "Reconciling with fixed duration"
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -92,7 +89,7 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 
 	// TODO - add logical value or attach from the maintancene CR
 	//The length of time to wait before giving up, zero means infinite
-	r.drainer.Timeout = drainerTimeout
+	r.drainer.Timeout = DrainerTimeout
 
 	// TODO - consider pod selectors (only for VMIs + others ?)
 	//Label selector to filter pods on the node
@@ -243,7 +240,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
 		reqLogger.Infof("not all pods evicted: %s : %v", nodeName, err)
-		waitOnReconcile := WaitOnDrainError
+		waitOnReconcile := WaitDurationOnDrainError
 		return r.onReconcileErrorWithRequeue(instance, err, &waitOnReconcile)
 	}
 	reqLogger.Infof("All pods evicted: %s", nodeName)
@@ -402,8 +399,10 @@ func (r *ReconcileNodeMaintenance) onReconcileErrorWithRequeue(nm *nodemaintenan
 		log.Errorf("Failed to update NodeMaintenance with \"Failed\" status. Error: %v", updateErr)
 	}
 	if duration != nil {
+		log.Infof(FixedDurationReconcileLog)
 		return reconcile.Result{RequeueAfter: *duration }, nil
 	}
+	log.Infof("Reconciling with exponential duration")
 	return reconcile.Result{}, err
 }
 
