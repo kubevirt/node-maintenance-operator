@@ -4,7 +4,7 @@ set -ex
 
 SELF=$( realpath $0 )
 BASEPATH=$( dirname $SELF )
-. "${BASEPATH}/gen-opm.sh"
+. "${BASEPATH}/get-opm.sh"
 
 # Skip adding an bundle by using an empty bundle image, just generate the Dockerfile (and an empty database)
 # Reason: we don't want to use the bundle image for creating the db, we have the manifests available,

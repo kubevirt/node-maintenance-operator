@@ -27,7 +27,7 @@ TARGET_NS=openshift-node-maintenance
 if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
   SELF=$( realpath $0 )
   BASEPATH=$( dirname $SELF )
-  . "${BASEPATH}/gen-operator-sdk.sh"
+  . "${BASEPATH}/get-operator-sdk.sh"
 
   set +e
   ${OPERATOR_SDK} olm status
@@ -57,7 +57,7 @@ if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
     registry_ip=$(docker ps | grep dnsmasq | awk '{ print $1 }' | xargs docker inspect | grep registry | sed -r 's/^.*:([0-9.]+)".*$/\1/g')
     registry=localhost:$registry_port
 
-    IMAGE_REGISTRY=$registry OVERRIDE_MANIFEST_REGISTRY="registry:5000" make csv-generator container-build container-push
+    IMAGE_REGISTRY=$registry OVERRIDE_MANIFEST_REGISTRY="registry:5000" make generate-bundle container-build container-push
 
     nodes=()
     if [[ $KUBEVIRT_PROVIDER =~ okd.* ]]; then

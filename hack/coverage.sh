@@ -1,9 +1,6 @@
 #!/bin/bash -e
 
-[  -f ./build/_output/bin/ginkgo ] || GOBIN=$PWD/build/_output/bin/  go install github.com/onsi/ginkgo/ginkgo
-
-GINKGO="$1"
-TARGETCOVERAGE="$2"
+[ -f ${GINKGO} ] || GOBIN=$PWD/build/_output/bin/ go install github.com/onsi/ginkgo/ginkgo
 
 COVERAGE_FILE=cover.out
 GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipPackage ./vendor"
