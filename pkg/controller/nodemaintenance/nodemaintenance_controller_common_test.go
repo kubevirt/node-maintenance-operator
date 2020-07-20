@@ -1,8 +1,8 @@
 package nodemaintenance
 
 import (
-
 	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,66 +12,66 @@ import (
 )
 
 func getCommonTestObjs() (*nodemaintenanceapi.NodeMaintenance, []runtime.Object) {
-		nm := &nodemaintenanceapi.NodeMaintenance{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-maintanance",
-			},
-			Spec: nodemaintenanceapi.NodeMaintenanceSpec{
-				NodeName: "node01",
-				Reason:   "test reason",
-			},
-		}
+	nm := &nodemaintenanceapi.NodeMaintenance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-maintanance",
+		},
+		Spec: nodemaintenanceapi.NodeMaintenanceSpec{
+			NodeName: "node01",
+			Reason:   "test reason",
+		},
+	}
 
-		return nm, []runtime.Object{
-			&corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "node01",
+	return nm, []runtime.Object{
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node01",
+			},
+			Spec: corev1.NodeSpec{
+				Taints: []corev1.Taint{{
+					Key:    "test",
+					Effect: corev1.TaintEffectPreferNoSchedule},
 				},
-				Spec: corev1.NodeSpec{
-					Taints: []corev1.Taint{{
-						Key:    "test",
-						Effect: corev1.TaintEffectPreferNoSchedule},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node02",
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-pod-1",
+			},
+			Spec: corev1.PodSpec{
+				NodeName: "node01",
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionTrue,
 					},
 				},
 			},
-			&corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "node02",
-				},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-pod-2",
 			},
-			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pod-1",
-				},
-				Spec: corev1.PodSpec{
-					NodeName: "node01",
-				},
-				Status: corev1.PodStatus{
-					Conditions: []corev1.PodCondition{
-						{
-							Type:   corev1.PodReady,
-							Status: corev1.ConditionTrue,
-						},
+			Spec: corev1.PodSpec{
+				NodeName: "node01",
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionTrue,
 					},
 				},
 			},
-			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pod-2",
-				},
-				Spec: corev1.PodSpec{
-					NodeName: "node01",
-				},
-				Status: corev1.PodStatus{
-					Conditions: []corev1.PodCondition{
-						{
-							Type:   corev1.PodReady,
-							Status: corev1.ConditionTrue,
-						},
-					},
-				},
-			},
-		}
+		},
+	}
 
 }
 
@@ -93,7 +93,7 @@ func (self *FakeDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 }
 
 const (
-	FakeClientReturnError = 0
+	FakeClientReturnError        = 0
 	FakeClientReturnLeasePackage = 1
 	FakeClientReturnWrongPackage = 2
 )
@@ -109,25 +109,25 @@ func (self *FakeClient) Discovery() k8sdiscovery.DiscoveryInterface {
 	}
 	if self.clientType == FakeClientReturnWrongPackage {
 		return &FakeDiscovery{groupList: &metav1.APIGroupList{
-					Groups: []metav1.APIGroup{{
-						Name: "lease",
-						Versions: []metav1.GroupVersionForDiscovery{{
-							GroupVersion: LeaseApiPackage + "notQuite",
-							Version:      "v1beta1",
-						}},
-					}},
-				}}
+			Groups: []metav1.APIGroup{{
+				Name: "lease",
+				Versions: []metav1.GroupVersionForDiscovery{{
+					GroupVersion: LeaseApiPackage + "notQuite",
+					Version:      "v1beta1",
+				}},
+			}},
+		}}
 	}
 	if self.clientType == FakeClientReturnLeasePackage {
 		return &FakeDiscovery{groupList: &metav1.APIGroupList{
-					Groups: []metav1.APIGroup{{
-						Name: "lease",
-						Versions: []metav1.GroupVersionForDiscovery{{
-							GroupVersion: LeaseApiPackage,
-							Version:      "v1beta1",
-						}},
-					}},
-				}}
+			Groups: []metav1.APIGroup{{
+				Name: "lease",
+				Versions: []metav1.GroupVersionForDiscovery{{
+					GroupVersion: LeaseApiPackage,
+					Version:      "v1beta1",
+				}},
+			}},
+		}}
 	}
 	return nil
 }
