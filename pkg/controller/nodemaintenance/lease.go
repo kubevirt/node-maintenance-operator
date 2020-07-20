@@ -3,6 +3,7 @@ package nodemaintenance
 import (
 	"context"
 	"fmt"
+	"k8s.io/utils/pointer"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -15,17 +16,12 @@ import (
 	kubernetes "k8s.io/client-go/kubernetes"
 )
 
-func makeInt32(val int32) (*int32) {
-	tmpVal := val
-	return &tmpVal
-}
-
-func makeTimeNow(time time.Time) (*metav1.MicroTime) {
-
-	timeNow := metav1.MicroTime{Time: time}
-	return &timeNow
-}
-
+const (
+	LeaseDuration = 3600 * time.Second
+	LeaseHolderIdentity    = "node-maintenance"
+	LeaseNamespaceDefault  = "node-maintenance"
+	LeaseApiPackage        = "coordination.k8s.io/v1beta1"
+)
 func checkLeaseSupportedInternal(cs kubernetes.Interface) (bool, error) {
 
 	groupList, err := cs.Discovery().ServerGroups()
@@ -52,10 +48,10 @@ func makeExpectedOwnerOfLease(node *corev1.Node) (*metav1.OwnerReference) {
 	}
 }
 
-func createOrGetExistingLease(client  client.Client, node *corev1.Node, durationInSeconds int32) (*coordv1beta1.Lease, bool, error) {
+func createOrGetExistingLease(client  client.Client, node *corev1.Node, duration time.Duration) (*coordv1beta1.Lease, bool, error) {
 	holderIdentity := LeaseHolderIdentity
 	owner := makeExpectedOwnerOfLease(node)
-	microTimeNow :=  makeTimeNow(time.Now())
+	microTimeNow := metav1.NowMicro()
 
 	lease := &coordv1beta1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,10 +61,10 @@ func createOrGetExistingLease(client  client.Client, node *corev1.Node, duration
 		},
 		Spec: coordv1beta1.LeaseSpec{
 			HolderIdentity:       &holderIdentity,
-			LeaseDurationSeconds: makeInt32(durationInSeconds),
-			AcquireTime:          microTimeNow,
-			RenewTime:            microTimeNow,
-			LeaseTransitions:     makeInt32(0),
+			LeaseDurationSeconds: pointer.Int32Ptr(int32(duration.Seconds())),
+			AcquireTime:          &microTimeNow,
+			RenewTime:            &microTimeNow,
+			LeaseTransitions:     pointer.Int32Ptr(0),
 		},
 	}
 
@@ -88,29 +84,25 @@ func createOrGetExistingLease(client  client.Client, node *corev1.Node, duration
 	return lease, false,  nil
 }
 
-func leaseDueTime(lease *coordv1beta1.Lease, durationInSeconds time.Duration) (time.Time) {
-	dueTime := lease.Spec.RenewTime.Time
-	return dueTime.Add(durationInSeconds * time.Second)
+func leaseDueTime(lease *coordv1beta1.Lease) time.Time {
+	return lease.Spec.RenewTime.Time.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
 }
 
-func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime time.Time) (bool,bool) {
+func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime metav1.MicroTime) (bool,bool) {
 
 	if lease.Spec.RenewTime == nil || lease.Spec.LeaseDurationSeconds == nil {
 		log.Info("empty renew time or duration in sec")
 		return true, true
 	}
-	duration := time.Duration(*lease.Spec.LeaseDurationSeconds)
-	dueTime := leaseDueTime(lease, duration)
-
-	deadline := currentTime
+	dueTime := leaseDueTime(lease)
 
 	// if lease expired right now, then both update the lease and the acquire time (second rvalue)
 	// if the acquire time has been previously nil
-	if dueTime.Before(deadline) {
+	if dueTime.Before(currentTime.Time) {
 		return true, lease.Spec.AcquireTime == nil
 	}
 
-	deadline = deadline.Add(2 * drainerTimeoutInMinutes * time.Minute)
+	deadline := currentTime.Add(2 * DrainerTimeout)
 
 	// about to expire, update the lease but no the acquire time (second rvalue)
 	return dueTime.Before(deadline), false
@@ -122,15 +114,14 @@ func isValidLease(lease *coordv1beta1.Lease, currentTime time.Time) bool {
 		return false
 	}
 
-	duration := time.Duration(*lease.Spec.LeaseDurationSeconds)
 	renewTime := (*lease.Spec.RenewTime).Time
-	dueTime := leaseDueTime(lease, duration)
+	dueTime := leaseDueTime(lease)
 
 	// valid lease if: due time not in the past and renew time not in the future
 	return !dueTime.Before(currentTime) && !renewTime.After(currentTime)
 }
 
-func updateLease(client  client.Client, node *corev1.Node, lease *coordv1beta1.Lease, currentTime time.Time, durationInSeconds int32) (*coordv1beta1.Lease, error, bool) {
+func updateLease(client  client.Client, node *corev1.Node, lease *coordv1beta1.Lease, currentTime *metav1.MicroTime, duration time.Duration) (error, bool) {
 
 	holderIdentity := LeaseHolderIdentity
 
@@ -139,7 +130,7 @@ func updateLease(client  client.Client, node *corev1.Node, lease *coordv1beta1.L
 	updateAlreadyOwnedLease := false
 
 	if  lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity == holderIdentity {
-		needUpdateLease, setAcquireAndLeaseTransitions = needUpdateOwnedLease(lease,currentTime)
+		needUpdateLease, setAcquireAndLeaseTransitions = needUpdateOwnedLease(lease,*currentTime)
 		if  needUpdateLease {
 			updateAlreadyOwnedLease = true
 
@@ -148,8 +139,8 @@ func updateLease(client  client.Client, node *corev1.Node, lease *coordv1beta1.L
 		}
 	}  else {
 		// can't update the lease if it is currently valid.
-		if isValidLease(lease, currentTime) {
-			return nil, fmt.Errorf("Can't update valid lease held by different owner"), false
+		if isValidLease(lease, currentTime.Time) {
+			return fmt.Errorf("Can't update valid lease held by different owner"), false
 		}
 		needUpdateLease = true
 
@@ -159,25 +150,25 @@ func updateLease(client  client.Client, node *corev1.Node, lease *coordv1beta1.L
 
 	if needUpdateLease {
 		if setAcquireAndLeaseTransitions {
-			lease.Spec.AcquireTime = makeTimeNow(currentTime)
+			lease.Spec.AcquireTime = currentTime
 			if lease.Spec.LeaseTransitions != nil {
 				*lease.Spec.LeaseTransitions += int32(1)
 			} else {
-				lease.Spec.LeaseTransitions = makeInt32(1)
+				lease.Spec.LeaseTransitions = pointer.Int32Ptr(1)
 			}
 		}
 		owner := makeExpectedOwnerOfLease(node)
 		lease.ObjectMeta.OwnerReferences = []metav1.OwnerReference{*owner}
 		lease.Spec.HolderIdentity = &holderIdentity
-		lease.Spec.LeaseDurationSeconds = makeInt32(durationInSeconds)
-		lease.Spec.RenewTime = makeTimeNow(currentTime)
+		lease.Spec.LeaseDurationSeconds = pointer.Int32Ptr(int32(duration.Seconds()))
+		lease.Spec.RenewTime = currentTime
 		if err := client.Update(context.TODO(), lease); err != nil {
 			log.Errorf("Failed to update the lease. node %s error: %v", node.Name, err)
-			return lease, err, updateAlreadyOwnedLease
+			return err, updateAlreadyOwnedLease
 		}
 	}
 
-	return lease, nil, false
+	return nil, false
 }
 
 func invalidateLease(client  client.Client, nodeName string) error {

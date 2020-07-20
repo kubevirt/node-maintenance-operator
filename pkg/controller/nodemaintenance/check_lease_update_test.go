@@ -1,105 +1,85 @@
 package nodemaintenance
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-    . "github.com/onsi/ginkgo/extensions/table"
-	corev1 "k8s.io/api/core/v1"
-	coordv1beta1 "k8s.io/api/coordination/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	apitypes "k8s.io/apimachinery/pkg/types"
-	"time"
 	"context"
 	"fmt"
+	"time"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+
+	coordv1beta1 "k8s.io/api/coordination/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	apitypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-const NowTime = 100000
+var NowTime = metav1.NowMicro()
 
-func compareString(rval *string, lval *string) bool {
-	return (rval == nil && lval == nil) || (rval != nil && lval != nil && *rval == *lval)
-}
-
-func compareTime(rval *metav1.MicroTime, lval *metav1.MicroTime) bool {
-	return (rval == nil && lval == nil) || (rval != nil && lval != nil && (*rval).Time == (*lval).Time)
-}
-
-func compareInt32(rval *int32, lval *int32) bool {
-	return (rval == nil && lval == nil) || (rval != nil && lval != nil && *rval == *lval)
-}
-
-func makeString(val string) (*string) {
-	return &val
-}
-
-func getTimeLease(tmsec int64) (*metav1.MicroTime) {
-	tm  := time.Unix(int64(tmsec),0)
-	ret := metav1.MicroTime{Time: tm}
-	return &ret
-}
-
-func getMockNode() (*corev1.Node) {
+func getMockNode() *corev1.Node {
 	node := &corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "miau",
-					UID:  "foobar",
-				},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "miau",
+			UID:  "foobar",
+		},
 	}
 	return node
 }
 
 var _ = Describe("checkLeaseUpdate", func() {
 
+	// if current time is after this time, the lease is expired
+	leaseExpiredTime := NowTime.Add(-LeaseDuration).Add(-1 * time.Second)
+	// if lease expires after this time, it should be renewed
+	renewTriggerTime := NowTime.Add(-LeaseDuration).Add(2 * DrainerTimeout)
+
 	DescribeTable("check lease supported",
-		func(initLease *coordv1beta1.Lease, leasePostcondition *coordv1beta1.Lease, expectedError error) {
+		func(initialLease *coordv1beta1.Lease, expectedLease *coordv1beta1.Lease, expectedError error) {
 			node := getMockNode()
 			objs := []runtime.Object{
-				initLease,
+				initialLease,
 			}
 			cl  := fake.NewFakeClient(objs...)
-			timeNow :=  time.Unix(NowTime,0)
 
 			name := apitypes.NamespacedName{Namespace: LeaseNamespace, Name: node.Name}
-			leaseIn := &coordv1beta1.Lease{}
-			err := cl.Get(context.TODO(), name, leaseIn)
+			currentLease := &coordv1beta1.Lease{}
+			err := cl.Get(context.TODO(), name, currentLease)
 			Expect(err).NotTo(HaveOccurred())
 
-			leaseRet, err, failedUpdateOwnedLease := updateLease(cl, node, leaseIn, timeNow, LeaseDurationInSeconds)
+			err, failedUpdateOwnedLease := updateLease(cl, node, currentLease, &NowTime, LeaseDuration)
 
-			if leasePostcondition == nil {
+			if expectedLease == nil {
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(expectedError))
-
-				var nilRef *coordv1beta1.Lease
-				Expect(leaseRet).To(Equal(nilRef))
 			} else {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(expectedError).NotTo(HaveOccurred())
 
 				Expect(failedUpdateOwnedLease).To(BeFalse())
-				lease := &coordv1beta1.Lease{}
-				err = cl.Get(context.TODO(), name, lease)
+				actualLease := &coordv1beta1.Lease{}
+				err = cl.Get(context.TODO(), name, actualLease)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(leaseRet).To(Equal(lease))
 
-				Expect(len(lease.ObjectMeta.OwnerReferences)).To(Equal(1))
-				Expect(len(leasePostcondition.ObjectMeta.OwnerReferences)).To(Equal(1))
+				Expect(len(actualLease.ObjectMeta.OwnerReferences)).To(Equal(1))
+				Expect(len(expectedLease.ObjectMeta.OwnerReferences)).To(Equal(1))
 
-				leaseRef := lease.ObjectMeta.OwnerReferences[0]
-				leasePost := leasePostcondition.ObjectMeta.OwnerReferences[0]
+				actualLeaseOwner := actualLease.ObjectMeta.OwnerReferences[0]
+				expectedLeaseOwner := expectedLease.ObjectMeta.OwnerReferences[0]
 
-				Expect(leasePost.APIVersion).To(Equal(leaseRef.APIVersion))
-				Expect(leasePost.Kind).To(Equal(leaseRef.Kind))
-				Expect(leasePost.Name).To(Equal(leaseRef.Name))
-				Expect(leasePost.UID).To(Equal(leaseRef.UID))
+				Expect(actualLeaseOwner.APIVersion).To(Equal(expectedLeaseOwner.APIVersion))
+				Expect(actualLeaseOwner.Kind).To(Equal(expectedLeaseOwner.Kind))
+				Expect(actualLeaseOwner.Name).To(Equal(expectedLeaseOwner.Name))
+				Expect(actualLeaseOwner.UID).To(Equal(expectedLeaseOwner.UID))
 
-				Expect(compareString(lease.Spec.HolderIdentity, leasePostcondition.Spec.HolderIdentity)).To(Equal(true))
-				Expect(compareTime(lease.Spec.RenewTime, leasePostcondition.Spec.RenewTime)).To(Equal(true))
-				Expect(compareTime(lease.Spec.AcquireTime, leasePostcondition.Spec.AcquireTime)).To(Equal(true))
-				Expect(compareInt32(lease.Spec.LeaseDurationSeconds, leasePostcondition.Spec.LeaseDurationSeconds)).To(Equal(true))
-
-				Expect(compareInt32(lease.Spec.LeaseTransitions, leasePostcondition.Spec.LeaseTransitions)).To(Equal(true))
+				ExpectEqualWithNil(actualLease.Spec.HolderIdentity, expectedLease.Spec.HolderIdentity, "holder identity should match")
+				ExpectEqualWithNil(actualLease.Spec.RenewTime, expectedLease.Spec.RenewTime, "renew time should match")
+				ExpectEqualWithNil(actualLease.Spec.AcquireTime, expectedLease.Spec.AcquireTime, "acquire time should match")
+				ExpectEqualWithNil(actualLease.Spec.LeaseDurationSeconds, expectedLease.Spec.LeaseDurationSeconds, "actualLease duration should match")
+				ExpectEqualWithNil(actualLease.Spec.LeaseTransitions, expectedLease.Spec.LeaseTransitions, "actualLease transitions should match")
 			}
 		},
 
@@ -118,10 +98,10 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString("miau"),
-						LeaseDurationSeconds: makeInt32(3200),
+						HolderIdentity:       pointer.StringPtr("miau"),
+						LeaseDurationSeconds: pointer.Int32Ptr(32000),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime-1)),
+						RenewTime:            &metav1.MicroTime{Time: NowTime.Add(-1 * time.Second)},
 						LeaseTransitions:     nil,
 					},
 				},
@@ -143,10 +123,10 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString("miau"),
-						LeaseDurationSeconds: makeInt32(44),
-						AcquireTime:          getTimeLease(42),
-						RenewTime:            getTimeLease(43),
+						HolderIdentity:       pointer.StringPtr("miau"),
+						LeaseDurationSeconds: pointer.Int32Ptr(44),
+						AcquireTime:          &metav1.MicroTime{Time: time.Unix(42, 0)},
+						RenewTime:            &metav1.MicroTime{Time: time.Unix(43, 0)},
 						LeaseTransitions:     nil,
 					},
 				},
@@ -162,16 +142,16 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime)),
-						RenewTime:            getTimeLease(int64(NowTime)),
-						LeaseTransitions:     makeInt32(1),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &NowTime,
+						RenewTime:            &NowTime,
+						LeaseTransitions:     pointer.Int32Ptr(1),
 					},
 				},
 				nil,
 			 ),
-		Entry("update lease with different holder identity (with transition update)",
+		Entry("update expired lease with different holder identity (with transition update)",
 				&coordv1beta1.Lease{
 					ObjectMeta :metav1.ObjectMeta{
 						Name:	getMockNode().Name,
@@ -186,11 +166,11 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString("miau"),
-						LeaseDurationSeconds: makeInt32(44),
-						AcquireTime:          getTimeLease(42),
-						RenewTime:            getTimeLease(43),
-						LeaseTransitions:     makeInt32(3),
+						HolderIdentity:       pointer.StringPtr("miau"),
+						LeaseDurationSeconds: pointer.Int32Ptr(44),
+						AcquireTime:          &metav1.MicroTime{Time: time.Unix(42, 0)},
+						RenewTime:            &metav1.MicroTime{Time: time.Unix(43, 0)},
+						LeaseTransitions:     pointer.Int32Ptr(3),
 					},
 				},
 				&coordv1beta1.Lease{
@@ -205,16 +185,16 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime)),
-						RenewTime:            getTimeLease(int64(NowTime)),
-						LeaseTransitions:     makeInt32(4),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &NowTime,
+						RenewTime:            &NowTime,
+						LeaseTransitions:     pointer.Int32Ptr(4),
 					},
 				},
 				nil,
 			 ),
-		Entry("extend lease if same holder and zero renew time (invalid lease)",
+		Entry("extend lease if same holder and zero duration and renew time (invalid lease)",
 				&coordv1beta1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:	getMockNode().Name,
@@ -229,11 +209,11 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
 						LeaseDurationSeconds: nil,
-						AcquireTime:          getTimeLease(int64(NowTime-599)),
+						AcquireTime:          &metav1.MicroTime{Time: NowTime.Add(-599 * time.Second)},
 						RenewTime:            nil,
-						LeaseTransitions:     makeInt32(3),
+						LeaseTransitions:     pointer.Int32Ptr(3),
 						},
 				},
 				&coordv1beta1.Lease{
@@ -248,11 +228,11 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime)),
-						RenewTime:            getTimeLease(int64(NowTime)),
-						LeaseTransitions:     makeInt32(4),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &NowTime,
+						RenewTime:            &NowTime,
+						LeaseTransitions:     pointer.Int32Ptr(4),
 					},
 				},
 				nil,
@@ -272,10 +252,10 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds-42),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds()-42)),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime-LeaseDurationInSeconds-1)),
+						RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
 						LeaseTransitions:     nil,
 						},
 				},
@@ -291,11 +271,11 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime)),
-						RenewTime:            getTimeLease(int64(NowTime)),
-						LeaseTransitions:     makeInt32(1),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &NowTime,
+						RenewTime:            &NowTime,
+						LeaseTransitions:     pointer.Int32Ptr(1),
 					},
 				},
 				nil,
@@ -315,11 +295,11 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime-LeaseDurationInSeconds-1)),
-						RenewTime:            getTimeLease(int64(NowTime-LeaseDurationInSeconds-1)),
-						LeaseTransitions:     makeInt32(1),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &metav1.MicroTime{Time: leaseExpiredTime},
+						RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
+						LeaseTransitions:     pointer.Int32Ptr(1),
 						},
 				},
 				&coordv1beta1.Lease{
@@ -334,15 +314,16 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime-LeaseDurationInSeconds-1)),
-						RenewTime:            getTimeLease(int64(NowTime)),
-						LeaseTransitions:     makeInt32(1),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &metav1.MicroTime{Time: leaseExpiredTime},
+						RenewTime:            &NowTime,
+						LeaseTransitions:     pointer.Int32Ptr(1),
 					},
 				},
 				nil,
 			 ),
+		// TODO why is not setting aquire time and transitions?
 		Entry("extend lease if same holder and expired lease (acquire time previously nil)",
 				&coordv1beta1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
@@ -358,10 +339,10 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime-LeaseDurationInSeconds-1)),
+						RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
 						LeaseTransitions:     nil,
 						},
 				},
@@ -377,16 +358,17 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
-						AcquireTime:          getTimeLease(int64(NowTime)),
-						RenewTime:            getTimeLease(int64(NowTime)),
-						LeaseTransitions:     makeInt32(1),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+						AcquireTime:          &NowTime,
+						RenewTime:            &NowTime,
+						LeaseTransitions:     pointer.Int32Ptr(1),
 					},
 				},
 				nil,
 			 ),
-		Entry("extend lease if same holder and lease will expire before current Time + two times the drainertimeout",
+		// TODO why not setting aquire time and transitions?
+		Entry("extend lease if same holder and lease will expire before current Time + two times the drainer timeout",
 				&coordv1beta1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:	getMockNode().Name,
@@ -401,10 +383,10 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime) - LeaseDurationInSeconds + 2 * drainerTimeoutInMinutes * 60 - 1 ),
+						RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(-1 * time.Second)},
 						LeaseTransitions:     nil,
 						},
 				},
@@ -420,15 +402,16 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime)),
+						RenewTime:            &NowTime,
 						LeaseTransitions:     nil,
 					},
 				},
 				nil,
 			 ),
+		// TODO why not setting aquire time and transitions?
 		Entry("dont extend lease if same holder and lease not about to expire before current Time + two times the drainertimeout",
 				&coordv1beta1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
@@ -444,10 +427,10 @@ var _ = Describe("checkLeaseUpdate", func() {
 						},
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime) - LeaseDurationInSeconds + 2 * drainerTimeoutInMinutes * 60 + 1 ),
+						RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(time.Second)},
 						LeaseTransitions:     nil,
 						},
 				},
@@ -463,15 +446,14 @@ var _ = Describe("checkLeaseUpdate", func() {
 						} },
 					},
 					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       makeString(LeaseHolderIdentity),
-						LeaseDurationSeconds: makeInt32(LeaseDurationInSeconds),
+						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
 						AcquireTime:          nil,
-						RenewTime:            getTimeLease(int64(NowTime) - LeaseDurationInSeconds + 2 * drainerTimeoutInMinutes * 60 + 1 ),
+						RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(time.Second)},
 						LeaseTransitions:     nil,
 					},
 				},
 				nil,
 			 ),
-
 	)
 })

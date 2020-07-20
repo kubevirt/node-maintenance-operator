@@ -2,17 +2,28 @@ package nodemaintenance
 
 import (
 	"fmt"
+	"reflect"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func ExpectEqualWithNil(actual, expected interface{}) {
-	if expected == nil {
-		ExpectWithOffset(1, actual).To(BeNil())
-	} else if actual == nil {
-		ExpectWithOffset(1, expected).To(BeNil())
+func ExpectEqualWithNil(actual, expected interface{}, description string) {
+	// heads up: interfaces representing a pointer are not nil when the pointer is nil
+	if expected == nil || (reflect.ValueOf(expected).Kind() == reflect.Ptr && reflect.ValueOf(expected).IsNil()) {
+		// BeNil() handles pointers correctly
+		ExpectWithOffset(1, actual).To(BeNil(), description)
 	} else {
-		ExpectWithOffset(1, actual).To(Equal(expected))
+		// compare unix time, precision of MicroTime is sometimes different
+		if e, ok := expected.(*v1.MicroTime); ok {
+			expected = e.Unix()
+			if actual != nil && reflect.ValueOf(actual).Kind() == reflect.Ptr && !reflect.ValueOf(actual).IsNil(){
+				actual = actual.(*v1.MicroTime).Unix()
+			}
+		}
+		ExpectWithOffset(1, actual).To(Equal(expected), description)
 	}
 }
 
@@ -51,7 +62,7 @@ var _ = Describe("checkIfLeaseAPISupported", func() {
 
 					isLeaseSupported, err := checkLeaseSupportedInternal(c.mock);
 
-					ExpectEqualWithNil(err, c.expectedErr)
+					ExpectEqualWithNil(err, c.expectedErr, "error should match")
 					Expect(isLeaseSupported).To(Equal(c.expectedRes))
 
 			})

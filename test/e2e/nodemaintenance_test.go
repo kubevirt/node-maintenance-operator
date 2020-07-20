@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"k8s.io/utils/pointer"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,12 +34,12 @@ var (
 	cleanupTimeout       = time.Second * 5
 	testDeployment       = "testdeployment"
 	podLabel             = map[string]string{"test": "drain"}
-	testIterations		 = 4
 )
 
 func getCurrentOperatorPods() (*corev1.Pod, error) {
 
-	pods, err := KubeClient.CoreV1().Pods("node-maintenance-operator").List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	// FIXME get the correct namespace dynamically, on openshift we will be in another one...
+	pods, err := KubeClient.CoreV1().Pods("node-maintenance").List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
 	if err != nil {
 		return nil, err
 	}
@@ -49,17 +51,16 @@ func getCurrentOperatorPods() (*corev1.Pod, error) {
 	return &pods.Items[0], nil
 }
 
-func showDeploymentStatus(t *testing.T, callerError error) {
-
+func getOperatorLogs(t *testing.T) string {
 	pod, err := getCurrentOperatorPods()
 	if err != nil {
 		t.Fatalf("showDeployment: can't get operator deployment error=%v", err)
-		return
+		return ""
 	}
 	podName := pod.ObjectMeta.Name
 	podLogOpts := corev1.PodLogOptions{}
 
-	req := KubeClient.CoreV1().Pods("node-maintenance-operator").GetLogs(podName, &podLogOpts)
+	req := KubeClient.CoreV1().Pods(pod.Namespace).GetLogs(podName, &podLogOpts)
 	podLogs, err := req.Stream(context.Background())
 	if err != nil {
 		t.Errorf("showDeployment: can't get log stream error=%v", err)
@@ -71,29 +72,23 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 	if err != nil {
 		t.Errorf("showDeployment: can't copy log stream error=%v", err)
 	}
-	str := buf.String()
+	return buf.String()
+}
+
+func showDeploymentStatus(t *testing.T, callerError error) {
+
+	logs := getOperatorLogs(t)
 
 	if callerError != nil {
-		t.Fatalf("error: %v operator logs: %s", callerError, str)
+		t.Fatalf("error: %v operator logs:\n%s", callerError, logs)
 	} else {
-		t.Logf("operator logs %s", str)
-	}
-}
-
-func TestNodeMainenance(t *testing.T) {
-	// run subtests
-	t.Run("NodeMaintenance-group", func(t *testing.T) {
-		t.Run("Cluster", ClusterTest)
-	})
-}
-
-func ClusterTest(t *testing.T) {
-	if err := nodeMaintenanceTest(t); err != nil {
-		t.Fatal(err)
+		t.Logf("operator logs:\n%s", logs)
 	}
 }
 
 func  checkValidLease(t *testing.T, nodeName string) error {
+
+	// FIXME this won't work: nmo.LeaseNamespace is overwritten by the operator during runtime, and we will never see that here...
 	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
 	err := Client.Get(context.TODO(), nName, lease)
@@ -101,7 +96,7 @@ func  checkValidLease(t *testing.T, nodeName string) error {
 		return fmt.Errorf("can't get lease node %s : %v", nodeName, err)
 	}
 
-	if lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds != nmo.LeaseDurationInSeconds {
+	if lease.Spec.LeaseDurationSeconds == nil || *lease.Spec.LeaseDurationSeconds != int32(nmo.LeaseDuration.Seconds()) {
 		return fmt.Errorf("checkValidLease wrong LeaseDurationInSeconds")
 	}
 	if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != nmo.LeaseHolderIdentity {
@@ -150,13 +145,38 @@ func  checkInvalidLease(t *testing.T, nodeName string) error {
 	return nil
 }
 
-func  enterAndExitMaintenanceMode(t *testing.T) error {
+func countNodes(t *testing.T) (int, string, error) {
+	nodesList := &corev1.NodeList{}
+	err := Client.List(context.TODO(), nodesList, &client.ListOptions{})
+	if err != nil {
+		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
+		return -1, "", err
+	}
+
+	computeNodesNumber := 0
+	workerNodeName := ""
+
+	for _, node := range nodesList.Items {
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+			computeNodesNumber++
+			workerNodeName = node.ObjectMeta.Name
+		}
+	}
+	return computeNodesNumber, workerNodeName, nil
+}
+
+func enterAndExitMaintenanceMode(t *testing.T) error {
 	namespace := os.Getenv("TEST_NAMESPACE")
 	if len(namespace) == 0 {
 		return fmt.Errorf("could not get namespace")
 	}
 
-	err := createSimpleDeployment(t, namespace)
+	computeNodesNumber, workerNodeName, err := countNodes(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createSimpleDeployment(t, namespace, workerNodeName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,6 +227,19 @@ func  enterAndExitMaintenanceMode(t *testing.T) error {
 		showDeploymentStatus(t, fmt.Errorf("%s: Failed to verify running phase: %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
 	}
 
+	// Wait for operator log showing it reconciles with fixed duration
+	// caused by drain, caused by termination graceperiod > drain timeout
+	t.Log("Waiting for drain timeout log")
+	if err = wait.PollImmediate(5*time.Second, 2*time.Minute, func()(bool, error) {
+		logs := getOperatorLogs(t)
+		if strings.Contains(logs, nmo.FixedDurationReconcileLog) {
+			return true, nil
+		}
+		return false, nil
+	}); err != nil {
+		showDeploymentStatus(t, fmt.Errorf("%s: Didn't run into drain timeout: %v", time.Now().Format("2006-01-02 15:04:05.000000"), err))
+	}
+
 	// Wait for the maintanance operation to complete successfuly
 	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
@@ -240,27 +273,12 @@ func  enterAndExitMaintenanceMode(t *testing.T) error {
 		showDeploymentStatus(t, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
 	}
 
-	nodesList := &corev1.NodeList{}
-	err = Client.List(context.TODO(), nodesList, &client.ListOptions{})
-	if err != nil {
-		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
-	}
-
-	computeNodesNumber := 0
-
-	for _, node := range nodesList.Items {
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
-			computeNodesNumber++
-		}
-	}
-
 	err = checkValidLease(t, nodeName)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("no valid lease after nmo completion: %v", err))
 	}
 
 	if computeNodesNumber > 2 {
-		// Check that the deployment has 1 replica running after maintenance
 		err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
 		if err != nil {
 			showDeploymentStatus(t, fmt.Errorf("failed to wait for deployment. error %v", err))
@@ -328,15 +346,13 @@ func  enterAndExitMaintenanceMode(t *testing.T) error {
 	return nil
 }
 
-func nodeMaintenanceTest(t *testing.T) error {
+func TestNodeMaintenance(t *testing.T) {
 
-	for i:=0; i < testIterations; i+=1 {
-		if err := enterAndExitMaintenanceMode(t); err != nil {
-			t.Fatalf("failed to enter maintenance mode. error %v", err);
-		}
+	if err := enterAndExitMaintenanceMode(t); err != nil {
+		showDeploymentStatus(t, nil)
+		t.Fatalf("failed to enter or exit maintenance mode. error %v", err)
 	}
 
-	return nil
 }
 
 func deleteSimpleDeployment(t *testing.T, namespace string) error {
@@ -368,8 +384,7 @@ func deleteSimpleDeployment(t *testing.T, namespace string) error {
 	})
 }
 
-func createSimpleDeployment(t *testing.T, namespace string) error {
-	replicas := rune(1)
+func createSimpleDeployment(t *testing.T, namespace string, nodeName string) error {
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -380,7 +395,7 @@ func createSimpleDeployment(t *testing.T, namespace string) error {
 			Namespace: namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: pointer.Int32Ptr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: podLabel,
 			},
@@ -397,7 +412,7 @@ func createSimpleDeployment(t *testing.T, namespace string) error {
 									{
 										MatchExpressions: []corev1.NodeSelectorRequirement{
 											{
-												Key:      "node-role.kubernetes.io/master",
+												Key:      "node-role.kubernetes.io/" + nodeName,
 												Operator: corev1.NodeSelectorOpDoesNotExist,
 											},
 										},
@@ -412,6 +427,9 @@ func createSimpleDeployment(t *testing.T, namespace string) error {
 						Command: []string{"/bin/sh"},
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
+					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
+					// make sure we run into the drain timeout at least once
+					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nmo.DrainerTimeout.Seconds()) +10),
 				},
 			},
 		},
