@@ -18,7 +18,7 @@ fi
 exec 1>&2
 
 cd $TOP_LEVEL
-make fmt verify-unchanged
+make shfmt fmt verify-unchanged
 if [[ $? != 0 ]]; then
 	echo "Error: fmt check failed. run make fmt to fix it."
 	exit 1

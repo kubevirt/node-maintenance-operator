@@ -58,8 +58,13 @@ verify-unchanged:
 test:
 	./hack/coverage.sh
 
+.PHONY: shfmt
+shfmt:
+	go get mvdan.cc/sh/v3/cmd/shfmt
+	shfmt -i 4 -w ./hack/
+
 .PHONY: check
-check: fmt vet generate-all verify-manifests verify-unchanged test
+check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
 
 .PHONY: container-build
 container-build: container-build-operator container-build-bundle container-build-index
