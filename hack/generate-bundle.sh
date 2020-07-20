@@ -12,8 +12,8 @@
 
 set -ex
 
-SELF=$( realpath $0 )
-BASEPATH=$( dirname $SELF )
+SELF=$(realpath $0)
+BASEPATH=$(dirname $SELF)
 . "${BASEPATH}/get-operator-sdk.sh"
 
 CSV_TEMPLATE=manifests/node-maintenance-operator/template/node-maintenance-operator.clusterserviceversion.yaml

@@ -2,8 +2,8 @@
 
 set -ex
 
-SELF=$( realpath $0 )
-BASEPATH=$( dirname $SELF )
+SELF=$(realpath $0)
+BASEPATH=$(dirname $SELF)
 . "${BASEPATH}/get-opm.sh"
 
 # Skip adding an bundle by using an empty bundle image, just generate the Dockerfile (and an empty database)
