@@ -350,7 +350,7 @@ func TestNodeMaintenance(t *testing.T) {
 
 	if err := enterAndExitMaintenanceMode(t); err != nil {
 		showDeploymentStatus(t, nil)
-		t.Fatalf("failed to enter maintenance mode. error %v", err)
+		t.Fatalf("failed to enter or exit maintenance mode. error %v", err)
 	}
 
 }
