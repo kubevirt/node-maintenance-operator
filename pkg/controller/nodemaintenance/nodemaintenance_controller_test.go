@@ -2,8 +2,9 @@ package nodemaintenance
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/types"
 	"reflect"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -201,4 +202,3 @@ var _ = Describe("updateCondition", func() {
 
 	})
 })
-

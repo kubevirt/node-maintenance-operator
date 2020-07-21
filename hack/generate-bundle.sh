@@ -8,13 +8,13 @@
 # Note: dealing with bundle images and creating index images from them is difficult in CI
 # We use the "initializer" instead for creating the regisrty database
 # That's why we still need a package manifest: the "initializer" does not read the annotation file from the metadata
-# See ./gen-index.sh
+# See ./generate-index.sh
 
 set -ex
 
-SELF=$( realpath $0 )
-BASEPATH=$( dirname $SELF )
-. "${BASEPATH}/gen-operator-sdk.sh"
+SELF=$(realpath $0)
+BASEPATH=$(dirname $SELF)
+. "${BASEPATH}/get-operator-sdk.sh"
 
 CSV_TEMPLATE=manifests/node-maintenance-operator/template/node-maintenance-operator.clusterserviceversion.yaml
 PACKAGE_TEMPLATE=manifests/node-maintenance-operator/template/node-maintenance-operator.package.yaml

@@ -1,9 +1,6 @@
 #!/bin/bash -e
 
-[  -f ./build/_output/bin/ginkgo ] || GOBIN=$PWD/build/_output/bin/  go install github.com/onsi/ginkgo/ginkgo
-
-GINKGO="$1"
-TARGETCOVERAGE="$2"
+[ -f ${GINKGO} ] || GOBIN=$PWD/build/_output/bin/ go install github.com/onsi/ginkgo/ginkgo
 
 COVERAGE_FILE=cover.out
 GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipPackage ./vendor"
@@ -16,26 +13,26 @@ declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
 find . -name ${COVERAGE_FILE} | xargs rm -f
 
 # run ginkgo with coverage result line
-${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed  '/coverage:.*$/d'
+${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed '/coverage:.*$/d'
 GSTAT=${PIPESTATUS[0]}
 
 if [[ $GSTAT != 0 ]]; then
-	echo "* ginkgo run failed *"
-	exit 1
+    echo "* ginkgo run failed *"
+    exit 1
 fi
 
 # ginkgo and html coverage don't quite live in harmony. fix that.
 # ginkgo aggregates the coverage file, but the resulting file is not accepted by go tool cover.
 # the reason is that there are repeated mode: headers, we need to leave just the first one of them
-sed -i  '/mode: atomic/d' $COVERAGE_FILE
+sed -i '/mode: atomic/d' $COVERAGE_FILE
 sed -i '1i mode: atomic' $COVERAGE_FILE
 
-function exclude_file {
-	local file=$2
-	local term=$1
+function exclude_file() {
+    local file=$2
+    local term=$1
 
-	grep -v $term ${file} >${file}.tmp
-	mv -f ${file}.tmp $file
+    grep -v $term ${file} >${file}.tmp
+    mv -f ${file}.tmp $file
 }
 
 # so that the function can be called from xargs
@@ -43,7 +40,7 @@ export -f exclude_file
 
 # exclude files listed as excluded from coverage report
 for f in "${EXCLUDE_FILES_FROM_COVERAGE}"; do
-	exclude_file "$f" "${COVERAGE_FILE}"
+    exclude_file "$f" "${COVERAGE_FILE}"
 done
 
 #echo "now exit"
@@ -59,10 +56,9 @@ COVERAGENUM=$(echo "$FUNC_REP" | sed -n 's/^total:[[:blank:]]*(statements)[[:bla
 ROUNDEDCOVERAGE=$(echo "$COVERAGENUM" | awk '{print int($1+0.5)}')
 
 if [[ "$ROUNDEDCOVERAGE" -lt "$TARGETCOVERAGE" ]]; then
-	echo "Error: actual coverage $ROUNDEDCOVERAGE of unit tests is less then the target coverage $TARGETCOVERAGE"
-	exit 1
+    echo "Error: actual coverage $ROUNDEDCOVERAGE of unit tests is less then the target coverage $TARGETCOVERAGE"
+    exit 1
 fi
 
 # html coverage report (this makes sense if run in interactive mode - go tool displays the results in the current browser)
 go tool cover -html=$COVERAGE_FILE
-

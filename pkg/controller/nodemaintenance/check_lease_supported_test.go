@@ -19,7 +19,7 @@ func ExpectEqualWithNil(actual, expected interface{}, description string) {
 		// compare unix time, precision of MicroTime is sometimes different
 		if e, ok := expected.(*v1.MicroTime); ok {
 			expected = e.Unix()
-			if actual != nil && reflect.ValueOf(actual).Kind() == reflect.Ptr && !reflect.ValueOf(actual).IsNil(){
+			if actual != nil && reflect.ValueOf(actual).Kind() == reflect.Ptr && !reflect.ValueOf(actual).IsNil() {
 				actual = actual.(*v1.MicroTime).Unix()
 			}
 		}
@@ -29,7 +29,7 @@ func ExpectEqualWithNil(actual, expected interface{}, description string) {
 
 type TestCaseDefinition struct {
 	info        string
-	mock		*FakeClient
+	mock        *FakeClient
 	expectedErr error
 	expectedRes bool
 }
@@ -58,12 +58,12 @@ var _ = Describe("checkIfLeaseAPISupported", func() {
 		}
 		for _, c := range testCases {
 			Context(c.info, func() {
-					By(c.info)
+				By(c.info)
 
-					isLeaseSupported, err := checkLeaseSupportedInternal(c.mock);
+				isLeaseSupported, err := checkLeaseSupportedInternal(c.mock)
 
-					ExpectEqualWithNil(err, c.expectedErr, "error should match")
-					Expect(isLeaseSupported).To(Equal(c.expectedRes))
+				ExpectEqualWithNil(err, c.expectedErr, "error should match")
+				Expect(isLeaseSupported).To(Equal(c.expectedRes))
 
 			})
 		}

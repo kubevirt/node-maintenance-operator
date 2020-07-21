@@ -43,7 +43,7 @@ var _ = Describe("checkLeaseUpdate", func() {
 			objs := []runtime.Object{
 				initialLease,
 			}
-			cl  := fake.NewFakeClient(objs...)
+			cl := fake.NewFakeClient(objs...)
 
 			name := apitypes.NamespacedName{Namespace: LeaseNamespace, Name: node.Name}
 			currentLease := &coordv1beta1.Lease{}
@@ -84,376 +84,376 @@ var _ = Describe("checkLeaseUpdate", func() {
 		},
 
 		Entry("fail to update valid lease with different holder identity",
-				&coordv1beta1.Lease{
-					ObjectMeta :metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr("miau"),
-						LeaseDurationSeconds: pointer.Int32Ptr(32000),
-						AcquireTime:          nil,
-						RenewTime:            &metav1.MicroTime{Time: NowTime.Add(-1 * time.Second)},
-						LeaseTransitions:     nil,
-					},
-				},
-				nil,
-				fmt.Errorf("Can't update valid lease held by different owner"),
-			 ),
-		Entry("update lease with different holder identity (full init)",
-				&coordv1beta1.Lease{
-					ObjectMeta :metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr("miau"),
-						LeaseDurationSeconds: pointer.Int32Ptr(44),
-						AcquireTime:          &metav1.MicroTime{Time: time.Unix(42, 0)},
-						RenewTime:            &metav1.MicroTime{Time: time.Unix(43, 0)},
-						LeaseTransitions:     nil,
-					},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta :metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &NowTime,
-						RenewTime:            &NowTime,
-						LeaseTransitions:     pointer.Int32Ptr(1),
-					},
-				},
-				nil,
-			 ),
-		Entry("update expired lease with different holder identity (with transition update)",
-				&coordv1beta1.Lease{
-					ObjectMeta :metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr("miau"),
-						LeaseDurationSeconds: pointer.Int32Ptr(44),
-						AcquireTime:          &metav1.MicroTime{Time: time.Unix(42, 0)},
-						RenewTime:            &metav1.MicroTime{Time: time.Unix(43, 0)},
-						LeaseTransitions:     pointer.Int32Ptr(3),
-					},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta :metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &NowTime,
-						RenewTime:            &NowTime,
-						LeaseTransitions:     pointer.Int32Ptr(4),
-					},
-				},
-				nil,
-			 ),
-		Entry("extend lease if same holder and zero duration and renew time (invalid lease)",
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: nil,
-						AcquireTime:          &metav1.MicroTime{Time: NowTime.Add(-599 * time.Second)},
-						RenewTime:            nil,
-						LeaseTransitions:     pointer.Int32Ptr(3),
-						},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &NowTime,
-						RenewTime:            &NowTime,
-						LeaseTransitions:     pointer.Int32Ptr(4),
-					},
-				},
-				nil,
-			 ),
-		Entry("update lease if same holder and expired lease - check modified lease duration",
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds()-42)),
-						AcquireTime:          nil,
-						RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
-						LeaseTransitions:     nil,
-						},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &NowTime,
-						RenewTime:            &NowTime,
-						LeaseTransitions:     pointer.Int32Ptr(1),
-					},
-				},
-				nil,
-			 ),
-		Entry("extend lease if same holder and expired lease (acquire time previously not nil)",
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &metav1.MicroTime{Time: leaseExpiredTime},
-						RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
-						LeaseTransitions:     pointer.Int32Ptr(1),
-						},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &metav1.MicroTime{Time: leaseExpiredTime},
-						RenewTime:            &NowTime,
-						LeaseTransitions:     pointer.Int32Ptr(1),
-					},
-				},
-				nil,
-			 ),
-		// TODO why is not setting aquire time and transitions?
-		Entry("extend lease if same holder and expired lease (acquire time previously nil)",
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          nil,
-						RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
-						LeaseTransitions:     nil,
-						},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          &NowTime,
-						RenewTime:            &NowTime,
-						LeaseTransitions:     pointer.Int32Ptr(1),
-					},
-				},
-				nil,
-			 ),
-		// TODO why not setting aquire time and transitions?
-		Entry("extend lease if same holder and lease will expire before current Time + two times the drainer timeout",
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          nil,
-						RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(-1 * time.Second)},
-						LeaseTransitions:     nil,
-						},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
-								APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
-								Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
-								Name:       getMockNode().Name,
-								UID:        getMockNode().UID,
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          nil,
-						RenewTime:            &NowTime,
-						LeaseTransitions:     nil,
-					},
-				},
-				nil,
-			 ),
-		// TODO why not setting aquire time and transitions?
-		Entry("dont extend lease if same holder and lease not about to expire before current Time + two times the drainertimeout",
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{
-							metav1.OwnerReference{
-								APIVersion: "v1",
-								Kind:       "Node",
-								Name:       "@",
-								UID:        "#",
-							},
-						},
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          nil,
-						RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(time.Second)},
-						LeaseTransitions:     nil,
-						},
-				},
-				&coordv1beta1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:	getMockNode().Name,
-						Namespace: LeaseNamespace,
-						OwnerReferences: []metav1.OwnerReference{ {
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
 							APIVersion: "v1",
 							Kind:       "Node",
 							Name:       "@",
 							UID:        "#",
-						} },
-					},
-					Spec: coordv1beta1.LeaseSpec{
-						HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
-						LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
-						AcquireTime:          nil,
-						RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(time.Second)},
-						LeaseTransitions:     nil,
+						},
 					},
 				},
-				nil,
-			 ),
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr("miau"),
+					LeaseDurationSeconds: pointer.Int32Ptr(32000),
+					AcquireTime:          nil,
+					RenewTime:            &metav1.MicroTime{Time: NowTime.Add(-1 * time.Second)},
+					LeaseTransitions:     nil,
+				},
+			},
+			nil,
+			fmt.Errorf("Can't update valid lease held by different owner"),
+		),
+		Entry("update lease with different holder identity (full init)",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr("miau"),
+					LeaseDurationSeconds: pointer.Int32Ptr(44),
+					AcquireTime:          &metav1.MicroTime{Time: time.Unix(42, 0)},
+					RenewTime:            &metav1.MicroTime{Time: time.Unix(43, 0)},
+					LeaseTransitions:     nil,
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &NowTime,
+					RenewTime:            &NowTime,
+					LeaseTransitions:     pointer.Int32Ptr(1),
+				},
+			},
+			nil,
+		),
+		Entry("update expired lease with different holder identity (with transition update)",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr("miau"),
+					LeaseDurationSeconds: pointer.Int32Ptr(44),
+					AcquireTime:          &metav1.MicroTime{Time: time.Unix(42, 0)},
+					RenewTime:            &metav1.MicroTime{Time: time.Unix(43, 0)},
+					LeaseTransitions:     pointer.Int32Ptr(3),
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &NowTime,
+					RenewTime:            &NowTime,
+					LeaseTransitions:     pointer.Int32Ptr(4),
+				},
+			},
+			nil,
+		),
+		Entry("extend lease if same holder and zero duration and renew time (invalid lease)",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: nil,
+					AcquireTime:          &metav1.MicroTime{Time: NowTime.Add(-599 * time.Second)},
+					RenewTime:            nil,
+					LeaseTransitions:     pointer.Int32Ptr(3),
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &NowTime,
+					RenewTime:            &NowTime,
+					LeaseTransitions:     pointer.Int32Ptr(4),
+				},
+			},
+			nil,
+		),
+		Entry("update lease if same holder and expired lease - check modified lease duration",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds() - 42)),
+					AcquireTime:          nil,
+					RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
+					LeaseTransitions:     nil,
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &NowTime,
+					RenewTime:            &NowTime,
+					LeaseTransitions:     pointer.Int32Ptr(1),
+				},
+			},
+			nil,
+		),
+		Entry("extend lease if same holder and expired lease (acquire time previously not nil)",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &metav1.MicroTime{Time: leaseExpiredTime},
+					RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
+					LeaseTransitions:     pointer.Int32Ptr(1),
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &metav1.MicroTime{Time: leaseExpiredTime},
+					RenewTime:            &NowTime,
+					LeaseTransitions:     pointer.Int32Ptr(1),
+				},
+			},
+			nil,
+		),
+		// TODO why is not setting aquire time and transitions?
+		Entry("extend lease if same holder and expired lease (acquire time previously nil)",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          nil,
+					RenewTime:            &metav1.MicroTime{Time: leaseExpiredTime},
+					LeaseTransitions:     nil,
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          &NowTime,
+					RenewTime:            &NowTime,
+					LeaseTransitions:     pointer.Int32Ptr(1),
+				},
+			},
+			nil,
+		),
+		// TODO why not setting aquire time and transitions?
+		Entry("extend lease if same holder and lease will expire before current Time + two times the drainer timeout",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+							Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+							Name:       getMockNode().Name,
+							UID:        getMockNode().UID,
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          nil,
+					RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(-1 * time.Second)},
+					LeaseTransitions:     nil,
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: corev1.SchemeGroupVersion.WithKind("Node").Version,
+						Kind:       corev1.SchemeGroupVersion.WithKind("Node").Kind,
+						Name:       getMockNode().Name,
+						UID:        getMockNode().UID,
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          nil,
+					RenewTime:            &NowTime,
+					LeaseTransitions:     nil,
+				},
+			},
+			nil,
+		),
+		// TODO why not setting aquire time and transitions?
+		Entry("dont extend lease if same holder and lease not about to expire before current Time + two times the drainertimeout",
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{
+							APIVersion: "v1",
+							Kind:       "Node",
+							Name:       "@",
+							UID:        "#",
+						},
+					},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          nil,
+					RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(time.Second)},
+					LeaseTransitions:     nil,
+				},
+			},
+			&coordv1beta1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      getMockNode().Name,
+					Namespace: LeaseNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "v1",
+						Kind:       "Node",
+						Name:       "@",
+						UID:        "#",
+					}},
+				},
+				Spec: coordv1beta1.LeaseSpec{
+					HolderIdentity:       pointer.StringPtr(LeaseHolderIdentity),
+					LeaseDurationSeconds: pointer.Int32Ptr(int32(LeaseDuration.Seconds())),
+					AcquireTime:          nil,
+					RenewTime:            &metav1.MicroTime{Time: renewTriggerTime.Add(time.Second)},
+					LeaseTransitions:     nil,
+				},
+			},
+			nil,
+		),
 	)
 })

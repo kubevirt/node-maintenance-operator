@@ -23,9 +23,9 @@ import (
 
 const (
 	MaxAllowedErrorToUpdateOwnedLease = 3
-    DrainerTimeout                    = 30 * time.Second
+	DrainerTimeout                    = 30 * time.Second
 	WaitDurationOnDrainError          = 5 * time.Second
-	FixedDurationReconcileLog = "Reconciling with fixed duration"
+	FixedDurationReconcileLog         = "Reconciling with fixed duration"
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -55,7 +55,7 @@ func onPodDeletedOrEvicted(pod *corev1.Pod, usingEviction bool) {
 	}
 	msg := fmt.Sprintf("pod: %s:%s %s from node: %s", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, verbString, pod.Spec.NodeName)
 	klog.Info(msg)
-	}
+}
 
 func SetLeaseNamespace(namespace string) {
 	LeaseNamespace = namespace
@@ -114,14 +114,14 @@ var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
 type ReconcileNodeMaintenance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client      client.Client
-	scheme      *runtime.Scheme
-	drainer     *drain.Helper
+	client           client.Client
+	scheme           *runtime.Scheme
+	drainer          *drain.Helper
 	isLeaseSupported bool
 }
 
-func (r *ReconcileNodeMaintenance) checkLeaseSupported() (error) {
-	isLeaseSupported, err := checkLeaseSupportedInternal(r.drainer.Client);
+func (r *ReconcileNodeMaintenance) checkLeaseSupported() error {
+	isLeaseSupported, err := checkLeaseSupportedInternal(r.drainer.Client)
 	if err != nil {
 		log.Errorf("Failed to check for lease support %v", err)
 		return err
@@ -167,7 +167,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		reqLogger.Infof("Deletion timestamp not zero")
 
 		// The object is being deleted
-		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) || ContainsString(instance.ObjectMeta.Finalizers, metav1.FinalizerOrphanDependents)  {
+		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) || ContainsString(instance.ObjectMeta.Finalizers, metav1.FinalizerOrphanDependents) {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
 			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName); err != nil {
 				reqLogger.Infof("error stopping node maintenance: %v", err)
@@ -210,16 +210,16 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			// Uncordon the node
 			err = r.stopNodeMaintenanceImp(node)
 			if err != nil {
-				return r.onReconcileError(instance,fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
+				return r.onReconcileError(instance, fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
 			}
 			instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
 		}
-		return r.onReconcileError(instance,fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
+		return r.onReconcileError(instance, fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
 	}
 	if err != nil {
 		instance.Status.ErrorOnLeaseCount = 0
 		return r.onReconcileError(instance, err)
-	}  else {
+	} else {
 		if instance.Status.Phase != nodemaintenanceapi.MaintenanceRunning || instance.Status.ErrorOnLeaseCount != 0 {
 			instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
 			instance.Status.ErrorOnLeaseCount = 0
@@ -273,15 +273,15 @@ func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev
 
 	nodeMeta := node.TypeMeta
 	ref := metav1.OwnerReference{
-			APIVersion:         nodeMeta.APIVersion,
-			Kind:               nodeMeta.Kind,
-			Name:               node.ObjectMeta.GetName(),
-			UID:                node.ObjectMeta.GetUID(),
-			BlockOwnerDeletion: makeBoolRef(false),
-			Controller:         makeBoolRef(false),
-		}
+		APIVersion:         nodeMeta.APIVersion,
+		Kind:               nodeMeta.Kind,
+		Name:               node.ObjectMeta.GetName(),
+		UID:                node.ObjectMeta.GetUID(),
+		BlockOwnerDeletion: makeBoolRef(false),
+		Controller:         makeBoolRef(false),
+	}
 
-	instance.ObjectMeta.SetOwnerReferences( append(instance.ObjectMeta.GetOwnerReferences(), ref) )
+	instance.ObjectMeta.SetOwnerReferences(append(instance.ObjectMeta.GetOwnerReferences(), ref))
 }
 
 func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) {
@@ -303,13 +303,13 @@ func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) 
 
 		now := metav1.NowMicro()
 		if err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, &now, LeaseDuration); err != nil {
-				return updateOwnedLeaseFailed, err
+			return updateOwnedLeaseFailed, err
 		}
 	}
 
 	return false, nil
 }
-func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node ) error {
+func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) error {
 	// Uncordon the node
 	err := AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
@@ -400,7 +400,7 @@ func (r *ReconcileNodeMaintenance) onReconcileErrorWithRequeue(nm *nodemaintenan
 	}
 	if duration != nil {
 		log.Infof(FixedDurationReconcileLog)
-		return reconcile.Result{RequeueAfter: *duration }, nil
+		return reconcile.Result{RequeueAfter: *duration}, nil
 	}
 	log.Infof("Reconciling with exponential duration")
 	return reconcile.Result{}, err

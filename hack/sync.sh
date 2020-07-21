@@ -15,7 +15,7 @@ if [ -z "$KUBEVIRTCI_CONFIG_PATH" ]; then
 fi
 
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
-  export KUBECONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)
+    export KUBECONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)
 fi
 
 source $KUBEVIRTCI_PATH/hack/common.sh
@@ -25,23 +25,23 @@ TARGET_NS=openshift-node-maintenance
 
 # Deploy OLM if needed
 if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
-  SELF=$( realpath $0 )
-  BASEPATH=$( dirname $SELF )
-  . "${BASEPATH}/gen-operator-sdk.sh"
+    SELF=$(realpath $0)
+    BASEPATH=$(dirname $SELF)
+    . "${BASEPATH}/get-operator-sdk.sh"
 
-  set +e
-  ${OPERATOR_SDK} olm status
-  if [[ $? != 0 ]] ; then
-    ${OPERATOR_SDK} olm install --verbose --timeout 5m
-    if [[ $? != 0 ]] ; then
-      echo "Failed to install OLM!"
-      exit 1
+    set +e
+    ${OPERATOR_SDK} olm status
+    if [[ $? != 0 ]]; then
+        ${OPERATOR_SDK} olm install --verbose --timeout 5m
+        if [[ $? != 0 ]]; then
+            echo "Failed to install OLM!"
+            exit 1
+        fi
     fi
-  fi
-  set -e
+    set -e
 
-  OLM_NS=olm
-  TARGET_NS=node-maintenance
+    OLM_NS=olm
+    TARGET_NS=node-maintenance
 fi
 
 registry="$IMAGE_REGISTRY"
@@ -57,7 +57,7 @@ if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
     registry_ip=$(docker ps | grep dnsmasq | awk '{ print $1 }' | xargs docker inspect | grep registry | sed -r 's/^.*:([0-9.]+)".*$/\1/g')
     registry=localhost:$registry_port
 
-    IMAGE_REGISTRY=$registry OVERRIDE_MANIFEST_REGISTRY="registry:5000" make csv-generator container-build container-push
+    IMAGE_REGISTRY=$registry OVERRIDE_MANIFEST_REGISTRY="registry:5000" make generate-bundle container-build container-push
 
     nodes=()
     if [[ $KUBEVIRT_PROVIDER =~ okd.* ]]; then
@@ -111,49 +111,48 @@ iterations=0
 sleep_time=10
 max_iterations=30 # results in 5 minute timeout
 
-until [[ $success -eq 1 ]] || [[ $iterations -eq $max_iterations ]]
-do
+until [[ $success -eq 1 ]] || [[ $iterations -eq $max_iterations ]]; do
 
-  echo "[INFO] Deploying NMO via OLM"
-  set +e
+    echo "[INFO] Deploying NMO via OLM"
+    set +e
 
-  # be verbose on last iteration only
-  if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
-    ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir
-  else
-    ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir &> /dev/null
-  fi
-  CHECK_1=$?
-
-  if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
-    ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s
-  else
-    ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s &> /dev/null
-  fi
-  CHECK_2=$?
-
-  if [[ ${CHECK_1} != 0 ]] || [[ ${CHECK_2} != 0 ]]; then
-
-    iterations=$((iterations + 1))
-    iterations_left=$((max_iterations - iterations))
-    if [[ $iterations_left != 0  ]]; then
-      echo "[WARN] Deployment did not fully succeed yet, retrying in $sleep_time sec, $iterations_left retries left"
-      sleep $sleep_time
+    # be verbose on last iteration only
+    if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
+        ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir
     else
-      echo "[WARN] At least one deployment failed, giving up"
+        ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir &>/dev/null
     fi
+    CHECK_1=$?
 
-  else
-    # All resources deployed successfully
-    success=1
-  fi
-  set -e
+    if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
+        ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s
+    else
+        ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s &>/dev/null
+    fi
+    CHECK_2=$?
+
+    if [[ ${CHECK_1} != 0 ]] || [[ ${CHECK_2} != 0 ]]; then
+
+        iterations=$((iterations + 1))
+        iterations_left=$((max_iterations - iterations))
+        if [[ $iterations_left != 0 ]]; then
+            echo "[WARN] Deployment did not fully succeed yet, retrying in $sleep_time sec, $iterations_left retries left"
+            sleep $sleep_time
+        else
+            echo "[WARN] At least one deployment failed, giving up"
+        fi
+
+    else
+        # All resources deployed successfully
+        success=1
+    fi
+    set -e
 
 done
 
 if [[ $success -eq 0 ]]; then
-  echo "[ERROR] Deployment failed, giving up."
-  exit 1
+    echo "[ERROR] Deployment failed, giving up."
+    exit 1
 fi
 
 echo "[INFO] Deployment successful."
