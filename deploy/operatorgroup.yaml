@@ -3,6 +3,3 @@ kind: OperatorGroup
 metadata:
   name: node-maintenance-operator
   namespace: SUBSCRIPTION_NAMESPACE
-spec:
-  targetNamespaces:
-    - SUBSCRIPTION_NAMESPACE
