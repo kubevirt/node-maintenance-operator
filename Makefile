@@ -2,11 +2,11 @@ export OPERATOR_SDK_VERSION = v0.18.2
 export OPM_VERSION = v1.12.7
 
 # The last released version (without v)
-export OPERATOR_VERSION_LAST=0.6.0
+export OPERATOR_VERSION_LAST ?= 0.6.0
 # The version of the next release (without v)
-export OPERATOR_VERSION_NEXT=0.7.0
+export OPERATOR_VERSION_NEXT ?= 0.7.0
 # The OLM channel this operator should be default of
-export OLM_CHANNEL=4.6
+export OLM_CHANNEL ?= 4.6
 
 export IMAGE_REGISTRY ?= quay.io/kubevirt
 export IMAGE_TAG ?= latest

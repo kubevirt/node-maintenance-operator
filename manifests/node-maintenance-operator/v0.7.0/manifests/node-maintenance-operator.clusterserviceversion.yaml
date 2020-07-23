@@ -18,7 +18,7 @@ metadata:
       ]
     capabilities: Basic Install
     categories: OpenShift Optional
-    containerImage: quay.io/kubevirt/node-maintenance-operator
+    containerImage: quay.io/kubevirt/node-maintenance-operator:latest
     description: Node-maintenance-operator maintains nodes in cluster
     repository: https://github.com/kubevirt/node-maintenance-operator
   name: node-maintenance-operator.v0.7.0
