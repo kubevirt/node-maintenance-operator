@@ -66,11 +66,13 @@ func InitValidator(client client.Client) {
 func (v *NodeMaintenanceValidator) ValidateCreate(nm *NodeMaintenance) error {
 	// Validate that node with given name exists
 	if err := v.validateNodeExists(nm.Spec.NodeName); err != nil {
+		log.Info("validation failed", "error", err)
 		return err
 	}
 
 	// Validate that no NodeMaintenance for given node exists yet
 	if err := v.validateNoNodeMaintenanceExists(nm.Spec.NodeName); err != nil {
+		log.Info("validation failed", "error", err)
 		return err
 	}
 
@@ -80,6 +82,7 @@ func (v *NodeMaintenanceValidator) ValidateCreate(nm *NodeMaintenance) error {
 func (v *NodeMaintenanceValidator) ValidateUpdate(new, old *NodeMaintenance) error {
 	// Validate that node name didn't change
 	if new.Spec.NodeName != old.Spec.NodeName {
+		log.Info("validation failed", "error", ErrorNodeNameUpdateForbidden)
 		return fmt.Errorf(ErrorNodeNameUpdateForbidden)
 	}
 	return nil

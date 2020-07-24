@@ -185,7 +185,6 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("Putting node %s into maintanance", nodeName)
 
 	// Create node maintenance custom resource
 	nodeMaintenance := &operator.NodeMaintenance{
@@ -197,17 +196,59 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 			Name: "nodemaintenance-xyz",
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			NodeName: nodeName,
+			NodeName: "doesNotExist",
 			Reason:   "Set maintenance on node for e2e testing",
 		},
 	}
 
-	// Create node maintenance CR
+	t.Logf("Validation test: create node maintenance CR for unexisting node")
 	err = Client.Create(context.TODO(), nodeMaintenance)
-	if err != nil {
-		t.Fatalf("Can't create CRD: %v", err)
+	if err == nil {
+		t.Errorf("FAIL: CR for unexisting node should have been rejected")
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeNotExists, "doesNotExist")) {
+		t.Errorf("FAIL: CR creation for not existing node has been rejected with unexpected error message: %s", err.Error())
 	}
 
+	t.Logf("Putting node %s into maintanance", nodeName)
+	nodeMaintenance.Spec.NodeName = nodeName
+	err = Client.Create(context.TODO(), nodeMaintenance)
+	if err != nil {
+		t.Fatalf("Can't create CR: %v", err)
+	}
+
+	t.Logf("Validation test: update NodeName")
+	nmNew := nodeMaintenance.DeepCopy()
+	nmNew.Spec.NodeName = "test"
+	err = Client.Patch(context.TODO(), nmNew, client.MergeFrom(nodeMaintenance), &client.PatchOptions{})
+	if err == nil {
+		t.Errorf("FAIL: Update of NodeName should have been rejected")
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeNameUpdateForbidden)) {
+		t.Errorf("FAIL: CR update with new NodeName has been rejected with unexpected error message: %s", err.Error())
+	}
+	nodeMaintenance.Spec.NodeName = nodeName
+
+	t.Logf("Validation test: create NM for same node")
+	nmNew = &operator.NodeMaintenance{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "NodeMaintenance",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nodemaintenance-new",
+		},
+		Spec: operator.NodeMaintenanceSpec{
+			NodeName: nodeName,
+			Reason:   "Test duplicate maintenance",
+		},
+	}
+	err = Client.Create(context.TODO(), nmNew)
+	if err == nil {
+		t.Errorf("FAIL: CR for node already in maintenance should have been rejected: %v", err)
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeMaintenanceExists, nodeName)) {
+		t.Errorf("FAIL: CR creation for node already in maintenance has been rejected with unexpected error message: %s", err.Error())
+	}
+
+	// Go on with maintenance tests
 	// Get Running phase first
 	if err := wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
