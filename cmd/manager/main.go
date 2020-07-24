@@ -167,6 +167,8 @@ func setupWebhookServer(mgr manager.Manager) error {
 
 	server.Register("/validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances", admission.ValidatingWebhookFor(&v1beta1.NodeMaintenance{}))
 
+	v1beta1.InitValidator(mgr.GetClient())
+
 	return nil
 
 }
