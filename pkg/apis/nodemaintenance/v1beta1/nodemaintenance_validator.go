@@ -13,12 +13,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
+const (
+	ErrorNodeNotExists           = "invalid nodeName, no node with name %s found"
+	ErrorNodeMaintenanceExists   = "invalid nodeName, a NodeMaintenance for node %s already exists"
+	ErrorNodeNameUpdateForbidden = "updating spec.NodeName isn't allowed"
+)
+
 var log = logger.Log.WithName("validator")
 
 // introduce a NodeMaintenanceValidator, which gets a k8s client injected
+// +k8s:deepcopy-gen=false
 type NodeMaintenanceValidator struct {
 	client client.Client
 }
+
 var validator *NodeMaintenanceValidator
 
 // implement webhook.Validator on NodeMaintenance
@@ -72,7 +80,7 @@ func (v *NodeMaintenanceValidator) ValidateCreate(nm *NodeMaintenance) error {
 func (v *NodeMaintenanceValidator) ValidateUpdate(new, old *NodeMaintenance) error {
 	// Validate that node name didn't change
 	if new.Spec.NodeName != old.Spec.NodeName {
-		return fmt.Errorf("updating spec.NodeName isn't allowed")
+		return fmt.Errorf(ErrorNodeNameUpdateForbidden)
 	}
 	return nil
 }
@@ -84,7 +92,7 @@ func (v *NodeMaintenanceValidator) validateNodeExists(nodeName string) error {
 	}
 	if err := v.client.Get(context.TODO(), key, &node); err != nil {
 		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("invalid nodeName, no node with name %s found", nodeName)
+			return fmt.Errorf(ErrorNodeNotExists, nodeName)
 		}
 		return fmt.Errorf("could not get node for validating spec.NodeName, please try again: %v", err)
 	}
@@ -99,7 +107,7 @@ func (v *NodeMaintenanceValidator) validateNoNodeMaintenanceExists(nodeName stri
 
 	for _, nm := range nodeMaintenances.Items {
 		if nm.Spec.NodeName == nodeName {
-			return fmt.Errorf("invalid nodeName, a NodeMaintenance for node %s already exists", nodeName)
+			return fmt.Errorf(ErrorNodeMaintenanceExists, nodeName)
 		}
 	}
 	return nil
