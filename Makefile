@@ -40,7 +40,7 @@ fmt: whitespace goimports
 
 .PHONY: goimports
 goimports:
-	go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd
+	go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd ./test
 
 .PHONY: whitespace
 whitespace: $(all_sources)
@@ -48,7 +48,7 @@ whitespace: $(all_sources)
 
 .PHONY: vet
 vet: $(cmd_sources) $(pkg_sources)
-	go vet -mod=vendor ./pkg/... ./cmd/...
+	go vet -mod=vendor ./pkg/... ./cmd/... ./test/...
 
 .PHONY: verify-unchanged
 verify-unchanged:
