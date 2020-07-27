@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/spf13/pflag"
@@ -16,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -24,15 +26,26 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
 	"kubevirt.io/node-maintenance-operator/pkg/apis"
+	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"kubevirt.io/node-maintenance-operator/pkg/controller"
 	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 )
 
 // Change below variables to serve metrics on different host or port.
-var (
+const (
 	metricsHost       = "0.0.0.0"
 	metricsPort int32 = 8383
 )
+
+const (
+	// Must match port in deploy/webhooks/nodemaintenance.webhook.yaml
+	WebhookPort = 8443
+	// This is the cert location as configured by OLM
+	WebhookCertDir  = "/apiserver.local.config/certificates"
+	WebhookCertName = "apiserver.crt"
+	WebhookKeyName  = "apiserver.key"
+)
+
 var log = logf.Log.WithName("cmd")
 
 func printVersion() {
@@ -64,9 +77,9 @@ func main() {
 
 	printVersion()
 
-	namespace, err := k8sutil.GetWatchNamespace()
+	namespace, err := k8sutil.GetOperatorNamespace()
 	if err != nil {
-		log.Error(err, "Failed to get watch namespace")
+		log.Error(err, "Failed to get operator's namespace")
 		os.Exit(1)
 	}
 
@@ -90,7 +103,6 @@ func main() {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:          namespace,
 		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
 	})
 	if err != nil {
@@ -121,6 +133,12 @@ func main() {
 		log.Info(err.Error())
 	}
 
+	// Setup webhooks
+	if err := setupWebhookServer(mgr); err != nil {
+		log.Error(err, "Failed to setup webhook server")
+		os.Exit(1)
+	}
+
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
@@ -128,4 +146,29 @@ func main() {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}
+}
+
+func setupWebhookServer(mgr manager.Manager) error {
+
+	// Make sure the certificates are mounted, this should be handled by the OLM
+	certs := []string{filepath.Join(WebhookCertDir, WebhookCertName), filepath.Join(WebhookCertDir, WebhookKeyName)}
+	for _, fname := range certs {
+		if _, err := os.Stat(fname); err != nil {
+			log.Error(err, "Failed to prepare webhook server, certificates not found")
+			return err
+		}
+	}
+
+	server := mgr.GetWebhookServer()
+	server.Port = WebhookPort
+	server.CertDir = WebhookCertDir
+	server.CertName = WebhookCertName
+	server.KeyName = WebhookKeyName
+
+	server.Register("/validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances", admission.ValidatingWebhookFor(&v1beta1.NodeMaintenance{}))
+
+	v1beta1.InitValidator(mgr.GetClient())
+
+	return nil
+
 }

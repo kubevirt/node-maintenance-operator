@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"k8s.io/utils/pointer"
 	"os"
 	"reflect"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
@@ -86,7 +86,7 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 	}
 }
 
-func  checkValidLease(t *testing.T, nodeName string) error {
+func checkValidLease(t *testing.T, nodeName string) error {
 
 	// FIXME this won't work: nmo.LeaseNamespace is overwritten by the operator during runtime, and we will never see that here...
 	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
@@ -103,25 +103,25 @@ func  checkValidLease(t *testing.T, nodeName string) error {
 		return fmt.Errorf("checkValidLease wrong Spec.HolderIdentity")
 	}
 
-	if lease.Spec.RenewTime == nil  {
+	if lease.Spec.RenewTime == nil {
 		return fmt.Errorf("checkValidLease nil RenewTime")
 	}
 
 	timeNow := time.Now()
-	if  (*lease.Spec.RenewTime).Time.After(timeNow)  {
+	if (*lease.Spec.RenewTime).Time.After(timeNow) {
 		return fmt.Errorf("checkValidLease RenewTime in the future current time %s renew time %s", timeNow.Format(time.UnixDate), (*lease.Spec.RenewTime).Format(time.UnixDate))
 
 	}
 	tm := (*lease.Spec.RenewTime).Time
-	tm = tm.Add( time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second))  )
-	if  tm.Before(timeNow) {
+	tm = tm.Add(time.Duration(int64(*lease.Spec.LeaseDurationSeconds) * int64(time.Second)))
+	if tm.Before(timeNow) {
 		return fmt.Errorf("checkValidLease expiration time in the past time Now: %s expiration time %s :: leaseDuration %d renew time %s", timeNow.Format(time.UnixDate), tm.Format(time.UnixDate), *lease.Spec.LeaseDurationSeconds, (*lease.Spec.RenewTime).Time.Format(time.UnixDate))
 	}
 
 	return nil
 }
 
-func  checkInvalidLease(t *testing.T, nodeName string) error {
+func checkInvalidLease(t *testing.T, nodeName string) error {
 	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
 	err := Client.Get(context.TODO(), nName, lease)
@@ -129,10 +129,10 @@ func  checkInvalidLease(t *testing.T, nodeName string) error {
 		return fmt.Errorf("can't get lease node %s : %v", nodeName, err)
 	}
 
-	if lease.Spec.AcquireTime != nil  {
+	if lease.Spec.AcquireTime != nil {
 		return fmt.Errorf("AcquireTime not nil %s", nodeName)
 	}
-	if lease.Spec.LeaseDurationSeconds  != nil {
+	if lease.Spec.LeaseDurationSeconds != nil {
 		return fmt.Errorf("LeaseDurationSeconds not nil %s", nodeName)
 	}
 	if lease.Spec.RenewTime != nil {
@@ -185,7 +185,6 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("Putting node %s into maintanance", nodeName)
 
 	// Create node maintenance custom resource
 	nodeMaintenance := &operator.NodeMaintenance{
@@ -197,17 +196,59 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 			Name: "nodemaintenance-xyz",
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			NodeName: nodeName,
+			NodeName: "doesNotExist",
 			Reason:   "Set maintenance on node for e2e testing",
 		},
 	}
 
-	// Create node maintenance CR
+	t.Logf("Validation test: create node maintenance CR for unexisting node")
 	err = Client.Create(context.TODO(), nodeMaintenance)
-	if err != nil {
-		t.Fatalf("Can't create CRD: %v", err)
+	if err == nil {
+		t.Errorf("FAIL: CR for unexisting node should have been rejected")
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeNotExists, "doesNotExist")) {
+		t.Errorf("FAIL: CR creation for not existing node has been rejected with unexpected error message: %s", err.Error())
 	}
 
+	t.Logf("Putting node %s into maintanance", nodeName)
+	nodeMaintenance.Spec.NodeName = nodeName
+	err = Client.Create(context.TODO(), nodeMaintenance)
+	if err != nil {
+		t.Fatalf("Can't create CR: %v", err)
+	}
+
+	t.Logf("Validation test: update NodeName")
+	nmNew := nodeMaintenance.DeepCopy()
+	nmNew.Spec.NodeName = "test"
+	err = Client.Patch(context.TODO(), nmNew, client.MergeFrom(nodeMaintenance), &client.PatchOptions{})
+	if err == nil {
+		t.Errorf("FAIL: Update of NodeName should have been rejected")
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeNameUpdateForbidden)) {
+		t.Errorf("FAIL: CR update with new NodeName has been rejected with unexpected error message: %s", err.Error())
+	}
+	nodeMaintenance.Spec.NodeName = nodeName
+
+	t.Logf("Validation test: create NM for same node")
+	nmNew = &operator.NodeMaintenance{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "NodeMaintenance",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nodemaintenance-new",
+		},
+		Spec: operator.NodeMaintenanceSpec{
+			NodeName: nodeName,
+			Reason:   "Test duplicate maintenance",
+		},
+	}
+	err = Client.Create(context.TODO(), nmNew)
+	if err == nil {
+		t.Errorf("FAIL: CR for node already in maintenance should have been rejected: %v", err)
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeMaintenanceExists, nodeName)) {
+		t.Errorf("FAIL: CR creation for node already in maintenance has been rejected with unexpected error message: %s", err.Error())
+	}
+
+	// Go on with maintenance tests
 	// Get Running phase first
 	if err := wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
@@ -230,7 +271,7 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	// Wait for operator log showing it reconciles with fixed duration
 	// caused by drain, caused by termination graceperiod > drain timeout
 	t.Log("Waiting for drain timeout log")
-	if err = wait.PollImmediate(5*time.Second, 2*time.Minute, func()(bool, error) {
+	if err = wait.PollImmediate(5*time.Second, 2*time.Minute, func() (bool, error) {
 		logs := getOperatorLogs(t)
 		if strings.Contains(logs, nmo.FixedDurationReconcileLog) {
 			return true, nil
@@ -322,7 +363,7 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	}
 
 	if kubevirtTaintExist(node) {
-		showDeploymentStatus(t, fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName) )
+		showDeploymentStatus(t, fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName))
 	}
 
 	err = checkInvalidLease(t, nodeName)
@@ -373,14 +414,15 @@ func deleteSimpleDeployment(t *testing.T, namespace string) error {
 
 	return wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
 
-				err = Client.Get(context.TODO(), namespaceName, deploymentToDelete)
-				if err != nil {
-					if errors.IsNotFound(err) {
-						return true, nil
-					}
-					return false, fmt.Errorf("error encountered during deletion of deployment: %v", err)
-				}
-				return false, nil
+		err = Client.Get(context.TODO(), namespaceName, deploymentToDelete)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, fmt.Errorf("error encountered during deletion of deployment: %v", err)
+		}
+		return false, nil
+
 	})
 }
 
@@ -429,7 +471,7 @@ func createSimpleDeployment(t *testing.T, namespace string, nodeName string) err
 					}},
 					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
 					// make sure we run into the drain timeout at least once
-					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nmo.DrainerTimeout.Seconds()) +10),
+					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nmo.DrainerTimeout.Seconds()) + 10),
 				},
 			},
 		},
@@ -509,7 +551,7 @@ func checkFailureStatus(t *testing.T) {
 		} else {
 			if len(pods.Items) != 0 && pods.Items[0].Name != nm.Status.PendingPods[0] {
 				t.Logf("Status.PendingPods on %s nodeMaintenance does not contain pod %s", nm.Name, pods.Items[0].Name)
-			} else  {
+			} else {
 				t.Logf("no deployment pods found")
 			}
 		}
@@ -540,4 +582,3 @@ func waitForDeployment(t *testing.T, namespace, name string, replicas int, retry
 	t.Logf("Deployment available (%d/%d)\n", replicas, replicas)
 	return nil
 }
-

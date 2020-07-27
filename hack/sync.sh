@@ -42,6 +42,10 @@ if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
 
     OLM_NS=olm
     TARGET_NS=node-maintenance
+
+    # use "latest" olm-operator, containing this fix: https://github.com/operator-framework/operator-lifecycle-manager/issues/1573
+    # TODO remove this as soon as OLM > v0.15.1 is released
+    ./kubevirtci/cluster-up/kubectl.sh patch -n olm deployment olm-operator --patch '{"spec": {"template": {"spec": {"containers": [{"name": "olm-operator","image": "quay.io/operator-framework/olm:latest"}]}}}}'
 fi
 
 registry="$IMAGE_REGISTRY"

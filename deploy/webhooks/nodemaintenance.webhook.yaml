@@ -1,0 +1,31 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: nodemaintenance-validation.kubevirt.io
+webhooks:
+  - name: nodemaintenance-validation.kubevirt.io
+    clientConfig:
+      service:
+        namespace: placeholder
+        # must match deployment name + "-service"!
+        name: node-maintenance-operator-service
+        port: 8443
+        path: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+          - nodemaintenance.kubevirt.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - nodemaintenances
+        scope: "Cluster"
+    admissionReviewVersions:
+      - v1beta1
+      # - v1 enable this as soon as we vendor a version of controller runtime which understands it
+    sideEffects: None
+    timeoutSeconds: 5

@@ -162,9 +162,9 @@ spec:
                 key: node-role.kubernetes.io/master
     strategy: deployment
   installModes:
-  - supported: true
+  - supported: false
     type: OwnNamespace
-  - supported: true
+  - supported: false
     type: SingleNamespace
   - supported: false
     type: MultiNamespace
@@ -193,3 +193,25 @@ spec:
       alm-owner-kubevirt: nodemaintenanceoperator
       operated-by: nodemaintenanceoperator
   version: 0.7.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1beta1
+    containerPort: 8443
+    deploymentName: node-maintenance-operator
+    failurePolicy: Fail
+    generateName: nodemaintenance-validation.kubevirt.io
+    rules:
+    - apiGroups:
+      - nodemaintenance.kubevirt.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - nodemaintenances
+      scope: Cluster
+    sideEffects: None
+    timeoutSeconds: 5
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances
