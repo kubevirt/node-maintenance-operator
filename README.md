@@ -9,12 +9,27 @@ The purpose of this operator is to watch for new or deleted custom resources cal
 
 ## Build and run the operator
 
-There are two ways to run the operator:
+There are three ways to run the operator:
 
-- As a Deployment inside a Openshift/Kubernetes cluster
+- Deploy the latest version from master branch to a running Openshift/Kubernetes cluster
+- Build and deploy from sources to a running or to be created Openshift/Kubernetes cluster
 - As Go program outside a cluster
 
-### Deploy operator using OLM
+### Deploy the latest version
+
+After every merge to master images were build and pushed to quay.io.
+For deployment of NMO using these images you need
+
+- a running Openshift cluster or a Kubernetes cluster with OLM (> v0.15.1) installed
+- `oc` or `kubectl` binary installed and configured to access your cluster
+- on Openshift, run these commands:
+    - run `oc apply -f deploy/deployment-ocp/namespace.yaml`
+    - run `oc apply -f deploy/deployment-ocp/`
+- on Kubernetes, run these commands:
+    - run `kubectl apply -f deploy/deployment-k8s/namespace.yaml`
+    - run `kubectl apply -f deploy/deployment-k8s/`
+
+### Build and deploy from sources
 
 For more information on the [Operator Lifecycle
 Manager](https://github.com/operator-framework/operator-lifecycle-manager) and

@@ -7,6 +7,8 @@ export OPERATOR_VERSION_LAST ?= 0.6.0
 export OPERATOR_VERSION_NEXT ?= 0.7.0
 # The OLM channel this operator should be default of
 export OLM_CHANNEL ?= 4.6
+export OLM_NS ?= openshift-marketplace
+export OPERATOR_NS ?= openshift-node-maintenance
 
 export IMAGE_REGISTRY ?= quay.io/kubevirt
 export IMAGE_TAG ?= latest
