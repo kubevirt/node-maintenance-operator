@@ -20,9 +20,6 @@ fi
 
 source $KUBEVIRTCI_PATH/hack/common.sh
 
-OLM_NS=openshift-marketplace
-TARGET_NS=openshift-node-maintenance
-
 # Deploy OLM if needed
 if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
     SELF=$(realpath $0)
@@ -41,7 +38,7 @@ if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
     set -e
 
     OLM_NS=olm
-    TARGET_NS=node-maintenance
+    OPERATOR_NS=node-maintenance
 
     # use "latest" olm-operator, containing this fix: https://github.com/operator-framework/operator-lifecycle-manager/issues/1573
     # TODO remove this as soon as OLM > v0.15.1 is released
@@ -106,7 +103,7 @@ else
 fi
 
 sed -i "s,MARKETPLACE_NAMESPACE,${OLM_NS},g" ${deploy_dir}/*.yaml
-sed -i "s,SUBSCRIPTION_NAMESPACE,${TARGET_NS},g" ${deploy_dir}/*.yaml
+sed -i "s,SUBSCRIPTION_NAMESPACE,${OPERATOR_NS},g" ${deploy_dir}/*.yaml
 sed -i "s,CHANNEL,\"${OLM_CHANNEL}\",g" ${deploy_dir}/*.yaml
 
 # Deploy
@@ -129,9 +126,9 @@ until [[ $success -eq 1 ]] || [[ $iterations -eq $max_iterations ]]; do
     CHECK_1=$?
 
     if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
-        ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s
+        ./kubevirtci/cluster-up/kubectl.sh -n "${OPERATOR_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s
     else
-        ./kubevirtci/cluster-up/kubectl.sh -n "${TARGET_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s &>/dev/null
+        ./kubevirtci/cluster-up/kubectl.sh -n "${OPERATOR_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s &>/dev/null
     fi
     CHECK_2=$?
 

@@ -55,3 +55,21 @@ cp -a "${WORKING_DIR}"/* "${NEW_DIR}"/
 
 # Move bundle.Dockerfile
 mv ./bundle.Dockerfile ./build/
+
+# Copy and modify deployment manifests
+DEPLOY_SRC=deploy
+DEPLOY_TARGET_K8S=deploy/deployment-k8s
+DEPLOY_TARGET_OCP=deploy/deployment-ocp
+for MANIFEST in namespace catalogsource operatorgroup subscription; do
+    cp ${DEPLOY_SRC}/${MANIFEST}.yaml ${DEPLOY_TARGET_K8S}/
+    cp ${DEPLOY_SRC}/${MANIFEST}.yaml ${DEPLOY_TARGET_OCP}/
+done
+
+for DEPLOY_TARGET in $DEPLOY_TARGET_OCP $DEPLOY_TARGET_K8S; do
+    sed -i "s,REPLACE_INDEX_IMAGE,${REGISTRY}/${INDEX_IMAGE}:${IMAGE_TAG},g" ${DEPLOY_TARGET}/*.yaml
+    sed -i "s,MARKETPLACE_NAMESPACE,${OLM_NS},g" ${DEPLOY_TARGET}/*.yaml
+    sed -i "s,SUBSCRIPTION_NAMESPACE,${OPERATOR_NS},g" ${DEPLOY_TARGET}/*.yaml
+    sed -i "s,CHANNEL,\"${OLM_CHANNEL}\",g" ${DEPLOY_TARGET}/*.yaml
+    OLM_NS=olm
+    OPERATOR_NS=node-maintenance
+done
