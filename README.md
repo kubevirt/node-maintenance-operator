@@ -23,11 +23,17 @@ For deployment of NMO using these images you need
 - a running Openshift cluster or a Kubernetes cluster with OLM (> v0.15.1) installed
 - `oc` or `kubectl` binary installed and configured to access your cluster
 - on Openshift, run these commands:
+    - run `oc apply -f deploy/deployment-ocp/catalogsource.yaml`
+    After this you can install NMO using the OperatorHub UI.
+    If you want to install NMO via commandline, go on with:
     - run `oc apply -f deploy/deployment-ocp/namespace.yaml`
-    - run `oc apply -f deploy/deployment-ocp/`
+    - run `oc apply -f deploy/deployment-ocp/operatorgroup.yaml`
+    - run `oc apply -f deploy/deployment-ocp/subscription.yaml`
 - on Kubernetes, run these commands:
+    - run `kubectl apply -f deploy/deployment-k8s/catalogsource.yaml`
     - run `kubectl apply -f deploy/deployment-k8s/namespace.yaml`
-    - run `kubectl apply -f deploy/deployment-k8s/`
+    - run `kubectl apply -f deploy/deployment-k8s/operatorgroup.yaml`
+    - run `kubectl apply -f deploy/deployment-k8s/subscription.yaml`
 
 ### Build and deploy from sources
 
