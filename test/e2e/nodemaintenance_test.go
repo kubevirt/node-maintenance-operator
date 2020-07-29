@@ -183,6 +183,55 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		t.Fatal(fmt.Errorf("no worker nodes found"))
 	}
 
+	// first check master quorum validation
+	nodeMaintenance := &operator.NodeMaintenance{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "NodeMaintenance",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nodemaintenance-",
+		},
+		Spec: operator.NodeMaintenanceSpec{
+			Reason: "Set maintenance on node for e2e testing",
+		},
+	}
+	for i, master := range masters {
+		nodeMaintenance.Name += master
+		nodeMaintenance.Spec.NodeName = master
+		if len(masters) == 1 {
+			// we have 1 master only
+			// on Openshift the etcd-quorum-guard PDB should prevent setting maintenance
+			// on k8s the fake etcd-quorum-guard PDB will for sure
+			t.Logf("Validation test: create node maintenance CR for single master node")
+			err = Client.Create(context.TODO(), nodeMaintenance)
+			if err == nil {
+				t.Errorf("FAIL: CR creation for single master node should have been rejected")
+			} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorMasterQuorumViolation)) {
+				t.Errorf("FAIL: CR creation for single master node has been rejected with unexpected error message: %s", err.Error())
+			}
+		} else if len(masters) == 3 {
+			if i == 0 {
+				// first master node should be ok
+				t.Logf("Validation test: create node maintenance CR for first master node")
+				err = Client.Create(context.TODO(), nodeMaintenance)
+				if err != nil {
+					t.Errorf("FAIL: CR creation for first master node should have not have been rejected")
+				}
+			} else {
+				t.Logf("Validation test: create node maintenance CR for 2nd and 3rd master node")
+				err = Client.Create(context.TODO(), nodeMaintenance)
+				if err == nil {
+					t.Errorf("FAIL: CR creation for 2nd and 3rd master node should have been rejected")
+				} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorMasterQuorumViolation)) {
+					t.Errorf("FAIL: CR creation for 2nd or 3rd master node has been rejected with unexpected error message: %s", err.Error())
+				}
+			}
+		} else {
+			t.Fatalf("unexpexted nr of master nodes, can't run master quorum validation test")
+		}
+	}
+
 	err = createSimpleDeployment(t, namespace)
 	if err != nil {
 		t.Fatal(err)
@@ -193,8 +242,8 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		t.Fatal(err)
 	}
 
-	// Create node maintenance custom resource
-	nodeMaintenance := &operator.NodeMaintenance{
+	// reset CR for next tests
+	nodeMaintenance = &operator.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
 			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
@@ -203,12 +252,12 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 			Name: "nodemaintenance-xyz",
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			NodeName: "doesNotExist",
-			Reason:   "Set maintenance on node for e2e testing",
+			Reason: "Set maintenance on node for e2e testing",
 		},
 	}
 
 	t.Logf("Validation test: create node maintenance CR for unexisting node")
+	nodeMaintenance.Spec.NodeName = "doesNotExist"
 	err = Client.Create(context.TODO(), nodeMaintenance)
 	if err == nil {
 		t.Errorf("FAIL: CR for unexisting node should have been rejected")

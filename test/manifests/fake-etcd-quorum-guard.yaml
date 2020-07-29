@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-machine-config-operator
+  labels:
+    name: openshift-machine-config-operator
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  namespace: openshift-machine-config-operator
+  name: etcd-quorum-guard
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: fake-etcd-quorum-guard
