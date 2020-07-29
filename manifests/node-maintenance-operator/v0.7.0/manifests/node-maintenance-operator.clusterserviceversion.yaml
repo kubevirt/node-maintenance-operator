@@ -62,6 +62,14 @@ spec:
           - watch
           - create
         - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - ""
           resources:
           - nodes
@@ -212,6 +220,6 @@ spec:
       - nodemaintenances
       scope: Cluster
     sideEffects: None
-    timeoutSeconds: 5
+    timeoutSeconds: 15
     type: ValidatingAdmissionWebhook
     webhookPath: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances

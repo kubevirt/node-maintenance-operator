@@ -28,4 +28,4 @@ webhooks:
       - v1beta1
       # - v1 enable this as soon as we vendor a version of controller runtime which understands it
     sideEffects: None
-    timeoutSeconds: 5
+    timeoutSeconds: 15
