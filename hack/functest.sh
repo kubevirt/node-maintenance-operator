@@ -16,16 +16,6 @@ fi
 
 KUBECTL_CMD="${KUBEVIRTCI_PATH}/kubectl.sh"
 
-function new_test() {
-    name=$1
-
-    printf "%0.s=" {1..80}
-    echo
-    echo ${name}
-}
-
-new_test 'Test e2e Node Mainenance'
-
 # Run tests
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
     export KUBECONFIG=$(${KUBEVIRTCI_PATH}/kubeconfig.sh)

@@ -20,6 +20,7 @@ export TARGETCOVERAGE=60
 
 KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
 KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
+export KUBEVIRT_NUM_NODES ?= 3
 
 export GINKGO ?= build/_output/bin/ginkgo
 
@@ -135,7 +136,7 @@ verify-manifests:
 
 .PHONY: cluster-up
 cluster-up:
-	KUBEVIRT_NUM_NODES=2 $(KUBEVIRTCI_PATH)/up.sh
+	$(KUBEVIRTCI_PATH)/up.sh
 
 .PHONY: cluster-down
 cluster-down:
