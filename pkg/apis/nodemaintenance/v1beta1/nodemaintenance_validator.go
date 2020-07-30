@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +18,13 @@ const (
 	ErrorNodeNotExists           = "invalid nodeName, no node with name %s found"
 	ErrorNodeMaintenanceExists   = "invalid nodeName, a NodeMaintenance for node %s already exists"
 	ErrorNodeNameUpdateForbidden = "updating spec.NodeName isn't allowed"
+	ErrorMasterQuorumViolation   = "can not put master node into maintenance at this moment, it would violate the master quorum"
+)
+
+const (
+	EtcdQuorumPDBName      = "etcd-quorum-guard"
+	EtcdQuorumPDBNamespace = "openshift-machine-config-operator"
+	LabelNameRoleMaster    = "node-role.kubernetes.io/master"
 )
 
 var log = logger.Log.WithName("validator")
@@ -76,6 +84,12 @@ func (v *NodeMaintenanceValidator) ValidateCreate(nm *NodeMaintenance) error {
 		return err
 	}
 
+	// Validate that NodeMaintenance for master nodes don't violate quorum
+	if err := v.validateMasterQuorum(nm.Spec.NodeName); err != nil {
+		log.Info("validation failed", "error", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -89,15 +103,10 @@ func (v *NodeMaintenanceValidator) ValidateUpdate(new, old *NodeMaintenance) err
 }
 
 func (v *NodeMaintenanceValidator) validateNodeExists(nodeName string) error {
-	var node v1.Node
-	key := types.NamespacedName{
-		Name: nodeName,
-	}
-	if err := v.client.Get(context.TODO(), key, &node); err != nil {
-		if apierrors.IsNotFound(err) {
-			return fmt.Errorf(ErrorNodeNotExists, nodeName)
-		}
+	if node, err := getNode(nodeName, v.client); err != nil {
 		return fmt.Errorf("could not get node for validating spec.NodeName, please try again: %v", err)
+	} else if node == nil {
+		return fmt.Errorf(ErrorNodeNotExists, nodeName)
 	}
 	return nil
 }
@@ -114,4 +123,58 @@ func (v *NodeMaintenanceValidator) validateNoNodeMaintenanceExists(nodeName stri
 		}
 	}
 	return nil
+}
+
+func (v *NodeMaintenanceValidator) validateMasterQuorum(nodeName string) error {
+	// check if the node is a master node
+	if node, err := getNode(nodeName, v.client); err != nil {
+		return fmt.Errorf("could not get node for master quorum validation, please try again: %v", err)
+	} else if node == nil {
+		// this should have been catched already, but just in case
+		return fmt.Errorf(ErrorNodeNotExists, nodeName)
+	} else if !isMasterNode(node) {
+		// not a master node, nothing to do
+		return nil
+	}
+
+	// check the etcd-quorum-guard PodDisruptionBudget if we can drain a master node
+	var pdb v1beta1.PodDisruptionBudget
+	key := types.NamespacedName{
+		Namespace: EtcdQuorumPDBNamespace,
+		Name:      EtcdQuorumPDBName,
+	}
+	if err := v.client.Get(context.TODO(), key, &pdb); err != nil {
+		if apierrors.IsNotFound(err) {
+			// TODO do we need a fallback for k8s clusters?
+			log.Info("etcd-quorum-guard PDB not found. Skipping master quorum validation.")
+			return nil
+		}
+		return fmt.Errorf("could not get etcd-quorum-guard PDB for master quorum validation, please try again: %v", err)
+	}
+	if pdb.Status.DisruptionsAllowed == 0 {
+		return fmt.Errorf(ErrorMasterQuorumViolation)
+	}
+	return nil
+}
+
+// if the returned node is nil, it wasn't found
+func getNode(nodeName string, client client.Client) (*v1.Node, error) {
+	var node v1.Node
+	key := types.NamespacedName{
+		Name: nodeName,
+	}
+	if err := client.Get(context.TODO(), key, &node); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("could not get node: %v", err)
+	}
+	return &node, nil
+}
+
+func isMasterNode(node *v1.Node) bool {
+	if _, ok := node.Labels[LabelNameRoleMaster]; ok {
+		return true
+	}
+	return false
 }

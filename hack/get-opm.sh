@@ -14,7 +14,7 @@ if [[ ! -x $CURRENT_OPM ]]; then
     set -e
 fi
 
-DETECTED_OPM_VERSION=$($CURRENT_OPM version | sed -r 's/^.*OpmVersion:"([0-9.]+)".*$/\1/g')
+DETECTED_OPM_VERSION=v$($CURRENT_OPM version | sed -r 's/^.*OpmVersion:"([0-9.]+)".*$/\1/g')
 
 function check_need_upgrade() {
     local detectedversion="$2"

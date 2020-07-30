@@ -145,24 +145,25 @@ func checkInvalidLease(t *testing.T, nodeName string) error {
 	return nil
 }
 
-func countNodes(t *testing.T) (int, string, error) {
+func getNodes(t *testing.T) ([]string, []string, error) {
+	masters := make([]string, 0)
+	workers := make([]string, 0)
+
 	nodesList := &corev1.NodeList{}
 	err := Client.List(context.TODO(), nodesList, &client.ListOptions{})
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("Failed to list nodes %v", err))
-		return -1, "", err
+		return masters, workers, err
 	}
-
-	computeNodesNumber := 0
-	workerNodeName := ""
 
 	for _, node := range nodesList.Items {
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
-			computeNodesNumber++
-			workerNodeName = node.ObjectMeta.Name
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
+			masters = append(masters, node.Name)
+		} else {
+			workers = append(workers, node.Name)
 		}
 	}
-	return computeNodesNumber, workerNodeName, nil
+	return masters, workers, nil
 }
 
 func enterAndExitMaintenanceMode(t *testing.T) error {
@@ -171,23 +172,78 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		return fmt.Errorf("could not get namespace")
 	}
 
-	computeNodesNumber, workerNodeName, err := countNodes(t)
+	masters, workers, err := getNodes(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	err = createSimpleDeployment(t, namespace, workerNodeName)
-	if err != nil {
-		t.Fatal(err)
+	if len(masters) == 0 {
+		t.Fatal(fmt.Errorf("no master nodes found"))
+	}
+	if len(workers) == 0 {
+		t.Fatal(fmt.Errorf("no worker nodes found"))
 	}
 
-	nodeName, err := getCurrentDeploymentHostName(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create node maintenance custom resource
+	// first check master quorum validation
 	nodeMaintenance := &operator.NodeMaintenance{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "NodeMaintenance",
+			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nodemaintenance-",
+		},
+		Spec: operator.NodeMaintenanceSpec{
+			Reason: "Set maintenance on node for e2e testing",
+		},
+	}
+	for i, master := range masters {
+		nodeMaintenance.Name += master
+		nodeMaintenance.Spec.NodeName = master
+		if len(masters) == 1 {
+			// we have 1 master only
+			// on Openshift the etcd-quorum-guard PDB should prevent setting maintenance
+			// on k8s the fake etcd-quorum-guard PDB will for sure
+			t.Logf("Validation test: create node maintenance CR for single master node")
+			err = Client.Create(context.TODO(), nodeMaintenance)
+			if err == nil {
+				t.Errorf("FAIL: CR creation for single master node should have been rejected")
+			} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorMasterQuorumViolation)) {
+				t.Errorf("FAIL: CR creation for single master node has been rejected with unexpected error message: %s", err.Error())
+			}
+		} else if len(masters) == 3 {
+			if i == 0 {
+				// first master node should be ok
+				t.Logf("Validation test: create node maintenance CR for first master node")
+				err = Client.Create(context.TODO(), nodeMaintenance)
+				if err != nil {
+					t.Errorf("FAIL: CR creation for first master node should have not have been rejected")
+				}
+			} else {
+				t.Logf("Validation test: create node maintenance CR for 2nd and 3rd master node")
+				err = Client.Create(context.TODO(), nodeMaintenance)
+				if err == nil {
+					t.Errorf("FAIL: CR creation for 2nd and 3rd master node should have been rejected")
+				} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorMasterQuorumViolation)) {
+					t.Errorf("FAIL: CR creation for 2nd or 3rd master node has been rejected with unexpected error message: %s", err.Error())
+				}
+			}
+		} else {
+			t.Fatalf("unexpexted nr of master nodes, can't run master quorum validation test")
+		}
+	}
+
+	err = createSimpleDeployment(t, namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	maintenanceNodeName, err := getCurrentDeploymentNodeName(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// reset CR for next tests
+	nodeMaintenance = &operator.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
 			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
@@ -196,12 +252,12 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 			Name: "nodemaintenance-xyz",
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			NodeName: "doesNotExist",
-			Reason:   "Set maintenance on node for e2e testing",
+			Reason: "Set maintenance on node for e2e testing",
 		},
 	}
 
 	t.Logf("Validation test: create node maintenance CR for unexisting node")
+	nodeMaintenance.Spec.NodeName = "doesNotExist"
 	err = Client.Create(context.TODO(), nodeMaintenance)
 	if err == nil {
 		t.Errorf("FAIL: CR for unexisting node should have been rejected")
@@ -209,8 +265,8 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		t.Errorf("FAIL: CR creation for not existing node has been rejected with unexpected error message: %s", err.Error())
 	}
 
-	t.Logf("Putting node %s into maintanance", nodeName)
-	nodeMaintenance.Spec.NodeName = nodeName
+	t.Logf("Putting node %s into maintanance", maintenanceNodeName)
+	nodeMaintenance.Spec.NodeName = maintenanceNodeName
 	err = Client.Create(context.TODO(), nodeMaintenance)
 	if err != nil {
 		t.Fatalf("Can't create CR: %v", err)
@@ -225,7 +281,7 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeNameUpdateForbidden)) {
 		t.Errorf("FAIL: CR update with new NodeName has been rejected with unexpected error message: %s", err.Error())
 	}
-	nodeMaintenance.Spec.NodeName = nodeName
+	nodeMaintenance.Spec.NodeName = maintenanceNodeName
 
 	t.Logf("Validation test: create NM for same node")
 	nmNew = &operator.NodeMaintenance{
@@ -237,14 +293,14 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 			Name: "nodemaintenance-new",
 		},
 		Spec: operator.NodeMaintenanceSpec{
-			NodeName: nodeName,
+			NodeName: maintenanceNodeName,
 			Reason:   "Test duplicate maintenance",
 		},
 	}
 	err = Client.Create(context.TODO(), nmNew)
 	if err == nil {
 		t.Errorf("FAIL: CR for node already in maintenance should have been rejected: %v", err)
-	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeMaintenanceExists, nodeName)) {
+	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeMaintenanceExists, maintenanceNodeName)) {
 		t.Errorf("FAIL: CR creation for node already in maintenance has been rejected with unexpected error message: %s", err.Error())
 	}
 
@@ -299,43 +355,44 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	}
 
 	node := &corev1.Node{}
-	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
+	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: maintenanceNodeName}, node)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("Failed to get CRD after entering main. mode : %v", err))
 	}
 
 	if node.Spec.Unschedulable == false {
 		checkFailureStatus(t)
-		showDeploymentStatus(t, fmt.Errorf("Node %s should have been unschedulable ", nodeName))
+		showDeploymentStatus(t, fmt.Errorf("Node %s should have been unschedulable ", maintenanceNodeName))
 	}
 
 	if !kubevirtTaintExist(node) {
 		checkFailureStatus(t)
-		showDeploymentStatus(t, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", nodeName))
+		showDeploymentStatus(t, fmt.Errorf("Node %s should have been tainted with kubevirt.io/drain:NoSchedule", maintenanceNodeName))
 	}
 
-	err = checkValidLease(t, nodeName)
+	err = checkValidLease(t, maintenanceNodeName)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("no valid lease after nmo completion: %v", err))
 	}
 
-	if computeNodesNumber > 2 {
-		err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
+	// if we have 2 workers or more, check the pod was moved to another node
+	if len(workers) >= 2 {
+		err = waitForDeployment(t, namespace, testDeployment, retryInterval, timeout)
 		if err != nil {
 			showDeploymentStatus(t, fmt.Errorf("failed to wait for deployment. error %v", err))
 		}
 
-		newNodeName, err := getCurrentDeploymentHostName(t)
+		newNodeName, err := getCurrentDeploymentNodeName(t)
 		if err != nil {
 			showDeploymentStatus(t, err)
 		}
 
-		if newNodeName == nodeName {
-			showDeploymentStatus(t, fmt.Errorf("Deployment was done on node %s that should be under maintanence", nodeName))
+		if newNodeName == maintenanceNodeName {
+			showDeploymentStatus(t, fmt.Errorf("Deployment was done on node %s that should be under maintanence", maintenanceNodeName))
 		}
 	}
 
-	t.Logf("Setting node %s out of maintanance", nodeName)
+	t.Logf("Setting node %s out of maintanance", maintenanceNodeName)
 
 	nodeMaintenanceDelete := &operator.NodeMaintenance{}
 
@@ -353,29 +410,29 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	time.Sleep(60 * time.Second)
 
 	node = &corev1.Node{}
-	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: nodeName}, node)
+	err = Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: maintenanceNodeName}, node)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("can't get CRD. error %v", err))
 	}
 
 	if node.Spec.Unschedulable == true {
-		showDeploymentStatus(t, fmt.Errorf("Node %s should have been schedulable", nodeName))
+		showDeploymentStatus(t, fmt.Errorf("Node %s should have been schedulable", maintenanceNodeName))
 	}
 
 	if kubevirtTaintExist(node) {
-		showDeploymentStatus(t, fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", nodeName))
+		showDeploymentStatus(t, fmt.Errorf("Node %s kubevirt.io/drain:NoSchedule taint should have been removed", maintenanceNodeName))
 	}
 
-	err = checkInvalidLease(t, nodeName)
+	err = checkInvalidLease(t, maintenanceNodeName)
 	if err != nil {
 		showDeploymentStatus(t, fmt.Errorf("valid lease after nmo completion %v", err))
 	}
 
 	// Check that the deployment has 1 replica running after maintenance is removed.
 	t.Logf("%s: wait for deployment.", time.Now().Format("2006-01-02 15:04:05.000000"))
-	err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
+	err = waitForDeployment(t, namespace, testDeployment, retryInterval, timeout)
 	if err != nil {
-		showDeploymentStatus(t, fmt.Errorf("%s: failed to wait for deployment. error %v.", err, time.Now().Format("2006-01-02 15:04:05.000000")))
+		showDeploymentStatus(t, fmt.Errorf("failed to wait for deployment: %v", err))
 	}
 
 	err = deleteSimpleDeployment(t, namespace)
@@ -383,6 +440,10 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		t.Fatal(err)
 	}
 	t.Logf("test deployment deleted")
+
+	if t.Failed() {
+		showDeploymentStatus(t, fmt.Errorf("some test(s) failed"))
+	}
 
 	return nil
 }
@@ -426,7 +487,7 @@ func deleteSimpleDeployment(t *testing.T, namespace string) error {
 	})
 }
 
-func createSimpleDeployment(t *testing.T, namespace string, nodeName string) error {
+func createSimpleDeployment(t *testing.T, namespace string) error {
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -454,7 +515,7 @@ func createSimpleDeployment(t *testing.T, namespace string, nodeName string) err
 									{
 										MatchExpressions: []corev1.NodeSelectorRequirement{
 											{
-												Key:      "node-role.kubernetes.io/" + nodeName,
+												Key:      "node-role.kubernetes.io/master",
 												Operator: corev1.NodeSelectorOpDoesNotExist,
 											},
 										},
@@ -469,7 +530,6 @@ func createSimpleDeployment(t *testing.T, namespace string, nodeName string) err
 						Command: []string{"/bin/sh"},
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
-					NodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
 					// make sure we run into the drain timeout at least once
 					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nmo.DrainerTimeout.Seconds()) + 10),
 				},
@@ -483,7 +543,7 @@ func createSimpleDeployment(t *testing.T, namespace string, nodeName string) err
 		return err
 	}
 	// wait for testPodDeployment to reach 1 replicas
-	err = waitForDeployment(t, namespace, testDeployment, 1, retryInterval, timeout)
+	err = waitForDeployment(t, namespace, testDeployment, retryInterval, timeout)
 	if err != nil {
 		return err
 	}
@@ -505,7 +565,7 @@ func getCurrentDeploymentPods(t *testing.T) (*corev1.PodList, error) {
 	return pods, nil
 }
 
-func getCurrentDeploymentHostName(t *testing.T) (string, error) {
+func getCurrentDeploymentNodeName(t *testing.T) (string, error) {
 	pods, err := getCurrentDeploymentPods(t)
 	if err != nil {
 		return "", err
@@ -558,7 +618,7 @@ func checkFailureStatus(t *testing.T) {
 	}
 }
 
-func waitForDeployment(t *testing.T, namespace, name string, replicas int, retryInterval, timeout time.Duration) error {
+func waitForDeployment(t *testing.T, namespace, name string, retryInterval, timeout time.Duration) error {
 	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
 		deployment, err := KubeClient.AppsV1().Deployments(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
@@ -569,16 +629,16 @@ func waitForDeployment(t *testing.T, namespace, name string, replicas int, retry
 			return false, err
 		}
 
-		if int(deployment.Status.AvailableReplicas) >= replicas {
+		if int(deployment.Status.AvailableReplicas) >= 1 {
 			return true, nil
 		}
 		t.Logf("Waiting for full availability of %s deployment (%d/%d)\n", name,
-			deployment.Status.AvailableReplicas, replicas)
+			deployment.Status.AvailableReplicas, 1)
 		return false, nil
 	})
 	if err != nil {
 		return err
 	}
-	t.Logf("Deployment available (%d/%d)\n", replicas, replicas)
+	t.Logf("Deployment available (%d/%d)\n", 1, 1)
 	return nil
 }
