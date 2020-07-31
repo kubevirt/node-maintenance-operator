@@ -1,4 +1,4 @@
 packageName: node-maintenance-operator
 channels:
-- name: CHANNEL
+- name: "CHANNEL"
   currentCSV: node-maintenance-operator.vOPERATOR_VERSION_NEXT
