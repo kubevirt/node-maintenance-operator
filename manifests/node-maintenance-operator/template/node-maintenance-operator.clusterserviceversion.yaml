@@ -188,7 +188,7 @@ spec:
     name: KubeVirt project
   maturity: beta
   provider:
-    name: KubeVirt project
+    name: Red Hat
   selector:
     matchLabels:
       alm-owner-kubevirt: nodemaintenanceoperator
