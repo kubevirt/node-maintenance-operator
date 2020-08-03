@@ -15,6 +15,7 @@ export IMAGE_TAG ?= latest
 export OPERATOR_IMAGE ?= node-maintenance-operator
 export BUNDLE_IMAGE ?= node-maintenance-operator-bundle
 export INDEX_IMAGE ?= node-maintenance-operator-index
+export MUST_GATHER_IMAGE ?= lifecycle-must-gather
 
 export TARGETCOVERAGE=60
 
@@ -70,7 +71,7 @@ shfmt:
 check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
 
 .PHONY: container-build
-container-build: container-build-operator container-build-bundle container-build-index
+container-build: container-build-operator container-build-bundle container-build-index container-build-must-gather
 
 .PHONY: container-build-operator
 container-build-operator: generate-bundle
@@ -88,8 +89,12 @@ container-generate-index:
 container-build-index: container-generate-index
 	docker build -f build/index.Dockerfile -t $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG) .
 
+.PHONY: container-build-must-gather
+container-build-must-gather:
+	docker build -f must-gather/Dockerfile -t $(IMAGE_REGISTRY)/$(MUST_GATHER_IMAGE):$(IMAGE_TAG) must-gather
+
 .PHONY: container-push
-container-push: container-push-operator container-push-bundle container-push-index
+container-push: container-push-operator container-push-bundle container-push-index container-push-must-gather
 
 .PHONY: container-push-operator
 container-push-operator:
@@ -102,6 +107,10 @@ container-push-bundle:
 .PHONY: container-push-index
 container-push-index:
 	docker push $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG)
+
+.PHONY: container-push-must-gather
+container-push-must-gather:
+	docker push $(IMAGE_REGISTRY)/$(MUST_GATHER_IMAGE):$(IMAGE_TAG)
 
 .PHONY: get-operator-sdk
 get-operator-sdk:
