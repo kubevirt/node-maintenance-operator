@@ -23,7 +23,7 @@ const (
 
 const (
 	EtcdQuorumPDBName      = "etcd-quorum-guard"
-	EtcdQuorumPDBNamespace = "openshift-machine-config-operator"
+	EtcdQuorumPDBNamespace = "openshift-etcd"
 	LabelNameRoleMaster    = "node-role.kubernetes.io/master"
 )
 
