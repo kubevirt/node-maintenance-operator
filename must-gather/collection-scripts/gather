@@ -8,13 +8,14 @@ version >> /must-gather/version
 # get namespace of node-maintenance-operator
 NMO_NAMESPACE=$( oc get pods -A -l name='node-maintenance-operator' -o=jsonpath='{.items[0].metadata.namespace}{"\n"}' )
 # fallback to default
-[ -z "${NMO_NAMESPACE}" ] && ns="openshift-node-maintenance"
+[ -z "${NMO_NAMESPACE}" ] && NMO_NAMESPACE="openshift-node-maintenance"
 
 # resource list
 resources=()
 
-# operator namespace
-resources+=(ns/${NMO_NAMESPACE})
+# nodes & machines
+resources+=(nodes)
+resources+=(machines)
 
 # node maintenance CRs
 resources+=(nodemaintenance)
