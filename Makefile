@@ -128,8 +128,12 @@ generate-crds: $(apis_sources)
 generate-bundle:
 	./hack/generate-bundle.sh
 
+.PHONY: generate-template-bundle
+generate-template-bundle:
+	OPERATOR_VERSION_NEXT=9.9.9 OLM_CHANNEL=9.9 IMAGE_REGISTRY=IMAGE_REGISTRY OPERATOR_IMAGE=OPERATOR_IMAGE IMAGE_TAG=IMAGE_TAG make generate-bundle
+
 .PHONY: generate-all
-generate-all: generate-k8s generate-crds generate-bundle
+generate-all: generate-k8s generate-crds generate-template-bundle generate-bundle
 
 .PHONY: manifests
 manifests: generate-bundle
