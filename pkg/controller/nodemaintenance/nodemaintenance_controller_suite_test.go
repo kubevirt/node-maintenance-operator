@@ -9,5 +9,5 @@ import (
 
 func TestNetwork(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Node Maintenanace Controller Suite")
+	RunSpecs(t, "Node Maintenance Controller Suite")
 }

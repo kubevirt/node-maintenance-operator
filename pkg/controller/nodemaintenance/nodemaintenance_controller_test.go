@@ -96,9 +96,9 @@ var _ = Describe("updateCondition", func() {
 
 	})
 
-	Context("Node maintenanace controller initialization test", func() {
+	Context("Node maintenance controller initialization test", func() {
 
-		It("Node maintenanace should be initialized properly", func() {
+		It("Node maintenance should be initialized properly", func() {
 			r.initMaintenanceStatus(nm)
 			maintenance := &nodemaintenanceapi.NodeMaintenance{}
 			err := cl.Get(context.TODO(), req.NamespacedName, maintenance)
@@ -124,7 +124,7 @@ var _ = Describe("updateCondition", func() {
 			setOwnerRefToNode(maintanance, node)
 			Expect(len(maintanance.ObjectMeta.GetOwnerReferences())).To(Equal(1))
 		})
-		It("Should not init Node maintenanace if already set", func() {
+		It("Should not init Node maintenance if already set", func() {
 			nmCopy := nm.DeepCopy()
 			nmCopy.Status.Phase = nodemaintenanceapi.MaintenanceRunning
 			r.initMaintenanceStatus(nmCopy)
@@ -139,7 +139,7 @@ var _ = Describe("updateCondition", func() {
 
 	})
 
-	Context("Node maintenanace controller taint function test", func() {
+	Context("Node maintenance controller taint function test", func() {
 		It("should add kubevirt NoSchedule taint and keep other existing taints", func() {
 			node, err := cs.CoreV1().Nodes().Get(context.TODO(), "node01", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
@@ -169,7 +169,7 @@ var _ = Describe("updateCondition", func() {
 		})
 	})
 
-	Context("Node maintenanace controller reconciles a maintenanace CR for a node in the cluster", func() {
+	Context("Node maintenance controller reconciles a maintenance CR for a node in the cluster", func() {
 
 		It("should reconcile once without failing", func() {
 			reconcileMaintenance(nm)

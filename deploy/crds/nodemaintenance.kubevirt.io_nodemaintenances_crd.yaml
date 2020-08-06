@@ -60,8 +60,7 @@ spec:
                 type: string
               type: array
             phase:
-              description: Phase is the represtation of the maintenanace progress
-                (Running,Succeeded,Failed)
+              description: Phase is the represtation of the maintenance progress (Running,Succeeded,Failed)
               type: string
             totalpods:
               description: TotalPods is the total number of all pods on the node from
