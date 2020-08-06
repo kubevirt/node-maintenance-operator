@@ -81,13 +81,9 @@ container-build-operator: generate-bundle
 container-build-bundle:
 	docker build -f build/bundle.Dockerfile -t $(IMAGE_REGISTRY)/$(BUNDLE_IMAGE):$(IMAGE_TAG) .
 
-.PHONY: container-generate-index
-container-generate-index:
-	./hack/generate-index.sh
-
 .PHONY: container-build-index
-container-build-index: container-generate-index
-	docker build -f build/index.Dockerfile -t $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG) .
+container-build-index:
+	docker build --build-arg OPERATOR_VERSION_NEXT=$(OPERATOR_VERSION_NEXT) -f build/index.Dockerfile -t $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG) .
 
 .PHONY: container-build-must-gather
 container-build-must-gather:
