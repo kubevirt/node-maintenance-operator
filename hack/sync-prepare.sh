@@ -42,7 +42,7 @@ if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
 
     # use "latest" olm-operator, containing this fix: https://github.com/operator-framework/operator-lifecycle-manager/issues/1573
     # TODO remove this as soon as OLM > v0.15.1 is released
-    ./kubevirtci/cluster-up/kubectl.sh patch -n olm deployment olm-operator --patch '{"spec": {"template": {"spec": {"containers": [{"name": "olm-operator","image": "quay.io/operator-framework/olm:latest"}]}}}}'
+    ./kubevirtci/cluster-up/kubectl.sh patch -n olm deployment olm-operator --patch '{"spec": {"template": {"spec": {"containers": [{"name": "olm-operator","image": "quay.io/operator-framework/olm:0.16.0"}]}}}}'
 fi
 
 registry="$IMAGE_REGISTRY"
