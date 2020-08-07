@@ -70,6 +70,10 @@ shfmt:
 .PHONY: check
 check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
 
+.PHONY: build
+build:
+	GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+
 .PHONY: container-build
 container-build: container-build-operator container-build-bundle container-build-index container-build-must-gather
 
