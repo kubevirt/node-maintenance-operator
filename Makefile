@@ -8,7 +8,7 @@ export OPERATOR_VERSION_NEXT ?= 0.7.0
 # The OLM channel this operator should be default of
 export OLM_CHANNEL ?= 4.6
 export OLM_NS ?= openshift-marketplace
-export OPERATOR_NS ?= openshift-node-maintenance
+export OPERATOR_NS ?= openshift-operators
 
 export IMAGE_REGISTRY ?= quay.io/kubevirt
 export IMAGE_TAG ?= latest
@@ -31,7 +31,7 @@ rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 # Gather needed source files and directories to create target dependencies
 directories := $(filter-out ./ ./vendor/ ./kubevirtci/ ,$(sort $(dir $(wildcard ./*/))))
 # exclude directories which are also targets
-all_sources=$(call rwildcard,$(directories),*) $(filter-out test manifests ./go.mod ./go.sum, $(wildcard *))
+all_sources=$(call rwildcard,$(directories),*) $(filter-out build test manifests ./go.mod ./go.sum, $(wildcard *))
 cmd_sources=$(call rwildcard,cmd/,*.go)
 pkg_sources=$(call rwildcard,pkg/,*.go)
 apis_sources=$(call rwildcard,pkg/apis,*.go)
@@ -70,6 +70,10 @@ shfmt:
 .PHONY: check
 check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
 
+.PHONY: build
+build:
+	mkdir -p _out && GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -o _out/node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+
 .PHONY: container-build
 container-build: container-build-operator container-build-bundle container-build-index container-build-must-gather
 
@@ -81,13 +85,9 @@ container-build-operator: generate-bundle
 container-build-bundle:
 	docker build -f build/bundle.Dockerfile -t $(IMAGE_REGISTRY)/$(BUNDLE_IMAGE):$(IMAGE_TAG) .
 
-.PHONY: container-generate-index
-container-generate-index:
-	./hack/generate-index.sh
-
 .PHONY: container-build-index
-container-build-index: container-generate-index
-	docker build -f build/index.Dockerfile -t $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG) .
+container-build-index:
+	docker build --build-arg OPERATOR_VERSION_NEXT=$(OPERATOR_VERSION_NEXT) -f build/index.Dockerfile -t $(IMAGE_REGISTRY)/$(INDEX_IMAGE):$(IMAGE_TAG) .
 
 .PHONY: container-build-must-gather
 container-build-must-gather:
@@ -132,8 +132,12 @@ generate-crds: $(apis_sources)
 generate-bundle:
 	./hack/generate-bundle.sh
 
+.PHONY: generate-template-bundle
+generate-template-bundle:
+	OPERATOR_VERSION_NEXT=9.9.9 OLM_CHANNEL=9.9 IMAGE_REGISTRY=IMAGE_REGISTRY OPERATOR_IMAGE=OPERATOR_IMAGE IMAGE_TAG=IMAGE_TAG make generate-bundle
+
 .PHONY: generate-all
-generate-all: generate-k8s generate-crds generate-bundle
+generate-all: generate-k8s generate-crds generate-template-bundle generate-bundle
 
 .PHONY: manifests
 manifests: generate-bundle
@@ -155,9 +159,16 @@ cluster-down:
 pull-ci-changes:
 	git subtree pull --prefix kubevirtci https://github.com/kubevirt/kubevirtci.git master --squash
 
-.PHONY: cluster-sync
+.PHONY: cluster-sync-prepare
+cluster-sync-prepare:
+	./hack/sync-prepare.sh
+
+.PHONY: cluster-sync-deploy
 cluster-sync:
-	IMAGE_REGISTRY=$(IMAGE_REGISTRY) IMAGE_TAG=$(IMAGE_TAG) ./hack/sync.sh
+	./hack/sync-deploy.sh
+
+.PHONY: cluster-sync
+cluster-sync: cluster-sync-prepare cluster-sync-deploy
 
 .PHONY: cluster-functest
 cluster-functest:

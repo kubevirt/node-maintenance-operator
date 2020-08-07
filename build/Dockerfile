@@ -3,7 +3,7 @@ WORKDIR /go/src/kubevirt.io/node-maintenance-operator/
 ENV GOPATH=/go
 COPY . .
 
-RUN GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+RUN mkdir -p _out && GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -o _out/node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 ENV OPERATOR=/usr/local/bin/node-maintenance-operator \
@@ -11,7 +11,7 @@ ENV OPERATOR=/usr/local/bin/node-maintenance-operator \
     USER_NAME=node-maintenance-operator
 
 # install operator binary
-COPY --from=builder /node-maintenance-operator ${OPERATOR}
+COPY --from=builder /go/src/kubevirt.io/node-maintenance-operator/_out/node-maintenance-operator ${OPERATOR}
 
 # install scripts
 COPY --from=builder /go/src/kubevirt.io/node-maintenance-operator/build/bin /usr/local/bin

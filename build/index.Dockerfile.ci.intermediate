@@ -13,13 +13,3 @@ RUN find /manifests/ -type f -exec sed -i "s|IMAGE_REGISTRY/OPERATOR_IMAGE:IMAGE
 
 # Build index database
 RUN mkdir /database && /bin/initializer -m /manifests -o /database/index.db
-
-FROM quay.io/operator-framework/upstream-opm-builder
-
-COPY --from=builder /database/index.db /database/index.db
-
-EXPOSE 50051
-ENTRYPOINT ["/bin/opm"]
-CMD ["registry", "serve", "--database", "/database/index.db"]
-
-LABEL operators.operatorframework.io.index.database.v1=/database/index.db

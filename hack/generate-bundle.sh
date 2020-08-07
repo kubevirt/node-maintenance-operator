@@ -8,7 +8,6 @@
 # Note: dealing with bundle images and creating index images from them is difficult in CI
 # We use the "initializer" instead for creating the regisrty database
 # That's why we still need a package manifest: the "initializer" does not read the annotation file from the metadata
-# See ./generate-index.sh
 
 set -ex
 

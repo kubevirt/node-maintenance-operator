@@ -54,7 +54,7 @@ type NodeMaintenanceList struct {
 
 // NodeMaintenanceStatus defines the observed state of NodeMaintenance
 type NodeMaintenanceStatus struct {
-	// Phase is the represtation of the maintenanace progress (Running,Succeeded,Failed)
+	// Phase is the represtation of the maintenance progress (Running,Succeeded,Failed)
 	Phase MaintenancePhase `json:"phase,omitempty"`
 	// LastError represents the latest error if any in the latest reconciliation
 	LastError string `json:"lastError,omitempty"`
