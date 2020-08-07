@@ -1,7 +1,8 @@
 FROM quay.io/operator-framework/upstream-opm-builder
 
-# will be injected by CI
-#COPY --from=builder /database/index.db /database/index.db
+# Will be injected by OpenshiftCI
+RUN pwd
+COPY database/index.db /database/index.db
 
 EXPOSE 50051
 ENTRYPOINT ["/bin/opm"]
