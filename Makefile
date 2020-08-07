@@ -31,7 +31,7 @@ rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 # Gather needed source files and directories to create target dependencies
 directories := $(filter-out ./ ./vendor/ ./kubevirtci/ ,$(sort $(dir $(wildcard ./*/))))
 # exclude directories which are also targets
-all_sources=$(call rwildcard,$(directories),*) $(filter-out test manifests ./go.mod ./go.sum, $(wildcard *))
+all_sources=$(call rwildcard,$(directories),*) $(filter-out build test manifests ./go.mod ./go.sum, $(wildcard *))
 cmd_sources=$(call rwildcard,cmd/,*.go)
 pkg_sources=$(call rwildcard,pkg/,*.go)
 apis_sources=$(call rwildcard,pkg/apis,*.go)
@@ -72,7 +72,7 @@ check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
 
 .PHONY: build
 build:
-	GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -o /node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+	mkdir -p _out && GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -o _out/node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
 
 .PHONY: container-build
 container-build: container-build-operator container-build-bundle container-build-index container-build-must-gather
