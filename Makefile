@@ -8,7 +8,7 @@ export OPERATOR_VERSION_NEXT ?= 0.7.0
 # The OLM channel this operator should be default of
 export OLM_CHANNEL ?= 4.6
 export OLM_NS ?= openshift-marketplace
-export OPERATOR_NS ?= openshift-node-maintenance
+export OPERATOR_NS ?= openshift-operators
 
 export IMAGE_REGISTRY ?= quay.io/kubevirt
 export IMAGE_TAG ?= latest
@@ -155,9 +155,16 @@ cluster-down:
 pull-ci-changes:
 	git subtree pull --prefix kubevirtci https://github.com/kubevirt/kubevirtci.git master --squash
 
-.PHONY: cluster-sync
+.PHONY: cluster-sync-prepare
+cluster-sync-prepare:
+	./hack/sync-prepare.sh
+
+.PHONY: cluster-sync-deploy
 cluster-sync:
-	IMAGE_REGISTRY=$(IMAGE_REGISTRY) IMAGE_TAG=$(IMAGE_TAG) ./hack/sync.sh
+	./hack/sync-deploy.sh
+
+.PHONY: cluster-sync
+cluster-sync: cluster-sync-prepare cluster-sync-deploy
 
 .PHONY: cluster-functest
 cluster-functest:

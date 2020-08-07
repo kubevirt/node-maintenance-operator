@@ -46,11 +46,6 @@ if [[ $KUBEVIRT_PROVIDER = k8s* ]]; then
 fi
 
 registry="$IMAGE_REGISTRY"
-TAG="${1:-$IMAGE_TAG}"
-
-if [[ -d "_out" ]]; then
-    make cluster-clean
-fi
 
 if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
 
@@ -85,75 +80,4 @@ else
     make container-build container-push
 fi
 
-# Cleanup previously generated manifests
-deploy_dir=_out
-rm -rf v ${deploy_dir}/
-mkdir -p ${deploy_dir}/
-
-# copy manifests
-cp deploy/namespace.yaml ${deploy_dir}/
-cp deploy/catalogsource.yaml ${deploy_dir}/
-cp deploy/operatorgroup.yaml ${deploy_dir}/
-cp deploy/subscription.yaml ${deploy_dir}/
-
-if [[ $KUBEVIRT_PROVIDER != "external" ]]; then
-    sed -i "s,REPLACE_INDEX_IMAGE,registry:5000/node-maintenance-operator-index:${TAG},g" ${deploy_dir}/catalogsource.yaml
-else
-    sed -i "s,REPLACE_INDEX_IMAGE,${registry}/node-maintenance-operator-index:${TAG},g" ${deploy_dir}/catalogsource.yaml
-fi
-
-sed -i "s,MARKETPLACE_NAMESPACE,${OLM_NS},g" ${deploy_dir}/*.yaml
-sed -i "s,SUBSCRIPTION_NAMESPACE,${OPERATOR_NS},g" ${deploy_dir}/*.yaml
-sed -i "s,CHANNEL,\"${OLM_CHANNEL}\",g" ${deploy_dir}/*.yaml
-
-# Deploy
-success=0
-iterations=0
-sleep_time=10
-max_iterations=30 # results in 5 minute timeout
-
-until [[ $success -eq 1 ]] || [[ $iterations -eq $max_iterations ]]; do
-
-    echo "[INFO] Deploying NMO via OLM"
-    set +e
-
-    # be verbose on last iteration only
-    if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
-        ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir
-    else
-        ./kubevirtci/cluster-up/kubectl.sh apply -f $deploy_dir &>/dev/null
-    fi
-    CHECK_1=$?
-
-    if [[ $iterations -eq $((max_iterations - 1)) ]] || [[ -n "${VERBOSE}" ]]; then
-        ./kubevirtci/cluster-up/kubectl.sh -n "${OPERATOR_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s
-    else
-        ./kubevirtci/cluster-up/kubectl.sh -n "${OPERATOR_NS}" wait deployment/node-maintenance-operator --for condition=Available --timeout 1s &>/dev/null
-    fi
-    CHECK_2=$?
-
-    if [[ ${CHECK_1} != 0 ]] || [[ ${CHECK_2} != 0 ]]; then
-
-        iterations=$((iterations + 1))
-        iterations_left=$((max_iterations - iterations))
-        if [[ $iterations_left != 0 ]]; then
-            echo "[WARN] Deployment did not fully succeed yet, retrying in $sleep_time sec, $iterations_left retries left"
-            sleep $sleep_time
-        else
-            echo "[WARN] At least one deployment failed, giving up"
-        fi
-
-    else
-        # All resources deployed successfully
-        success=1
-    fi
-    set -e
-
-done
-
-if [[ $success -eq 0 ]]; then
-    echo "[ERROR] Deployment failed, giving up."
-    exit 1
-fi
-
-echo "[INFO] Deployment successful."
+echo "[INFO] sync-cluster successful."
