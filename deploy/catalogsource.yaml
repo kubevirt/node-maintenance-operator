@@ -6,3 +6,11 @@ metadata:
 spec:
   sourceType: grpc
   image: REPLACE_INDEX_IMAGE
+  displayName: Node Maintencance Operator
+  icon:
+    base64data: ""
+    mediatype: ""
+  publisher: Red Hat
+  updateStrategy:
+    registryPoll:
+      interval: 1m0s

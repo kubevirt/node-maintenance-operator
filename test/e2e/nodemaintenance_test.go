@@ -38,8 +38,8 @@ var (
 
 func getCurrentOperatorPods() (*corev1.Pod, error) {
 
-	// FIXME get the correct namespace dynamically, on openshift we will be in another one...
-	pods, err := KubeClient.CoreV1().Pods("node-maintenance").List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	ns := os.Getenv("OPERATOR_NS")
+	pods, err := KubeClient.CoreV1().Pods(ns).List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +163,8 @@ func getNodes(t *testing.T) ([]string, []string, error) {
 			workers = append(workers, node.Name)
 		}
 	}
+	t.Logf("master nodes: %v", masters)
+	t.Logf("worker nodes: %v", workers)
 	return masters, workers, nil
 }
 
@@ -183,22 +185,25 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		t.Fatal(fmt.Errorf("no worker nodes found"))
 	}
 
-	// first check master quorum validation
-	nodeMaintenance := &operator.NodeMaintenance{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "NodeMaintenance",
-			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "nodemaintenance-",
-		},
-		Spec: operator.NodeMaintenanceSpec{
-			Reason: "Set maintenance on node for e2e testing",
-		},
+	getCR := func(name, nodeName string) *operator.NodeMaintenance {
+		return &operator.NodeMaintenance{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "NodeMaintenance",
+				APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "nodemaintenance-" + name,
+			},
+			Spec: operator.NodeMaintenanceSpec{
+				NodeName: nodeName,
+				Reason:   "Set maintenance on node for e2e testing",
+			},
+		}
 	}
+
+	// first check master quorum validation
 	for i, master := range masters {
-		nodeMaintenance.Name += master
-		nodeMaintenance.Spec.NodeName = master
+		nodeMaintenance := getCR(master, master)
 		if len(masters) == 1 {
 			// we have 1 master only
 			// on Openshift the etcd-quorum-guard PDB should prevent setting maintenance
@@ -216,7 +221,7 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 				t.Logf("Validation test: create node maintenance CR for first master node")
 				err = Client.Create(context.TODO(), nodeMaintenance)
 				if err != nil {
-					t.Errorf("FAIL: CR creation for first master node should have not have been rejected")
+					t.Errorf("FAIL: CR creation for first master node should not have been rejected")
 				}
 			} else {
 				t.Logf("Validation test: create node maintenance CR for 2nd and 3rd master node")
@@ -242,22 +247,8 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 		t.Fatal(err)
 	}
 
-	// reset CR for next tests
-	nodeMaintenance = &operator.NodeMaintenance{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "NodeMaintenance",
-			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "nodemaintenance-xyz",
-		},
-		Spec: operator.NodeMaintenanceSpec{
-			Reason: "Set maintenance on node for e2e testing",
-		},
-	}
-
 	t.Logf("Validation test: create node maintenance CR for unexisting node")
-	nodeMaintenance.Spec.NodeName = "doesNotExist"
+	nodeMaintenance := getCR("test-unexisting", "doesNotExist")
 	err = Client.Create(context.TODO(), nodeMaintenance)
 	if err == nil {
 		t.Errorf("FAIL: CR for unexisting node should have been rejected")
@@ -266,7 +257,7 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	}
 
 	t.Logf("Putting node %s into maintanance", maintenanceNodeName)
-	nodeMaintenance.Spec.NodeName = maintenanceNodeName
+	nodeMaintenance = getCR("test", maintenanceNodeName)
 	err = Client.Create(context.TODO(), nodeMaintenance)
 	if err != nil {
 		t.Fatalf("Can't create CR: %v", err)
@@ -281,22 +272,9 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	} else if !strings.Contains(err.Error(), fmt.Sprintf(operator.ErrorNodeNameUpdateForbidden)) {
 		t.Errorf("FAIL: CR update with new NodeName has been rejected with unexpected error message: %s", err.Error())
 	}
-	nodeMaintenance.Spec.NodeName = maintenanceNodeName
 
 	t.Logf("Validation test: create NM for same node")
-	nmNew = &operator.NodeMaintenance{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "NodeMaintenance",
-			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "nodemaintenance-new",
-		},
-		Spec: operator.NodeMaintenanceSpec{
-			NodeName: maintenanceNodeName,
-			Reason:   "Test duplicate maintenance",
-		},
-	}
+	nmNew = getCR("test-dup", maintenanceNodeName)
 	err = Client.Create(context.TODO(), nmNew)
 	if err == nil {
 		t.Errorf("FAIL: CR for node already in maintenance should have been rejected: %v", err)
@@ -308,7 +286,7 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	// Get Running phase first
 	if err := wait.PollImmediate(1*time.Second, 20*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
-		err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+		err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-test"}, nm)
 		if err != nil {
 			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
 			return false, nil
@@ -338,9 +316,9 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 	}
 
 	// Wait for the maintanance operation to complete successfuly
-	if err := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
+	if err := wait.PollImmediate(10*time.Second, 300*time.Second, func() (bool, error) {
 		nm := &operator.NodeMaintenance{}
-		err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+		err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-test"}, nm)
 		if err != nil {
 			t.Logf("Failed to get %q nodeMaintenance: %v", nm.Name, err)
 			return false, nil
@@ -593,7 +571,7 @@ func kubevirtTaintExist(node *corev1.Node) bool {
 
 func checkFailureStatus(t *testing.T) {
 	nm := &operator.NodeMaintenance{}
-	err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-xyz"}, nm)
+	err := Client.Get(context.TODO(), types.NamespacedName{Name: "nodemaintenance-test"}, nm)
 	if err != nil {
 		t.Logf("Failed to get %s nodeMaintenance: %v", nm.Name, err)
 		return

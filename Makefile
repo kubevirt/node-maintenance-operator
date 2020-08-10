@@ -8,7 +8,7 @@ export OPERATOR_VERSION_NEXT ?= 0.7.0
 # The OLM channel this operator should be default of
 export OLM_CHANNEL ?= 4.6
 export OLM_NS ?= openshift-marketplace
-export OPERATOR_NS ?= openshift-operators
+export OPERATOR_NS ?= openshift-node-maintenance-operator
 
 export IMAGE_REGISTRY ?= quay.io/kubevirt
 export IMAGE_TAG ?= latest
@@ -164,7 +164,7 @@ cluster-sync-prepare:
 	./hack/sync-prepare.sh
 
 .PHONY: cluster-sync-deploy
-cluster-sync:
+cluster-sync-deploy:
 	./hack/sync-deploy.sh
 
 .PHONY: cluster-sync
