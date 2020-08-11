@@ -234,7 +234,10 @@ func enterAndExitMaintenanceMode(t *testing.T) error {
 			}
 		} else {
 			t.Fatalf("unexpexted nr of master nodes, can't run master quorum validation test")
+			break
 		}
+		// the etcd-quorum-guard PDB needs some time to be updated...
+		time.Sleep(10 * time.Second)
 	}
 
 	err = createSimpleDeployment(t, namespace)
