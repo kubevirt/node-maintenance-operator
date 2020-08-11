@@ -3,11 +3,13 @@
 if [ -n "${IMAGE_FORMAT}" ]; then
     # Override the index image name in the CatalogSource when this is invoked from OpenshiftCI
     # See https://github.com/openshift/ci-tools/blob/master/TEMPLATES.md#image_format
-    export FULL_INDEX_IMAGE="${IMAGE_FORMAT}"
     # shellcheck disable=SC2016
-    FULL_INDEX_IMAGE=$(echo "${IMAGE_FORMAT}" | sed -i 's/${component}/node-maintenance-operator-index/')
+    export FULL_INDEX_IMAGE="${IMAGE_FORMAT//'${component}'/node-maintenance-operator-index}"
     OLM_CHANNEL="9.9"
     export CLUSTER_COMMAND="oc"
+
+    # disable default catalog resources
+    ${CLUSTER_COMMAND} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 else
     # We are not on OpenshiftCI
     if [ -z "$KUBEVIRTCI_PATH" ]; then
@@ -113,6 +115,20 @@ done
 
 if [[ $success -eq 0 ]]; then
     echo "[ERROR] Deployment failed, giving up."
+
+    set +e
+    echo "CatalogSource:\n\n"
+    ${CLUSTER_COMMAND} -n ${OLM_NS} describe catalogsource node-maintenance-operator
+    echo "Subscription:\n\n"
+    ${CLUSTER_COMMAND} -n ${OPERATOR_NS} describe subscription node-maintenance-operator
+    echo "OperatorGroup:\n\n"
+    ${CLUSTER_COMMAND} -n ${OPERATOR_NS} describe operatorgroup node-maintenance-operator
+    echo "All OperatorGroups:\n\n"
+    ${CLUSTER_COMMAND} get operatorgroup -A -o=wide
+    echo "Deployment:\n\n"
+    ${CLUSTER_COMMAND} -n ${OPERATOR_NS} describe deployment node-maintenance-operator
+    echo "Namespace:\n\n"
+    ${CLUSTER_COMMAND} describe namespace ${OPERATOR_NS}
     exit 1
 fi
 
