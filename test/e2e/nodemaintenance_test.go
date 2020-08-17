@@ -88,8 +88,8 @@ func showDeploymentStatus(t *testing.T, callerError error) {
 
 func checkValidLease(t *testing.T, nodeName string) error {
 
-	// FIXME this won't work: nmo.LeaseNamespace is overwritten by the operator during runtime, and we will never see that here...
-	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
+	ns := os.Getenv("OPERATOR_NS")
+	nName := types.NamespacedName{Namespace: ns, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
 	err := Client.Get(context.TODO(), nName, lease)
 	if err != nil {
@@ -122,7 +122,8 @@ func checkValidLease(t *testing.T, nodeName string) error {
 }
 
 func checkInvalidLease(t *testing.T, nodeName string) error {
-	nName := types.NamespacedName{Namespace: nmo.LeaseNamespace, Name: nodeName}
+	ns := os.Getenv("OPERATOR_NS")
+	nName := types.NamespacedName{Namespace: ns, Name: nodeName}
 	lease := &coordv1beta1.Lease{}
 	err := Client.Get(context.TODO(), nName, lease)
 	if err != nil {
