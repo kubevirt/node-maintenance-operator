@@ -44,8 +44,8 @@ func getCurrentOperatorPods() (*corev1.Pod, error) {
 		return nil, err
 	}
 
-	if pods.Size() == 0 {
-		return nil, fmt.Errorf("There are no pods deployed in cluster to run the operator")
+	if len(pods.Items) == 0 {
+		return nil, fmt.Errorf("no NMO pod found in ns %s", ns)
 	}
 
 	return &pods.Items[0], nil
