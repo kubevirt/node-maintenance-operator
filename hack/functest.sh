@@ -31,9 +31,8 @@ else
         # so we create a fake etcd-quorum-guard PDB with maxUnavailable = 0, which will always result in disruptionsAllowed = 0 without a corresponding deployment
         # that will make node maintenance requests for master nodes always fail
         $CLUSTER_COMMAND apply -f test/manifests/fake-etcd-quorum-guard.yaml
+        OPERATOR_NS=node-maintenance
     fi
-
-    OPERATOR_NS=node-maintenance
 
 fi
 
