@@ -163,7 +163,7 @@ spec:
                 key: node-role.kubernetes.io/master
     strategy: deployment
   installModes:
-  - supported: false
+  - supported: true
     type: OwnNamespace
   - supported: false
     type: SingleNamespace
