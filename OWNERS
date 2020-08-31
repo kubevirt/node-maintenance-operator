@@ -5,11 +5,13 @@ filters:
       - ksimon1
       - beekhof
       - slintes
+      - n1r1
     approvers:
       - yanirq
       - ksimon1
       - beekhof
       - slintes
+      - n1r1
 
     # Specify only if your Bugzilla product is not OCP
     product: "Kubernetes-native Infrastructure"
