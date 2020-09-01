@@ -29,7 +29,7 @@ func logWarnf(format string, args ...interface{}) {
 }
 
 func log(prefix, arg string) {
-	time := time.Now().Format(time.RFC3339)
-	msg := fmt.Sprintf("%s: [%s] %s", time, prefix, arg)
+	now := time.Now().Format(time.RFC3339)
+	msg := fmt.Sprintf("%s: [%s] %s", now, prefix, arg)
 	_, _ = ginkgo.GinkgoWriter.Write([]byte(msg))
 }

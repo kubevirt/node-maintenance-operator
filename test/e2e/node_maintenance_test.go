@@ -28,7 +28,7 @@ import (
 var (
 	retryInterval   = time.Second * 5
 	timeout         = time.Second * 120
-	testDeployment  = "testdeployment"
+	testDeployment  = "test-deployment"
 	testMaintenance = "test-maintenance"
 	podLabel        = map[string]string{"test": "drain"}
 )
@@ -57,14 +57,14 @@ var _ = Describe("Node Maintenance", func() {
 				if masterMaintenance == nil {
 					// do this once only
 					master := masters[0]
-					masterMaintenance = getNodeMaintenance("test-master1", master)
+					masterMaintenance = getNodeMaintenance(fmt.Sprintf("test-1st-master-%s", master), master)
 					err = Client.Create(context.TODO(), masterMaintenance)
 				}
 			})
 
 			It("should succeed", func() {
 				if len(masters) < 3 {
-					Skip("cluster to small for running this test")
+					Skip("cluster has less than 3 master nodes and is to small for running this test")
 				}
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -86,14 +86,16 @@ var _ = Describe("Node Maintenance", func() {
 			AfterEach(func() {
 				// after testing 2nd master we can restore 1st master
 				if masterMaintenance != nil {
-					Client.Delete(context.TODO(), masterMaintenance)
+					if err := Client.Delete(context.TODO(), masterMaintenance); err != nil {
+						logWarnf("failed to delete NodeMaintenance for 1st master node: %v\n", err)
+					}
 					masterMaintenance = nil
 				}
 			})
 
 			It("should fail", func() {
 				if len(masters) < 3 {
-					Skip("cluster to small for running this test")
+					Skip("cluster has less than 3 master nodes and is too small for running this test")
 				}
 				if len(masters) > 3 {
 					logWarnf("there are %v master nodes, which is unexpected. Skipping quorum validation for 2nd master node!\n", len(masters))
@@ -104,7 +106,8 @@ var _ = Describe("Node Maintenance", func() {
 				time.Sleep(10 * time.Second)
 
 				master := masters[1]
-				nodeMaintenance := getNodeMaintenance("test-master2", master)
+				nodeMaintenance := getNodeMaintenance(fmt.Sprintf("test-2nd-master-%s", master), master)
+
 				err := Client.Create(context.TODO(), nodeMaintenance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring(nmo.ErrorMasterQuorumViolation), "Unexpected error message")
@@ -265,6 +268,10 @@ func getNodes() ([]string, []string) {
 	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "Couldn't get node names")
 
 	for _, node := range nodesList.Items {
+		if node.Labels == nil {
+			logWarnf("node %s has no role label, skipping it\n", node.Name)
+			continue
+		}
 		if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
 			masters = append(masters, node.Name)
 		} else {

@@ -55,9 +55,6 @@ fi
 
 export TEST_NAMESPACE=node-maintenance-test
 
-# let's track errors on our own here for being able to write a nice comment afterwards
-set +e
-
 # -v: print out the text and location for each spec before running it and flush output to stdout in realtime
 # -r: run suites recursively
 # --keepGoing: don't stop on failing suite
