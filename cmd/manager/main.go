@@ -8,15 +8,14 @@ import (
 	"path/filepath"
 	"runtime"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/spf13/pflag"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -32,6 +31,7 @@ import (
 	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"kubevirt.io/node-maintenance-operator/pkg/controller"
 	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
+	"kubevirt.io/node-maintenance-operator/version"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -58,6 +58,9 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
+	log.Info(fmt.Sprintf("Operator Version: %s", version.Version))
+	log.Info(fmt.Sprintf("Git Commit: %s", version.GitCommit))
+	log.Info(fmt.Sprintf("Build Date: %s", version.BuildDate))
 }
 
 func main() {
