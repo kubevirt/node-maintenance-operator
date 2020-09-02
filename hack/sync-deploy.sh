@@ -108,10 +108,6 @@ until [[ $success -eq 1 ]] || [[ $iterations -eq $max_iterations ]]; do
     else
         # All resources deployed successfully
         success=1
-        # Fixme Webhook setup is slow... service needs to be created, endpoint needs to be created, and webhook server must be running
-        # Didn't find an easy but good solution yet, so just wait a bit for now
-        echo "[INFO] Giving the webhook some time to setup"
-        sleep 60s
     fi
     set -e
 
