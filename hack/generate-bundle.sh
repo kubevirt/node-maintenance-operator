@@ -17,6 +17,7 @@ BASEPATH=$(dirname $SELF)
 
 CSV_TEMPLATE=manifests/node-maintenance-operator/template/node-maintenance-operator.clusterserviceversion.yaml
 PACKAGE_TEMPLATE=manifests/node-maintenance-operator/template/node-maintenance-operator.package.yaml
+ICON_FILE=manifests/assets/nmo_icon.png
 WORKING_DIR=deploy/olm-catalog/node-maintenance-operator
 WORKING_CSV="${WORKING_DIR}/manifests/node-maintenance-operator.clusterserviceversion.yaml"
 WORKING_PACKAGE="${WORKING_DIR}/node-maintenance-operator.package.yaml"
@@ -36,6 +37,10 @@ ${OPERATOR_SDK} generate csv --csv-version "${OPERATOR_VERSION_NEXT}" --update-c
 REGISTRY="${OVERRIDE_MANIFEST_REGISTRY:-$IMAGE_REGISTRY}"
 OPERATOR="${REGISTRY}/${OPERATOR_IMAGE}:${IMAGE_TAG}"
 sed -i "s|REPLACE_IMAGE|${OPERATOR}|g" "${WORKING_CSV}"
+
+# Set icon
+ICON_BASE64="$(base64 -w 0 $ICON_FILE)"
+sed -i "s|OPERATOR_ICON|${ICON_BASE64}|g" "${WORKING_CSV}"
 
 # Remove replace directive
 # TODO check if we need replace, and if so how to create the index image while old version is delivered by HCO
@@ -69,6 +74,7 @@ for DEPLOY_TARGET in $DEPLOY_TARGET_OCP $DEPLOY_TARGET_K8S; do
     sed -i "s,MARKETPLACE_NAMESPACE,${OLM_NS},g" ${DEPLOY_TARGET}/*.yaml
     sed -i "s,SUBSCRIPTION_NAMESPACE,${OPERATOR_NS},g" ${DEPLOY_TARGET}/*.yaml
     sed -i "s,CHANNEL,\"${OLM_CHANNEL}\",g" ${DEPLOY_TARGET}/*.yaml
+    # set values for 2nd iteration
     OLM_NS=olm
     OPERATOR_NS=node-maintenance
 done
