@@ -36,7 +36,7 @@ spec:
     Node Maintenance Operator
 
     This operator will keep nodes cordoned and drained while a matching node maintenance CR exists.
-    This is useful when investigating problems with a machine, or performing an operation on the underlying failure that might result in node failure.
+    This is useful when investigating problems with a machine, or performing an operation on the underlying machine that might result in node failure.
 
     Primarily used in bare-metal environments.
   displayName: Node Maintenance Operator
