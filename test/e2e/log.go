@@ -7,6 +7,11 @@ import (
 	"github.com/onsi/ginkgo"
 )
 
+// Provide some wrapper funcs for formatted logging using the GinkgoWriter.
+// Other logs would only appear in case of failing tests.
+// If we need more funcs, we might want to investigate if / how we can use
+// that writer with existing logging frameworks.
+
 const (
 	INFO = "INFO"
 	WARN = "WARN"
