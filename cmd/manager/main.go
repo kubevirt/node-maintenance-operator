@@ -10,12 +10,9 @@ import (
 
 	"github.com/spf13/pflag"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -171,47 +168,6 @@ func setupWebhookServer(mgr manager.Manager) error {
 
 	v1beta1.InitValidator(mgr.GetClient())
 
-	// ignore errors here...
-	_ = fixWebhookConfig(mgr)
-
 	return nil
 
-}
-
-func fixWebhookConfig(mgr manager.Manager) error {
-
-	// OLM limits the webhook scope to the namespaces that are defined in the OperatorGroup
-	// by setting namespaceSelector in the ValidatingWebhookConfiguration. This is a problem when installed
-	// in ownNamespace installMode, because we need our webhook to intercept cluster scoped requests.
-	// Luckily the OLM does not watch and reconcile the ValidatingWebhookConfiguration so we can simply reset the
-	// namespaceSelector
-
-	vwcList := &admissionregistrationv1.ValidatingWebhookConfigurationList{}
-	err := mgr.GetAPIReader().List(context.TODO(), vwcList, client.MatchingLabels{"olm.webhook-description-generate-name": WebhookConfigName})
-	if err != nil {
-		log.Error(err, "Validating webhook config not found")
-		return err
-	}
-
-	for _, vwc := range vwcList.Items {
-		update := false
-
-		for i, wh := range vwc.Webhooks {
-			if wh.Name == WebhookConfigName {
-				vwc.Webhooks[i].NamespaceSelector = &metav1.LabelSelector{MatchLabels: map[string]string{}}
-				update = true
-			}
-		}
-
-		if update {
-			log.Info("Removing namespace scope from webhook", "webhook", vwc.Name)
-			err = mgr.GetClient().Update(context.TODO(), &vwc)
-			if err != nil {
-				log.Error(err, "Failed updating webhook", "webhook", vwc.Name)
-				return err
-			}
-		}
-	}
-
-	return nil
 }
