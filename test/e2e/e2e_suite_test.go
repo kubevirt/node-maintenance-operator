@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/reporters"
@@ -64,16 +63,9 @@ var _ = BeforeSuite(func() {
 	}
 	Expect(err).ToNot(HaveOccurred())
 
-	// wait until webhooks are up and running by checking the error for the "connect" substring
-	// as in e.g. "connect: connection refused"
+	// wait until webhooks are up and running by trying to create a CR and ignoring unexpected errors
 	testCR := getNodeMaintenance("webhook-test", "some-not-existing-node-name")
-	Eventually(func() string {
-		if err := Client.Create(context.TODO(), testCR); err != nil {
-			logInfof("waiting for webhook readiness, got error: %v\n", err)
-			return err.Error()
-		}
-		return ""
-	}, 60*time.Second, 5*time.Second).ShouldNot(ContainSubstring("connect"), "webhook should be ready after some time")
+	_ = createCRIgnoreUnrelatedErrors(testCR)
 })
 
 var _ = AfterSuite(func() {

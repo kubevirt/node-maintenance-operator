@@ -58,7 +58,7 @@ var _ = Describe("Node Maintenance", func() {
 					// do this once only
 					master := masters[0]
 					masterMaintenance = getNodeMaintenance(fmt.Sprintf("test-1st-master-%s", master), master)
-					err = Client.Create(context.TODO(), masterMaintenance)
+					err = createCRIgnoreUnrelatedErrors(masterMaintenance)
 				}
 			})
 
@@ -108,7 +108,7 @@ var _ = Describe("Node Maintenance", func() {
 				master := masters[1]
 				nodeMaintenance := getNodeMaintenance(fmt.Sprintf("test-2nd-master-%s", master), master)
 
-				err := Client.Create(context.TODO(), nodeMaintenance)
+				err := createCRIgnoreUnrelatedErrors(nodeMaintenance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring(nmo.ErrorMasterQuorumViolation), "Unexpected error message")
 			})
@@ -118,7 +118,7 @@ var _ = Describe("Node Maintenance", func() {
 			It("should fail", func() {
 				nodeName := "doesNotExist"
 				nodeMaintenance := getNodeMaintenance("test-unexisting", nodeName)
-				err := Client.Create(context.TODO(), nodeMaintenance)
+				err := createCRIgnoreUnrelatedErrors(nodeMaintenance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf(nmo.ErrorNodeNotExists, nodeName)), "Unexpected error message")
 			})
@@ -141,13 +141,13 @@ var _ = Describe("Node Maintenance", func() {
 			})
 
 			It("should succeed", func() {
-				err := Client.Create(context.TODO(), nodeMaintenance)
+				err := createCRIgnoreUnrelatedErrors(nodeMaintenance)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should prevent creating another maintenance for the same node", func() {
 				nmDuplicate := getNodeMaintenance("test-duplicate", maintenanceNodeName)
-				err := Client.Create(context.TODO(), nmDuplicate)
+				err := createCRIgnoreUnrelatedErrors(nmDuplicate)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf(nmo.ErrorNodeMaintenanceExists, maintenanceNodeName)), "Unexpected error message")
 			})
@@ -297,6 +297,27 @@ func getNodeMaintenance(name, nodeName string) *nmo.NodeMaintenance {
 			Reason:   "Set maintenance on node for e2e testing",
 		},
 	}
+}
+
+// Ignore errors like
+// - connect: connection refused
+// - no endpoints available for service "node-maintenance-operator-service"
+// They can be caused by webhooks not being ready yet or unavailable master nodes
+func createCRIgnoreUnrelatedErrors(nm *nmo.NodeMaintenance) error {
+	var err error
+
+	Eventually(func() string {
+		if err = Client.Create(context.TODO(), nm); err != nil {
+			logInfof("CR creation failed with error: %v\n", err)
+			return err.Error()
+		}
+		return ""
+	}, 60*time.Second, 5*time.Second).ShouldNot(Or(
+		ContainSubstring("connect"),
+		ContainSubstring("no endpoints available"),
+	), "webhook isn't working")
+
+	return err
 }
 
 func createTestDeployment() {
