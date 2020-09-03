@@ -1345,6 +1345,7 @@ modernc.org/strutil v1.0.0/go.mod h1:lstksw84oURvj9y3tn8lGvRxyRC1S2+g5uuIzNfIOBs
 modernc.org/xc v1.0.0/go.mod h1:mRNCo0bvLjGhHO9WsyuKVU4q0ceiDDDoEeWDJHrNx8I=
 mvdan.cc/editorconfig v0.1.1-0.20200121172147-e40951bde157 h1:VBYz8greWWP8BDpRX0v7SDv/8rNlZVmdHdO4ZSsHj/E=
 mvdan.cc/editorconfig v0.1.1-0.20200121172147-e40951bde157/go.mod h1:Ge4atmRUYqueGppvJ7JNrtqpqokoJEFxYbP0Z+WeKS8=
+mvdan.cc/sh v1.3.1 h1:UxMLpJPEnVj8hmGWCD3kgC5Toem3A3VuDliExsENI7E=
 mvdan.cc/sh v2.6.4+incompatible h1:eD6tDeh0pw+/TOTI1BBEryZ02rD2nMcFsgcvde7jffM=
 mvdan.cc/sh/v3 v3.1.2 h1:PG5BYlwtrkZTbJXUy25r0/q9shB5ObttCaknkOIB1XQ=
 mvdan.cc/sh/v3 v3.1.2/go.mod h1:F+Vm4ZxPJxDKExMLhvjuI50oPnedVXpfjNSrusiTOno=

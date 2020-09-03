@@ -8,7 +8,7 @@ metadata:
           "apiVersion": "nodemaintenance.kubevirt.io/v1beta1",
           "kind": "NodeMaintenance",
           "metadata": {
-            "name": "nodemaintenance-xyz"
+            "name": "nodemaintenance-example"
           },
           "spec": {
             "nodeName": "node02",
@@ -182,7 +182,7 @@ spec:
     type: SingleNamespace
   - supported: false
     type: MultiNamespace
-  - supported: true
+  - supported: false
     type: AllNamespaces
   keywords:
   - KubeVirt
