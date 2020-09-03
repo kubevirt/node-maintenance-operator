@@ -140,9 +140,9 @@ generate-template-bundle:
 .PHONY: generate-all
 generate-all: generate-k8s generate-crds generate-template-bundle generate-bundle
 
-.PHONY: manifests
-manifests: generate-bundle
-	./hack/release-manifests.sh ${IMAGE_TAG}
+.PHONY: release-manifests
+release-manifests: generate-bundle
+	./hack/release-manifests.sh
 
 .PHONY: verify-manifests
 verify-manifests:

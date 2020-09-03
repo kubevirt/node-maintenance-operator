@@ -4,8 +4,8 @@ set -ex
 GIT_VERSION=$(git describe --always --tags)
 VERSION=${CI_UPSTREAM_VERSION:-${GIT_VERSION}}
 GIT_COMMIT=$(git rev-list -1 HEAD)
-export COMMIT=${CI_UPSTREAM_COMMIT:-${GIT_COMMIT}}
-export BUILD_DATE=$(date --utc -Iseconds)
+COMMIT=${CI_UPSTREAM_COMMIT:-${GIT_COMMIT}}
+BUILD_DATE=$(date --utc -Iseconds)
 
 mkdir -p _out
 
