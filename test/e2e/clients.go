@@ -40,13 +40,13 @@ func init() {
 	}
 
 	var err error
-	Client, err = New()
+	Client, err = newClient()
 	if err != nil {
 		klog.Info("Failed to initialize client, check the KUBECONFIG env variable", err.Error())
 		ClientsEnabled = false
 		return
 	}
-	KubeClient, err = NewK8s()
+	KubeClient, err = newK8s()
 	if err != nil {
 		klog.Info("Failed to initialize k8s client, check the KUBECONFIG env variable", err.Error())
 		ClientsEnabled = false
@@ -55,8 +55,8 @@ func init() {
 	ClientsEnabled = true
 }
 
-// New returns a controller-runtime client.
-func New() (client.Client, error) {
+// newClient returns a controller-runtime client.
+func newClient() (client.Client, error) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return nil, err
@@ -66,8 +66,8 @@ func New() (client.Client, error) {
 	return c, err
 }
 
-// NewK8s returns a kubernetes clientset
-func NewK8s() (*kubernetes.Clientset, error) {
+// newK8s returns a kubernetes clientset
+func newK8s() (*kubernetes.Clientset, error) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return nil, err

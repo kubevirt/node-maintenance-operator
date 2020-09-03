@@ -36,13 +36,30 @@ else
 
 fi
 
-# Run tests
-# let's track errors on our own here for being able to write a nice comment afterwards
 set +e
-# FIXME cleanup test namespace
+which ginkgo
+if [ $? -ne 0 ]; then
+    echo "Downloading ginkgo tool"
+    set -e
+    # Disable vendor mode
+    GOFLAGS="" go install github.com/onsi/ginkgo/ginkgo
+fi
+
+# no colors in CI
+NO_COLOR=""
+set +e
+if ! which tput &>/dev/null 2>&1 || [[ $(tput -T$TERM colors) -lt 8 ]]; then
+    echo "Terminal does not seem to support colored output, disabling it"
+    NO_COLOR="-noColor"
+fi
+
 export TEST_NAMESPACE=node-maintenance-test
-$CLUSTER_COMMAND create ns "$TEST_NAMESPACE"
-GOFLAGS="-mod=vendor" go test -count=1 -v ./test/e2e/...
+
+# -v: print out the text and location for each spec before running it and flush output to stdout in realtime
+# -r: run suites recursively
+# --keepGoing: don't stop on failing suite
+# -requireSuite: fail if tests are not executed because of missing suite
+GOFLAGS=-mod=vendor ginkgo $NO_COLOR -v -r --keepGoing -requireSuite ./test/e2e
 
 if [[ $? != 0 ]]; then
     echo "E2e tests FAILED"
