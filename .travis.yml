@@ -23,7 +23,7 @@ deploy:
   on:
     branch: master
 - provider: script
-  script: make manifests container-build container-push IMAGE_TAG=$TRAVIS_TAG
+  script: IMAGE_TAG=$TRAVIS_TAG OPERATOR_VERSION_NEXT=${TRAVIS_TAG#v} make release-manifests container-build container-push
   skip_cleanup: true
   on:
     tags: true

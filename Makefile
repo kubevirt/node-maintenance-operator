@@ -23,12 +23,6 @@ KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
 KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
 export KUBEVIRT_NUM_NODES ?= 3
 
-GIT_VERSION=$$(git describe --always --tags)
-VERSION=$${CI_UPSTREAM_VERSION:-$(GIT_VERSION)}
-GIT_COMMIT=$$(git rev-list -1 HEAD)
-COMMIT=$${CI_UPSTREAM_COMMIT:-$(GIT_COMMIT)}
-BUILD_DATE=$$(date --utc -Iseconds)
-
 export GINKGO ?= build/_output/bin/ginkgo
 
 # Make does not offer a recursive wildcard function, so here's one:
@@ -79,12 +73,7 @@ check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
 
 .PHONY: build
 build:
-	mkdir -p _out; \
-	LDFLAGS="-s -w "; \
-	LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.Version=$(VERSION) "; \
-	LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.GitCommit=$(COMMIT) "; \
-	LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.BuildDate=$(BUILD_DATE) "; \
-	GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -ldflags="$$LDFLAGS" -o _out/node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+	./hack/build.sh
 
 .PHONY: container-build
 container-build: container-build-operator container-build-bundle container-build-index container-build-must-gather
@@ -151,9 +140,9 @@ generate-template-bundle:
 .PHONY: generate-all
 generate-all: generate-k8s generate-crds generate-template-bundle generate-bundle
 
-.PHONY: manifests
-manifests: generate-bundle
-	./hack/release-manifests.sh ${IMAGE_TAG}
+.PHONY: release-manifests
+release-manifests: generate-bundle
+	./hack/release-manifests.sh
 
 .PHONY: verify-manifests
 verify-manifests:
