@@ -30,9 +30,9 @@ OPERATOR_IMAGE=""
 # OPTIONAL ARGS
 WATCH_NAMESPACE=""
 
-while (( "$#" )); do
-    ARG=`echo $1 | awk -F= '{print $1}'`
-    VAL=`echo $1 | awk -F= '{print $2}'`
+while (("$#")); do
+    ARG=$(echo $1 | awk -F= '{print $1}')
+    VAL=$(echo $1 | awk -F= '{print $2}')
     shift
 
     case "$ARG" in
@@ -78,7 +78,7 @@ echo "---"
 cat ${TMP_CSV}
 rm ${TMP_CSV}
 if [ "$DUMP_CRDS" = "true" ]; then
-    for CRD in $( ls ${MANIFESTS_DIR}/*crd.yaml ); do
+    for CRD in $(ls ${MANIFESTS_DIR}/*crd.yaml); do
         echo "---"
         cat ${CRD}
     done

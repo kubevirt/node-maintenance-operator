@@ -72,6 +72,7 @@ test:
 shfmt:
 	go get mvdan.cc/sh/v3/cmd/shfmt
 	shfmt -i 4 -w ./hack/
+	shfmt -i 4 -w ./build/
 
 .PHONY: check
 check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
