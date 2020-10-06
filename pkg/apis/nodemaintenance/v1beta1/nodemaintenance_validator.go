@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	machinev1beta1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -13,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	machinev1beta1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 )
 
 const (
@@ -210,14 +210,14 @@ func (v *NodeMaintenanceValidator) getMachineFromNode(node *v1.Node) (*machinev1
 	}
 
 	key := types.NamespacedName{
-		Name:	   namespacedMachine[1],
+		Name:      namespacedMachine[1],
 		Namespace: namespacedMachine[0],
 	}
 
 	machine := &machinev1beta1.Machine{}
 
-	if err := v.client.Get(context.TODO(), key, machine); err != nil{
-		if apierrors.IsNotFound(err){
+	if err := v.client.Get(context.TODO(), key, machine); err != nil {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 

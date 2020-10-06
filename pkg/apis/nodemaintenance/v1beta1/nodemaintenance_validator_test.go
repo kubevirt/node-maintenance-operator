@@ -22,7 +22,6 @@ var _ = Describe("NodeMaintenance Validation", func() {
 		machineName         = "machine1"
 	)
 
-
 	var (
 		client  client.Client
 		objects []runtime.Object
@@ -125,7 +124,7 @@ var _ = Describe("NodeMaintenance Validation", func() {
 			})
 		})
 
-		Context("for unhealthy machine", func(){
+		Context("for unhealthy machine", func() {
 			BeforeEach(func() {
 				machine := getTestMachine(machineName, true)
 				node := getTestNode(existingNodeName, false)
@@ -133,7 +132,7 @@ var _ = Describe("NodeMaintenance Validation", func() {
 				objects = append(objects, node, machine)
 			})
 
-			It("should be rejected", func(){
+			It("should be rejected", func() {
 				nm := getTestNMO(existingNodeName)
 				err := nm.ValidateCreate()
 				Expect(err).To(HaveOccurred())
@@ -141,7 +140,7 @@ var _ = Describe("NodeMaintenance Validation", func() {
 			})
 		})
 
-		Context("for healthy machine", func(){
+		Context("for healthy machine", func() {
 			BeforeEach(func() {
 				machine := getTestMachine(machineName, false)
 				node := getTestNode(existingNodeName, false)
@@ -149,23 +148,23 @@ var _ = Describe("NodeMaintenance Validation", func() {
 				objects = append(objects, node, machine)
 			})
 
-			It("should not be rejected", func(){
+			It("should not be rejected", func() {
 				nm := getTestNMO(existingNodeName)
 				err := nm.ValidateCreate()
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 
-		Context("for node with a broken machine ref", func(){
+		Context("for node with a broken machine ref", func() {
 			var node *v1.Node
 
-			BeforeEach(func(){
+			BeforeEach(func() {
 				node = getTestNode(existingNodeName, false)
 				objects = append(objects, node)
 			})
 
-			Context("node without annotations", func(){
-				It("should not be rejected", func(){
+			Context("node without annotations", func() {
+				It("should not be rejected", func() {
 					nm := getTestNMO(existingNodeName)
 					err := nm.ValidateCreate()
 					Expect(err).ToNot(HaveOccurred())
@@ -184,27 +183,27 @@ var _ = Describe("NodeMaintenance Validation", func() {
 				})
 			})
 
-			Context("node with invalid machine ref format should be rejected", func(){
+			Context("node with invalid machine ref format should be rejected", func() {
 				invalidMachineRef := "blabla" // missing '/'
 				BeforeEach(func() {
 					node.Annotations = make(map[string]string)
 					node.Annotations[MachineRefAnnotation] = invalidMachineRef
 				})
-				It("should be rejected", func(){
+				It("should be rejected", func() {
 					nm := getTestNMO(existingNodeName)
 					err := nm.ValidateCreate()
 					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring(InvalidMachineFormat,invalidMachineRef))
+					Expect(err.Error()).To(ContainSubstring(InvalidMachineFormat, invalidMachineRef))
 				})
 			})
 
-			Context("node with invalid machine ref format", func(){
-				BeforeEach(func(){
+			Context("node with invalid machine ref format", func() {
+				BeforeEach(func() {
 					node.Annotations = make(map[string]string)
 					node.Annotations[MachineRefAnnotation] = "foo/bar"
 				})
 
-				It("node with non existent machine should not be rejected", func(){
+				It("node with non existent machine should not be rejected", func() {
 					nm := getTestNMO(existingNodeName)
 					err := nm.ValidateCreate()
 					Expect(err).ToNot(HaveOccurred())
