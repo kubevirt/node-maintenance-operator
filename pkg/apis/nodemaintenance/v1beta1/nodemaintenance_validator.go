@@ -3,6 +3,7 @@ package v1beta1
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
@@ -12,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	machinev1beta1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 )
 
 const (
@@ -19,12 +21,16 @@ const (
 	ErrorNodeMaintenanceExists   = "invalid nodeName, a NodeMaintenance for node %s already exists"
 	ErrorNodeNameUpdateForbidden = "updating spec.NodeName isn't allowed"
 	ErrorMasterQuorumViolation   = "can not put master node into maintenance at this moment, it would violate the master quorum"
+	ErrorUnhealthyMachine        = "machine associated with the node is currently unhealthy. node name: %s, machine name: %s"
+	InvalidMachineFormat         = "could not parse machine name and namespace from node annotation: %s"
 )
 
 const (
 	EtcdQuorumPDBName      = "etcd-quorum-guard"
 	EtcdQuorumPDBNamespace = "openshift-etcd"
 	LabelNameRoleMaster    = "node-role.kubernetes.io/master"
+	UnhealthyAnnotation    = "host.metal3.io/external-remediation"
+	MachineRefAnnotation   = "machine.openshift.io/machine"
 )
 
 var log = logger.Log.WithName("validator")
@@ -86,6 +92,12 @@ func (v *NodeMaintenanceValidator) ValidateCreate(nm *NodeMaintenance) error {
 
 	// Validate that NodeMaintenance for master nodes don't violate quorum
 	if err := v.validateMasterQuorum(nm.Spec.NodeName); err != nil {
+		log.Info("validation failed", "error", err)
+		return err
+	}
+
+	// Validate that the machine associated with the node is healthy
+	if err := v.validateMachineIsHealthy(nm.Spec.NodeName); err != nil {
 		log.Info("validation failed", "error", err)
 		return err
 	}
@@ -155,6 +167,79 @@ func (v *NodeMaintenanceValidator) validateMasterQuorum(nodeName string) error {
 		return fmt.Errorf(ErrorMasterQuorumViolation)
 	}
 	return nil
+}
+
+func (v *NodeMaintenanceValidator) validateMachineIsHealthy(nodeName string) error {
+	node, err := getNode(nodeName, v.client)
+	if err != nil {
+		return fmt.Errorf("could not get node for checking its health status: %v", err)
+	}
+
+	if node == nil {
+		return fmt.Errorf(ErrorNodeNotExists, nodeName)
+	}
+
+	var machine *machinev1beta1.Machine
+	if machine, err = v.getMachineFromNode(node); err != nil {
+		return err
+	}
+
+	if v.isMachineUnhealthy(machine) {
+		return fmt.Errorf(ErrorUnhealthyMachine, nodeName, machine.Name)
+	}
+
+	return nil
+}
+
+//getMachineFromNode returns the machine associated with the given node
+//it returns nil machine if it couldn't determine the machine
+func (v *NodeMaintenanceValidator) getMachineFromNode(node *v1.Node) (*machinev1beta1.Machine, error) {
+	if node.Annotations == nil {
+		return nil, nil
+	}
+
+	machineAnnotation, exists := node.Annotations[MachineRefAnnotation]
+	if !exists {
+		return nil, nil
+	}
+
+	namespacedMachine := strings.Split(machineAnnotation, string(types.Separator))
+
+	if len(namespacedMachine) != 2 {
+		return nil, fmt.Errorf(InvalidMachineFormat, machineAnnotation)
+	}
+
+	key := types.NamespacedName{
+		Name:	   namespacedMachine[1],
+		Namespace: namespacedMachine[0],
+	}
+
+	machine := &machinev1beta1.Machine{}
+
+	if err := v.client.Get(context.TODO(), key, machine); err != nil{
+		if apierrors.IsNotFound(err){
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("could not get machine %s", key.Name)
+	}
+
+	return machine, nil
+}
+
+//isMachineUnhealthy returns true if the machine is unhealthy, false otherwise (including nil machine)
+func (v *NodeMaintenanceValidator) isMachineUnhealthy(machine *machinev1beta1.Machine) bool {
+	if machine == nil {
+		return false
+	}
+
+	if machine.Annotations == nil {
+		return false
+	}
+
+	_, isUnhealthy := machine.Annotations[UnhealthyAnnotation]
+
+	return isUnhealthy
 }
 
 // if the returned node is nil, it wasn't found
