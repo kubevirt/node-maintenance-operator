@@ -26,6 +26,7 @@ const (
 	DrainerTimeout                    = 30 * time.Second
 	WaitDurationOnDrainError          = 5 * time.Second
 	FixedDurationReconcileLog         = "Reconciling with fixed duration"
+	LeaseHolderIdentity               = "node-maintenance"
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -290,7 +291,7 @@ func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) 
 	}
 
 	log.Info("Lease object supported, obtaining lease")
-	lease, needUpdate, err := createOrGetExistingLease(r.client, node, LeaseDuration)
+	lease, needUpdate, err := createOrGetExistingLease(r.client, node, LeaseDuration, LeaseHolderIdentity)
 
 	if err != nil {
 		log.Errorf("failed to create or get existing lease error=%v", err)
@@ -302,7 +303,7 @@ func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) 
 		log.Info("update lease")
 
 		now := metav1.NowMicro()
-		if err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, &now, LeaseDuration); err != nil {
+		if err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, &now, LeaseDuration, LeaseHolderIdentity); err != nil {
 			return updateOwnedLeaseFailed, err
 		}
 	}
@@ -321,6 +322,7 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) err
 	}
 
 	if r.isLeaseSupported {
+		log.Info("Lease object supported, invalidating lease")
 		if err := invalidateLease(r.client, node.Name); err != nil {
 			return err
 		}
@@ -334,6 +336,7 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string
 		// if CR is gathered as result of garbage collection: the node may have been deleted, but the CR has not yet been deleted, still we must clean up the lease!
 		if errors.IsNotFound(err) {
 			if r.isLeaseSupported {
+				log.Info("Lease object supported, invalidating lease")
 				if err := invalidateLease(r.client, nodeName); err != nil {
 					return err
 				}
