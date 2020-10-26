@@ -20,7 +20,12 @@ func Add(mgr manager.Manager) error {
 	if err != nil {
 		return err
 	}
-	return add(mgr, r)
+
+	reconciler := r.(*ReconcileNodeMaintenance)
+	leaseChannel, err := add(mgr, r)
+	reconciler.leaseChannel = leaseChannel
+
+	return err
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -35,11 +40,11 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r reconcile.Reconciler) (chan<- event.GenericEvent, error) {
 	// Create a new controller
 	c, err := controller.New("nodemaintenance-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	pred := predicate.Funcs{
@@ -55,7 +60,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to primary resource NodeMaintenance
 	err = c.Watch(src, &handler.EnqueueRequestForObject{}, pred)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+
+	leaseChannel := make(chan event.GenericEvent)
+	channelSource := &source.Channel{
+		Source: leaseChannel,
+	}
+
+	err = c.Watch(channelSource, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return nil, err
+	}
+
+	return leaseChannel, nil
 }

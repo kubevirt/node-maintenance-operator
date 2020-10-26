@@ -3,6 +3,9 @@ package nodemaintenance
 import (
 	"context"
 	"fmt"
+	le "k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -30,6 +33,12 @@ const (
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
+var nodeLocks = make(map[string]*NodeLock)
+
+type NodeLock struct {
+	leaderElector *le.LeaderElector
+	cancelFunc    func()
+}
 
 // set readable timestamp format in logs, not reference time
 func init() {
@@ -119,6 +128,7 @@ type ReconcileNodeMaintenance struct {
 	scheme           *runtime.Scheme
 	drainer          *drain.Helper
 	isLeaseSupported bool
+	leaseChannel     chan<- event.GenericEvent
 }
 
 func (r *ReconcileNodeMaintenance) checkLeaseSupported() error {
@@ -128,6 +138,71 @@ func (r *ReconcileNodeMaintenance) checkLeaseSupported() error {
 		return err
 	}
 	r.isLeaseSupported = isLeaseSupported
+	return nil
+}
+
+func (r *ReconcileNodeMaintenance) addNodeEventToReconcileQueue(node *corev1.Node) {
+	if r.leaseChannel == nil {
+		//todo error?
+	}
+
+	nodeEvent := event.GenericEvent{Meta: node.GetObjectMeta(), Object: node}
+	//todo this could blocking if channel is full?
+	r.leaseChannel <- nodeEvent
+}
+
+func (r *ReconcileNodeMaintenance) lockObject(node *corev1.Node) error {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	//todo add node owner ref to lease
+	leaseLock := &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{
+			Name:      node.Name,
+			Namespace: LeaseNamespace,
+		},
+		Client: nil, //todo
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: LeaseHolderIdentity,
+		},
+	}
+
+	leaderElectionConfig := le.LeaderElectionConfig{
+		Lock:          leaseLock,
+		LeaseDuration: LeaseDuration,
+		RenewDeadline: 10 * time.Second,
+		RetryPeriod:   30 * time.Second,
+		Callbacks: le.LeaderCallbacks{
+			OnStartedLeading: func(ctx context.Context) {
+				r.addNodeEventToReconcileQueue(node)
+			},
+			OnStoppedLeading: func() {
+				r.addNodeEventToReconcileQueue(node)
+			},
+			OnNewLeader: func(identity string) {
+				//todo is this redundant?
+				r.addNodeEventToReconcileQueue(node)
+			},
+		},
+		WatchDog:        nil,
+		ReleaseOnCancel: true,
+		Name:            node.Name,
+	}
+
+	_, exists := nodeLocks[node.Name]
+	if !exists {
+		nodeLeaderElector, err := le.NewLeaderElector(leaderElectionConfig)
+		if err != nil {
+			return err
+		}
+
+		nodeLeaderElector.Run(ctx)
+		nodeLock := &NodeLock{
+			leaderElector: nodeLeaderElector,
+			cancelFunc:    cancelFunc,
+		}
+		nodeLocks[node.Name] = nodeLock
+	}
+
 	return nil
 }
 
@@ -186,46 +261,44 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, nil
 	}
 
+	nodeName := instance.Spec.NodeName
+	node, err := r.fetchNode(nodeName)
+	if err != nil {
+		return r.onReconcileError(instance, err)
+	}
+
+	if err := r.lockObject(node); err != nil {
+		reqLogger.Errorf("Failed to lock node object", "node name", node.Name, "error", err)
+	}
+
+	nodeLock := nodeLocks[node.Name]
+	if !nodeLock.leaderElector.IsLeader() {
+		if instance.Status.Phase == nodemaintenanceapi.MaintenanceRunning {
+			//maintenance has started and we lost the lease
+			err = r.stopNodeMaintenanceImp(node)
+			if err != nil {
+				return r.onReconcileError(instance, fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
+			}
+			instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
+			if err := r.client.Status().Update(context.Background(), instance); err != nil {
+				return r.onReconcileError(instance, fmt.Errorf("Failed to update node maintenance to faild state : %v ", err))
+			}
+		}
+
+		// node is locked by someone else
+		// no need to requeue as the leader election callback will call reconcile once this changes
+		return reconcile.Result{}, nil
+	}
+
 	err = r.initMaintenanceStatus(instance)
 	if err != nil {
 		reqLogger.Errorf("Failed to update NodeMaintenance with \"Running\" status. Error: %v", err)
 		return r.onReconcileError(instance, err)
 	}
 
-	nodeName := instance.Spec.NodeName
-
 	reqLogger.Infof("Applying Maintenance mode on Node: %s with Reason: %s", nodeName, instance.Spec.Reason)
-	node, err := r.fetchNode(nodeName)
-	if err != nil {
-		return r.onReconcileError(instance, err)
-	}
 
 	setOwnerRefToNode(instance, node)
-
-	updateOwnedLeaseFailed, err := r.obtainLease(node)
-	if err != nil && updateOwnedLeaseFailed {
-		instance.Status.ErrorOnLeaseCount += 1
-		if instance.Status.ErrorOnLeaseCount > MaxAllowedErrorToUpdateOwnedLease {
-			log.Info("can't extend owned lease. uncordon for now")
-
-			// Uncordon the node
-			err = r.stopNodeMaintenanceImp(node)
-			if err != nil {
-				return r.onReconcileError(instance, fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
-			}
-			instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
-		}
-		return r.onReconcileError(instance, fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
-	}
-	if err != nil {
-		instance.Status.ErrorOnLeaseCount = 0
-		return r.onReconcileError(instance, err)
-	} else {
-		if instance.Status.Phase != nodemaintenanceapi.MaintenanceRunning || instance.Status.ErrorOnLeaseCount != 0 {
-			instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
-			instance.Status.ErrorOnLeaseCount = 0
-		}
-	}
 
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
@@ -321,11 +394,9 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) err
 		return err
 	}
 
-	if r.isLeaseSupported {
-		log.Info("Lease object supported, invalidating lease")
-		if err := invalidateLease(r.client, node.Name); err != nil {
-			return err
-		}
+	nodeLock, exists := nodeLocks[node.Name]
+	if exists {
+		nodeLock.cancelFunc()
 	}
 	return nil
 }
@@ -335,12 +406,6 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string
 	if err != nil {
 		// if CR is gathered as result of garbage collection: the node may have been deleted, but the CR has not yet been deleted, still we must clean up the lease!
 		if errors.IsNotFound(err) {
-			if r.isLeaseSupported {
-				log.Info("Lease object supported, invalidating lease")
-				if err := invalidateLease(r.client, nodeName); err != nil {
-					return err
-				}
-			}
 			return nil
 		}
 		return err
