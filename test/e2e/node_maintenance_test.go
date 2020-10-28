@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
-	coordv1beta1 "k8s.io/api/coordination/v1beta1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -451,7 +451,7 @@ func isTainted(node *corev1.Node) bool {
 }
 
 func hasValidLease(nodeName string, startTime time.Time) {
-	lease := &coordv1beta1.Lease{}
+	lease := &coordv1.Lease{}
 	err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: nodeName}, lease)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "failed to get lease")
 
@@ -469,12 +469,13 @@ func hasValidLease(nodeName string, startTime time.Time) {
 }
 
 func isLeaseInvalidated(nodeName string) {
-	lease := &coordv1beta1.Lease{}
+	lease := &coordv1.Lease{}
 	err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: nodeName}, lease)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "failed to get lease")
 
-	ExpectWithOffset(1, lease.Spec.AcquireTime).To(BeNil())
-	ExpectWithOffset(1, lease.Spec.LeaseDurationSeconds).To(BeNil())
-	ExpectWithOffset(1, lease.Spec.RenewTime).To(BeNil())
-	ExpectWithOffset(1, lease.Spec.LeaseTransitions).To(BeNil())
+	ExpectWithOffset(1, *lease.Spec.HolderIdentity).To(BeEmpty())
+	//ExpectWithOffset(1, lease.Spec.AcquireTime).To(BeNil())
+	//ExpectWithOffset(1, lease.Spec.LeaseDurationSeconds).To(BeNil())
+	//ExpectWithOffset(1, lease.Spec.RenewTime).To(BeNil())
+	//ExpectWithOffset(1, lease.Spec.LeaseTransitions).To(BeNil())
 }

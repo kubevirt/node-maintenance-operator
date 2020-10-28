@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfakeclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -82,9 +81,12 @@ var _ = Describe("updateCondition", func() {
 		setFakeClients(s)
 
 		// Create a ReconcileNodeMaintenance object with the scheme and fake client
-		r = &ReconcileNodeMaintenance{client: cl, scheme: s}
-		initDrainer(r, &rest.Config{})
-		r.drainer.Client = cs
+		r = &ReconcileNodeMaintenance{
+			client:    cl,
+			scheme:    s,
+			clientset: cs,
+		}
+		initDrainer(r, cs)
 
 		// Mock request to simulate Reconcile() being called on an event for a
 		// watched resource .

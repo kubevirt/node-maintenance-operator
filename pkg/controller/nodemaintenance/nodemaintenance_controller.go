@@ -12,13 +12,14 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubernetes "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 	"k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/drain"
-	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance/lease"
 )
 
 const (
@@ -26,6 +27,9 @@ const (
 	DrainerTimeout                    = 30 * time.Second
 	WaitDurationOnDrainError          = 5 * time.Second
 	FixedDurationReconcileLog         = "Reconciling with fixed duration"
+	LeaseNamespaceDefault             = "node-maintenance"
+	LeaseHolderIdentity               = "node-maintenance"
+	LeaseDuration                     = 3600 * time.Second
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
@@ -61,7 +65,7 @@ func SetLeaseNamespace(namespace string) {
 	LeaseNamespace = namespace
 }
 
-func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
+func initDrainer(r *ReconcileNodeMaintenance, clientset kubernetes.Interface) error {
 
 	r.drainer = &drain.Helper{}
 
@@ -95,11 +99,7 @@ func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
 	//Label selector to filter pods on the node
 	//r.drainer.PodSelector = "kubevirt.io=virt-launcher"
 
-	cs, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-	r.drainer.Client = cs
+	r.drainer.Client = clientset
 	r.drainer.DryRunStrategy = util.DryRunNone
 
 	r.drainer.Out = writer{klog.Info}
@@ -116,18 +116,9 @@ type ReconcileNodeMaintenance struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	scheme           *runtime.Scheme
+	clientset        kubernetes.Interface
 	drainer          *drain.Helper
 	isLeaseSupported bool
-}
-
-func (r *ReconcileNodeMaintenance) checkLeaseSupported() error {
-	isLeaseSupported, err := checkLeaseSupportedInternal(r.drainer.Client)
-	if err != nil {
-		log.Errorf("Failed to check for lease support %v", err)
-		return err
-	}
-	r.isLeaseSupported = isLeaseSupported
-	return nil
 }
 
 // Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
@@ -155,6 +146,12 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	leaseHandler, err := lease.New(LeaseNamespace, instance.Spec.NodeName, LeaseHolderIdentity, r.clientset)
+	if err != nil {
+		reqLogger.Errorf("Failed to setup lease handler: %v", err)
+		return reconcile.Result{}, err
+	}
+
 	// Add finalizer when object is created
 	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) {
@@ -169,7 +166,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		// The object is being deleted
 		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) || ContainsString(instance.ObjectMeta.Finalizers, metav1.FinalizerOrphanDependents) {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
-			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName); err != nil {
+			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName, leaseHandler); err != nil {
 				reqLogger.Infof("error stopping node maintenance: %v", err)
 				if errors.IsNotFound(err) == false {
 					return r.onReconcileError(instance, err)
@@ -201,30 +198,33 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 
 	setOwnerRefToNode(instance, node)
 
-	updateOwnedLeaseFailed, err := r.obtainLease(node)
-	if err != nil && updateOwnedLeaseFailed {
-		instance.Status.ErrorOnLeaseCount += 1
-		if instance.Status.ErrorOnLeaseCount > MaxAllowedErrorToUpdateOwnedLease {
-			log.Info("can't extend owned lease. uncordon for now")
+	// try to get a node lease
+	// note: the renew duration is taken from old impl... might need reconsideration?!
+	if err := leaseHandler.Get(LeaseDuration, 2*DrainerTimeout); err != nil {
 
-			// Uncordon the node
-			err = r.stopNodeMaintenanceImp(node)
-			if err != nil {
-				return r.onReconcileError(instance, fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
+		log.Errorf("failed to get or renew node lease! status: %v, error: %v", leaseHandler.Status, err)
+
+		// count renew errors and fail if needed
+		if leaseHandler.Status == lease.RenewFailed {
+			instance.Status.ErrorOnLeaseCount += 1
+			if instance.Status.ErrorOnLeaseCount > MaxAllowedErrorToUpdateOwnedLease {
+				log.Errorf("can't extend owned lease, uncordon for now")
+				// Uncordon the node
+				err = r.stopNodeMaintenanceImp(node, leaseHandler)
+				if err != nil {
+					return r.onReconcileError(instance, fmt.Errorf("failed to uncordon upon failure to obtain owned lease : %v ", err))
+				}
+				instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
 			}
-			instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
+			return r.onReconcileError(instance, fmt.Errorf("failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
 		}
-		return r.onReconcileError(instance, fmt.Errorf("Failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
-	}
-	if err != nil {
+
 		instance.Status.ErrorOnLeaseCount = 0
 		return r.onReconcileError(instance, err)
-	} else {
-		if instance.Status.Phase != nodemaintenanceapi.MaintenanceRunning || instance.Status.ErrorOnLeaseCount != 0 {
-			instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
-			instance.Status.ErrorOnLeaseCount = 0
-		}
 	}
+
+	instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
+	instance.Status.ErrorOnLeaseCount = 0
 
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)
@@ -284,32 +284,7 @@ func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev
 	instance.ObjectMeta.SetOwnerReferences(append(instance.ObjectMeta.GetOwnerReferences(), ref))
 }
 
-func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) {
-	if !r.isLeaseSupported {
-		return false, nil
-	}
-
-	log.Info("Lease object supported, obtaining lease")
-	lease, needUpdate, err := createOrGetExistingLease(r.client, node, LeaseDuration)
-
-	if err != nil {
-		log.Errorf("failed to create or get existing lease error=%v", err)
-		return false, err
-	}
-
-	if needUpdate {
-
-		log.Info("update lease")
-
-		now := metav1.NowMicro()
-		if err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, &now, LeaseDuration); err != nil {
-			return updateOwnedLeaseFailed, err
-		}
-	}
-
-	return false, nil
-}
-func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) error {
+func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node, leaseHandler *lease.Handler) error {
 	// Uncordon the node
 	err := AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
@@ -320,29 +295,25 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) err
 		return err
 	}
 
-	if r.isLeaseSupported {
-		if err := invalidateLease(r.client, node.Name); err != nil {
-			return err
-		}
+	if err := leaseHandler.Release(); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string) error {
+func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string, leaseHandler *lease.Handler) error {
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
 		// if CR is gathered as result of garbage collection: the node may have been deleted, but the CR has not yet been deleted, still we must clean up the lease!
 		if errors.IsNotFound(err) {
-			if r.isLeaseSupported {
-				if err := invalidateLease(r.client, nodeName); err != nil {
-					return err
-				}
+			if err := leaseHandler.Release(); err != nil {
+				return err
 			}
 			return nil
 		}
 		return err
 	}
-	return r.stopNodeMaintenanceImp(node)
+	return r.stopNodeMaintenanceImp(node, leaseHandler)
 }
 
 func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, error) {

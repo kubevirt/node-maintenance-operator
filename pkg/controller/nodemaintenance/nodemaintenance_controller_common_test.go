@@ -112,8 +112,8 @@ func (self *FakeClient) Discovery() k8sdiscovery.DiscoveryInterface {
 			Groups: []metav1.APIGroup{{
 				Name: "lease",
 				Versions: []metav1.GroupVersionForDiscovery{{
-					GroupVersion: LeaseApiPackage + "notQuite",
-					Version:      "v1beta1",
+					GroupVersion: "coordination.k8s.io" + "notQuite",
+					Version:      "v1",
 				}},
 			}},
 		}}
@@ -123,8 +123,8 @@ func (self *FakeClient) Discovery() k8sdiscovery.DiscoveryInterface {
 			Groups: []metav1.APIGroup{{
 				Name: "lease",
 				Versions: []metav1.GroupVersionForDiscovery{{
-					GroupVersion: LeaseApiPackage,
-					Version:      "v1beta1",
+					GroupVersion: "coordination.k8s.io",
+					Version:      "v1",
 				}},
 			}},
 		}}
