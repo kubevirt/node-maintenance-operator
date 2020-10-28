@@ -3,13 +3,13 @@
 package nodemaintenance
 
 import (
+	"k8s.io/client-go/kubernetes"
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -21,30 +21,31 @@ func Add(mgr manager.Manager) error {
 		return err
 	}
 
-	reconciler := r.(*ReconcileNodeMaintenance)
-	leaseChannel, err := add(mgr, r)
-	reconciler.leaseChannel = leaseChannel
-
-	return err
+	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
-
-	err := initDrainer(r, mgr.GetConfig())
-	if err == nil {
-		err = r.checkLeaseSupported()
+func newReconciler(mgr manager.Manager) (*ReconcileNodeMaintenance, error) {
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, err
 	}
-	return r, err
+
+	r := &ReconcileNodeMaintenance{
+		client:    mgr.GetClient(),
+		clientset: clientset,
+		scheme:    mgr.GetScheme(),
+	}
+
+	return r, initDrainer(r, mgr.GetConfig())
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) (chan<- event.GenericEvent, error) {
+func add(mgr manager.Manager, r *ReconcileNodeMaintenance) error {
 	// Create a new controller
 	c, err := controller.New("nodemaintenance-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	pred := predicate.Funcs{
@@ -60,18 +61,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) (chan<- event.GenericEvent
 	// Watch for changes to primary resource NodeMaintenance
 	err = c.Watch(src, &handler.EnqueueRequestForObject{}, pred)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	leaseChannel := make(chan event.GenericEvent)
+	leaseChannel := make(chan event.GenericEvent, 100)
 	channelSource := &source.Channel{
 		Source: leaseChannel,
 	}
 
 	err = c.Watch(channelSource, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return nil, err
+		return err
 	}
+	r.leaseChannel = leaseChannel
 
-	return leaseChannel, nil
+	return nil
 }

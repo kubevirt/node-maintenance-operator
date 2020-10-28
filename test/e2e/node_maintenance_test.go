@@ -473,8 +473,15 @@ func isLeaseInvalidated(nodeName string) {
 	err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: nodeName}, lease)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "failed to get lease")
 
-	ExpectWithOffset(1, lease.Spec.AcquireTime).To(BeNil())
-	ExpectWithOffset(1, lease.Spec.LeaseDurationSeconds).To(BeNil())
-	ExpectWithOffset(1, lease.Spec.RenewTime).To(BeNil())
-	ExpectWithOffset(1, lease.Spec.LeaseTransitions).To(BeNil())
+	EventuallyWithOffset(1, func() (int32, error) {
+		lease := &coordv1.Lease{}
+		err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: nodeName}, lease)
+		if err == nil {
+			return *lease.Spec.LeaseDurationSeconds, nil
+		}
+		return -1, err
+	}, time.Second*60, time.Second*5).Should(BeEquivalentTo(int32(1)))
+
+	ExpectWithOffset(1, lease.Spec.AcquireTime.Time).To(BeTemporally("<=", time.Now()))
+	ExpectWithOffset(1, lease.Spec.RenewTime.Time).To(BeTemporally("<=", time.Now()))
 }

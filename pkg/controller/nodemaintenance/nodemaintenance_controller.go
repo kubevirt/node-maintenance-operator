@@ -3,8 +3,7 @@ package nodemaintenance
 import (
 	"context"
 	"fmt"
-	le "k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"kubevirt.io/node-maintenance-operator/pkg/objectlock"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"time"
 
@@ -25,20 +24,13 @@ import (
 )
 
 const (
-	MaxAllowedErrorToUpdateOwnedLease = 3
-	DrainerTimeout                    = 30 * time.Second
-	WaitDurationOnDrainError          = 5 * time.Second
-	FixedDurationReconcileLog         = "Reconciling with fixed duration"
-	LeaseHolderIdentity               = "node-maintenance"
+	DrainerTimeout            = 30 * time.Second
+	WaitDurationOnDrainError  = 5 * time.Second
+	FixedDurationReconcileLog = "Reconciling with fixed duration"
+	LeaseHolderIdentity       = "node-maintenance"
+	LeaseNamespace            = "node-maintenance"
+	LeaseDuration             = 60 * time.Second //todo change
 )
-
-var LeaseNamespace = LeaseNamespaceDefault
-var nodeLocks = make(map[string]*NodeLock)
-
-type NodeLock struct {
-	leaderElector *le.LeaderElector
-	cancelFunc    func()
-}
 
 // set readable timestamp format in logs, not reference time
 func init() {
@@ -65,10 +57,6 @@ func onPodDeletedOrEvicted(pod *corev1.Pod, usingEviction bool) {
 	}
 	msg := fmt.Sprintf("pod: %s:%s %s from node: %s", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, verbString, pod.Spec.NodeName)
 	klog.Info(msg)
-}
-
-func SetLeaseNamespace(namespace string) {
-	LeaseNamespace = namespace
 }
 
 func initDrainer(r *ReconcileNodeMaintenance, config *rest.Config) error {
@@ -125,85 +113,11 @@ type ReconcileNodeMaintenance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
+	clientset        kubernetes.Interface
 	scheme           *runtime.Scheme
 	drainer          *drain.Helper
 	isLeaseSupported bool
 	leaseChannel     chan<- event.GenericEvent
-}
-
-func (r *ReconcileNodeMaintenance) checkLeaseSupported() error {
-	isLeaseSupported, err := checkLeaseSupportedInternal(r.drainer.Client)
-	if err != nil {
-		log.Errorf("Failed to check for lease support %v", err)
-		return err
-	}
-	r.isLeaseSupported = isLeaseSupported
-	return nil
-}
-
-func (r *ReconcileNodeMaintenance) addNodeEventToReconcileQueue(node *corev1.Node) {
-	if r.leaseChannel == nil {
-		//todo error?
-	}
-
-	nodeEvent := event.GenericEvent{Meta: node.GetObjectMeta(), Object: node}
-	//todo this could blocking if channel is full?
-	r.leaseChannel <- nodeEvent
-}
-
-func (r *ReconcileNodeMaintenance) lockObject(node *corev1.Node) error {
-	ctx, cancelFunc := context.WithCancel(context.Background())
-
-	//todo add node owner ref to lease
-	leaseLock := &resourcelock.LeaseLock{
-		LeaseMeta: metav1.ObjectMeta{
-			Name:      node.Name,
-			Namespace: LeaseNamespace,
-		},
-		Client: nil, //todo
-		LockConfig: resourcelock.ResourceLockConfig{
-			Identity: LeaseHolderIdentity,
-		},
-	}
-
-	leaderElectionConfig := le.LeaderElectionConfig{
-		Lock:          leaseLock,
-		LeaseDuration: LeaseDuration,
-		RenewDeadline: 10 * time.Second,
-		RetryPeriod:   30 * time.Second,
-		Callbacks: le.LeaderCallbacks{
-			OnStartedLeading: func(ctx context.Context) {
-				r.addNodeEventToReconcileQueue(node)
-			},
-			OnStoppedLeading: func() {
-				r.addNodeEventToReconcileQueue(node)
-			},
-			OnNewLeader: func(identity string) {
-				//todo is this redundant?
-				r.addNodeEventToReconcileQueue(node)
-			},
-		},
-		WatchDog:        nil,
-		ReleaseOnCancel: true,
-		Name:            node.Name,
-	}
-
-	_, exists := nodeLocks[node.Name]
-	if !exists {
-		nodeLeaderElector, err := le.NewLeaderElector(leaderElectionConfig)
-		if err != nil {
-			return err
-		}
-
-		nodeLeaderElector.Run(ctx)
-		nodeLock := &NodeLock{
-			leaderElector: nodeLeaderElector,
-			cancelFunc:    cancelFunc,
-		}
-		nodeLocks[node.Name] = nodeLock
-	}
-
-	return nil
 }
 
 // Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
@@ -245,7 +159,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		// The object is being deleted
 		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenanceapi.NodeMaintenanceFinalizer) || ContainsString(instance.ObjectMeta.Finalizers, metav1.FinalizerOrphanDependents) {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
-			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName); err != nil {
+			if err := r.stopNodeMaintenanceOnDeletion(instance); err != nil {
 				reqLogger.Infof("error stopping node maintenance: %v", err)
 				if errors.IsNotFound(err) == false {
 					return r.onReconcileError(instance, err)
@@ -267,15 +181,27 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return r.onReconcileError(instance, err)
 	}
 
-	if err := r.lockObject(node); err != nil {
-		reqLogger.Errorf("Failed to lock node object", "node name", node.Name, "error", err)
+	lockCfg := objectlock.LockConfig{
+		LockName:      node.Name,
+		EventsChannel: r.leaseChannel,
+		ObjMeta:       instance.ObjectMeta,
+		Identity:      LeaseHolderIdentity,
+		Clientset:     r.clientset,
+		LockDuration:  LeaseDuration,
+		Namespace:     LeaseNamespace,
 	}
 
-	nodeLock := nodeLocks[node.Name]
-	if !nodeLock.leaderElector.IsLeader() {
+	nodeLock, err := objectlock.GetOrCreate(lockCfg)
+	if err != nil {
+		reqLogger.Errorf("Failed to create node lock object on node %s: %v", node.Name, err)
+		return reconcile.Result{}, err
+	}
+
+	if !nodeLock.IsLockAcquired() {
+		reqLogger.Infof("Node lock was not acquired for node: %s. current holder: %s", node.Name, nodeLock.GetHolderId())
 		if instance.Status.Phase == nodemaintenanceapi.MaintenanceRunning {
 			//maintenance has started and we lost the lease
-			err = r.stopNodeMaintenanceImp(node)
+			err = r.stopNodeMaintenanceImp(node, instance)
 			if err != nil {
 				return r.onReconcileError(instance, fmt.Errorf("Failed to uncordon upon failure to obtain owned lease : %v ", err))
 			}
@@ -285,8 +211,12 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 			}
 		}
 
+		if err := nodeLock.StartLockingLoop(); err != nil {
+			return r.onReconcileError(instance, fmt.Errorf("Failed attempt to lock the node : %v ", err))
+		}
+
 		// node is locked by someone else
-		// no need to requeue as the leader election callback will call reconcile once this changes
+		// no need to requeue as callbacks will requeue once this changes
 		return reconcile.Result{}, nil
 	}
 
@@ -358,32 +288,7 @@ func setOwnerRefToNode(instance *nodemaintenanceapi.NodeMaintenance, node *corev
 	instance.ObjectMeta.SetOwnerReferences(append(instance.ObjectMeta.GetOwnerReferences(), ref))
 }
 
-func (r *ReconcileNodeMaintenance) obtainLease(node *corev1.Node) (bool, error) {
-	if !r.isLeaseSupported {
-		return false, nil
-	}
-
-	log.Info("Lease object supported, obtaining lease")
-	lease, needUpdate, err := createOrGetExistingLease(r.client, node, LeaseDuration, LeaseHolderIdentity)
-
-	if err != nil {
-		log.Errorf("failed to create or get existing lease error=%v", err)
-		return false, err
-	}
-
-	if needUpdate {
-
-		log.Info("update lease")
-
-		now := metav1.NowMicro()
-		if err, updateOwnedLeaseFailed := updateLease(r.client, node, lease, &now, LeaseDuration, LeaseHolderIdentity); err != nil {
-			return updateOwnedLeaseFailed, err
-		}
-	}
-
-	return false, nil
-}
-func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) error {
+func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node, instance *nodemaintenanceapi.NodeMaintenance) error {
 	// Uncordon the node
 	err := AddOrRemoveTaint(r.drainer.Client, node, false)
 	if err != nil {
@@ -394,14 +299,25 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceImp(node *corev1.Node) err
 		return err
 	}
 
-	nodeLock, exists := nodeLocks[node.Name]
-	if exists {
-		nodeLock.cancelFunc()
+	lockCfg := objectlock.LockConfig{
+		LockName:      node.Name,
+		EventsChannel: r.leaseChannel,
+		ObjMeta:       instance.ObjectMeta,
+		Identity:      LeaseHolderIdentity,
+		Clientset:     r.clientset,
+		LockDuration:  LeaseDuration,
+		Namespace:     LeaseNamespace,
 	}
+	nodeLock, err := objectlock.GetOrCreate(lockCfg)
+	if err != nil {
+		return err
+	}
+	nodeLock.Release()
 	return nil
 }
 
-func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string) error {
+func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(instance *nodemaintenanceapi.NodeMaintenance) error {
+	nodeName := instance.Spec.NodeName
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
 		// if CR is gathered as result of garbage collection: the node may have been deleted, but the CR has not yet been deleted, still we must clean up the lease!
@@ -410,7 +326,7 @@ func (r *ReconcileNodeMaintenance) stopNodeMaintenanceOnDeletion(nodeName string
 		}
 		return err
 	}
-	return r.stopNodeMaintenanceImp(node)
+	return r.stopNodeMaintenanceImp(node, instance)
 }
 
 func (r *ReconcileNodeMaintenance) fetchNode(nodeName string) (*corev1.Node, error) {

@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
@@ -27,7 +26,6 @@ import (
 	"kubevirt.io/node-maintenance-operator/pkg/apis"
 	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"kubevirt.io/node-maintenance-operator/pkg/controller"
-	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 	"kubevirt.io/node-maintenance-operator/version"
 )
 
@@ -83,20 +81,12 @@ func main() {
 
 	printVersion()
 
-	namespace, err := k8sutil.GetOperatorNamespace()
-	if err != nil {
-		log.Error(err, "Failed to get operator's namespace")
-		os.Exit(1)
-	}
-
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}
-
-	nodemaintenance.SetLeaseNamespace(namespace)
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{

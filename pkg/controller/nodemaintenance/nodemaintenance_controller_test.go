@@ -2,12 +2,11 @@ package nodemaintenance
 
 import (
 	"context"
-	"reflect"
-
-	"k8s.io/apimachinery/pkg/types"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/types"
+	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +29,7 @@ var _ = Describe("updateCondition", func() {
 	var cl client.Client
 	var cs *k8sfakeclient.Clientset
 	var req reconcile.Request
+	var leaseChan = make(chan event.GenericEvent)
 
 	setFakeClients := func(s *runtime.Scheme) {
 		var objs []runtime.Object
@@ -82,7 +82,7 @@ var _ = Describe("updateCondition", func() {
 		setFakeClients(s)
 
 		// Create a ReconcileNodeMaintenance object with the scheme and fake client
-		r = &ReconcileNodeMaintenance{client: cl, scheme: s}
+		r = &ReconcileNodeMaintenance{client: cl, scheme: s, leaseChannel: leaseChan, clientset: cs}
 		initDrainer(r, &rest.Config{})
 		r.drainer.Client = cs
 
@@ -172,6 +172,9 @@ var _ = Describe("updateCondition", func() {
 	Context("Node maintenance controller reconciles a maintenance CR for a node in the cluster", func() {
 
 		It("should reconcile once without failing", func() {
+			reconcileMaintenance(nm)
+			evt := <-leaseChan
+			Expect(evt.Meta.GetName()).To(Equal(nm.Name))
 			reconcileMaintenance(nm)
 			checkSuccesfulReconcile()
 		})
