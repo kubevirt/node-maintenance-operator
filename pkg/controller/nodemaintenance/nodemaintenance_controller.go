@@ -3,6 +3,7 @@ package nodemaintenance
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/drain"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
@@ -29,10 +31,13 @@ const (
 	FixedDurationReconcileLog         = "Reconciling with fixed duration"
 	LeaseNamespaceDefault             = "node-maintenance"
 	LeaseHolderIdentity               = "node-maintenance"
-	LeaseDuration                     = 3600 * time.Second
+	// TODO revert this change, find a better way to e2e test renewals
+	LeaseDuration = 15 * time.Second
 )
 
 var LeaseNamespace = LeaseNamespaceDefault
+
+var reconcileLocks = make(map[string]*sync.Mutex)
 
 // set readable timestamp format in logs, not reference time
 func init() {
@@ -114,11 +119,11 @@ var _ reconcile.Reconciler = &ReconcileNodeMaintenance{}
 type ReconcileNodeMaintenance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client           client.Client
-	scheme           *runtime.Scheme
-	clientset        kubernetes.Interface
-	drainer          *drain.Helper
-	isLeaseSupported bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	clientset       kubernetes.Interface
+	drainer         *drain.Helper
+	leaseCallbackCh chan event.GenericEvent
 }
 
 // Reconcile reads that state of the cluster for a NodeMaintenance object and makes changes based on the state read
@@ -127,6 +132,17 @@ type ReconcileNodeMaintenance struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+
+	// prevent reconciling the same node concurrently
+	// can happen when a lease expired and triggers a reconcile by channel source
+	var lock sync.Mutex
+	if lock, ok := reconcileLocks[request.Name]; !ok {
+		lock = &sync.Mutex{}
+		reconcileLocks[request.Name] = lock
+	}
+	lock.Lock()
+	defer lock.Unlock()
+
 	reqLogger := log.WithFields(log.Fields{"Request.Namespace": request.Namespace, "Request.Name": request.Name})
 	reqLogger.Info("Reconciling NodeMaintenance")
 
@@ -146,7 +162,7 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	leaseHandler, err := lease.New(LeaseNamespace, instance.Spec.NodeName, LeaseHolderIdentity, r.clientset)
+	leaseHandler, err := lease.New(LeaseNamespace, instance.Spec.NodeName, LeaseHolderIdentity, r.clientset, LeaseDuration)
 	if err != nil {
 		reqLogger.Errorf("Failed to setup lease handler: %v", err)
 		return reconcile.Result{}, err
@@ -199,32 +215,39 @@ func (r *ReconcileNodeMaintenance) Reconcile(request reconcile.Request) (reconci
 	setOwnerRefToNode(instance, node)
 
 	// try to get a node lease
-	// note: the renew duration is taken from old impl... might need reconsideration?!
-	if err := leaseHandler.Get(LeaseDuration, 2*DrainerTimeout); err != nil {
-
-		log.Errorf("failed to get or renew node lease! status: %v, error: %v", leaseHandler.Status, err)
-
-		// count renew errors and fail if needed
-		if leaseHandler.Status == lease.RenewFailed {
-			instance.Status.ErrorOnLeaseCount += 1
-			if instance.Status.ErrorOnLeaseCount > MaxAllowedErrorToUpdateOwnedLease {
-				log.Errorf("can't extend owned lease, uncordon for now")
-				// Uncordon the node
-				err = r.stopNodeMaintenanceImp(node, leaseHandler)
-				if err != nil {
-					return r.onReconcileError(instance, fmt.Errorf("failed to uncordon upon failure to obtain owned lease : %v ", err))
-				}
-				instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
+	// use a callback to get notified when we lose the lease and trigger a new reconcile
+	leaseCallback := func(reason lease.CallbackReason) {
+		switch reason {
+		case lease.Lost:
+			r.leaseCallbackCh <- event.GenericEvent{
+				Meta: instance.GetObjectMeta(),
 			}
-			return r.onReconcileError(instance, fmt.Errorf("failed to extend lease owned by us : %v errorOnLeaseCount %d", err, instance.Status.ErrorOnLeaseCount))
+		}
+	}
+	if err := leaseHandler.Get(leaseCallback); err != nil {
+
+		log.Errorf("failed to get node lease! status: %v, error: %v", leaseHandler.Status, err)
+
+		// heads up:
+		// comparing to old impl, we can't count renewal failures anymore, but I think that's ok
+		// we can only react on the fact that maintenance is running and then losing the lease
+		if leaseHandler.Status == lease.ForeignOwner &&
+			(instance.Status.Phase == nodemaintenanceapi.MaintenanceRunning || instance.Status.Phase == nodemaintenanceapi.MaintenanceSucceeded) {
+			log.Errorf("we lost the lease, stopping maintenance")
+			// TODO is it actually ok to modify the node when we don't have the lease anymore?? We might conflict with the new owner...
+			err = r.stopNodeMaintenanceImp(node, leaseHandler)
+			if err != nil {
+				return r.onReconcileError(instance, fmt.Errorf("failed to stop maintenance after losing lease : %v ", err))
+			}
+			instance.Status.Phase = nodemaintenanceapi.MaintenanceFailed
+			return r.onReconcileError(instance, fmt.Errorf("lease lost"))
 		}
 
-		instance.Status.ErrorOnLeaseCount = 0
+		// for everything else, just retry later
 		return r.onReconcileError(instance, err)
 	}
 
 	instance.Status.Phase = nodemaintenanceapi.MaintenanceRunning
-	instance.Status.ErrorOnLeaseCount = 0
 
 	// Cordon node
 	err = AddOrRemoveTaint(r.drainer.Client, node, true)

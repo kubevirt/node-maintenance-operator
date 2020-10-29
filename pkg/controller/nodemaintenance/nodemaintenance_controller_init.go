@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -25,7 +24,7 @@ func Add(mgr manager.Manager) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager) (*ReconcileNodeMaintenance, error) {
 
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
@@ -33,9 +32,10 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	r := &ReconcileNodeMaintenance{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		clientset: cs,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clientset:       cs,
+		leaseCallbackCh: make(chan event.GenericEvent, 1),
 	}
 
 	err = initDrainer(r, cs)
@@ -43,7 +43,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r *ReconcileNodeMaintenance) error {
 	// Create a new controller
 	c, err := controller.New("nodemaintenance-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -65,5 +65,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return err
 	}
+
+	// Watch for events from the lease handler
+	leaseCallbackSrc := &source.Channel{Source: r.leaseCallbackCh}
+	err = c.Watch(leaseCallbackSrc, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

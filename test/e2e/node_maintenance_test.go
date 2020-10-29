@@ -176,6 +176,15 @@ var _ = Describe("Node Maintenance", func() {
 				}, 60*time.Second, 5*time.Second).Should(BeTrue(), "maintenance did not start in time")
 			})
 
+			It("should result in a valid lease object", func() {
+				hasValidLease(maintenanceNodeName, startTime, false)
+			})
+
+			// TODO find a better way to test renewals if leaseDuration is reverted to a longer duration
+			It("should have a renewed lease", func() {
+				hasValidLease(maintenanceNodeName, startTime, true)
+			})
+
 			It("should report succeeded maintenance", func() {
 				Eventually(func() (bool, error) {
 					nm := &nmo.NodeMaintenance{}
@@ -204,10 +213,6 @@ var _ = Describe("Node Maintenance", func() {
 				Expect(err).ToNot(HaveOccurred(), "failed to get node")
 				Expect(node.Spec.Unschedulable).To(BeTrue(), "node should have been unschedulable")
 				Expect(isTainted(node)).To(BeTrue(), "node should have had the kubevirt taint")
-			})
-
-			It("should result in a valid lease object", func() {
-				hasValidLease(maintenanceNodeName, startTime)
 			})
 
 			It("should move test workload to another worker node", func() {
@@ -253,8 +258,67 @@ var _ = Describe("Node Maintenance", func() {
 				})
 
 			})
-
 		})
+
+		Context("for a worker node with a stolen lease", func() {
+
+			var maintenanceNodeName string
+			var nodeMaintenance *nmo.NodeMaintenance
+			var startTime time.Time
+
+			BeforeEach(func() {
+				// do this once only
+				if nodeMaintenance == nil {
+					startTime = time.Now()
+					maintenanceNodeName = getTestDeploymentNodeName()
+					nodeMaintenance = getNodeMaintenance(testMaintenance, maintenanceNodeName)
+				}
+			})
+
+			It("should succeed", func() {
+				err := createCRIgnoreUnrelatedErrors(nodeMaintenance)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should report running maintenance", func() {
+				Eventually(func() (nmo.MaintenancePhase, error) {
+					nm := &nmo.NodeMaintenance{}
+					if err := Client.Get(context.TODO(), types.NamespacedName{Name: nodeMaintenance.Name}, nm); err != nil {
+						return "", err
+					}
+					return nm.Status.Phase, nil
+				}, 2*nodemaintenance.DrainerTimeout, 5*time.Second).Should(Equal(nmo.MaintenanceRunning), "maintenance did not start in time")
+			})
+
+			It("should result in a valid lease object", func() {
+				hasValidLease(maintenanceNodeName, startTime, false)
+			})
+
+			It("should stop maintenance when the lease is lost", func() {
+				By("losing the lease")
+				lease := &coordv1.Lease{}
+				err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: maintenanceNodeName}, lease)
+				Expect(err).ToNot(HaveOccurred(), "failed to get lease")
+				newIdentity := "evilComponent"
+				now := metav1.NowMicro()
+				lease.Spec.HolderIdentity = &newIdentity
+				lease.Spec.AcquireTime = &now
+				lease.Spec.RenewTime = &now
+				lease.Spec.LeaseDurationSeconds = pointer.Int32Ptr(360)
+				err = Client.Update(context.TODO(), lease)
+				Expect(err).ToNot(HaveOccurred(), "failed to update lease")
+
+				By("checking maintenance phase")
+				Eventually(func() (nmo.MaintenancePhase, error) {
+					nm := &nmo.NodeMaintenance{}
+					if err := Client.Get(context.TODO(), types.NamespacedName{Name: nodeMaintenance.Name}, nm); err != nil {
+						return "", err
+					}
+					return nm.Status.Phase, nil
+				}, 60*time.Second, 5*time.Second).Should(Equal(nmo.MaintenanceFailed), "maintenance did not fail in time")
+			})
+		})
+
 	})
 
 })
@@ -450,7 +514,7 @@ func isTainted(node *corev1.Node) bool {
 	return false
 }
 
-func hasValidLease(nodeName string, startTime time.Time) {
+func hasValidLease(nodeName string, startTime time.Time, renewed bool) {
 	lease := &coordv1.Lease{}
 	err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: nodeName}, lease)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred(), "failed to get lease")
@@ -465,7 +529,16 @@ func hasValidLease(nodeName string, startTime time.Time) {
 	ExpectWithOffset(1, lease.Spec.RenewTime.Time).To(BeTemporally(">", startTime), "renew time should be after start time")
 	ExpectWithOffset(1, lease.Spec.RenewTime.Time).To(BeTemporally("<", checkTime), "renew time should be before now")
 
-	// renewal checks would take too long, lease time is 1 hour...
+	if renewed {
+		// renew should be after acquire
+		Eventually(func() (time.Time, error) {
+			lease := &coordv1.Lease{}
+			if err := Client.Get(context.TODO(), types.NamespacedName{Namespace: operatorNsName, Name: nodeName}, lease); err != nil {
+				return time.Time{}, err
+			}
+			return lease.Spec.RenewTime.Time, nil
+		}, nodemaintenance.LeaseDuration, 5*time.Second).Should(BeTemporally(">", lease.Spec.AcquireTime.Time), "lease not renewed")
+	}
 }
 
 func isLeaseInvalidated(nodeName string) {
