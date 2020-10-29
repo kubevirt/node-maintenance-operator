@@ -1,0 +1,11 @@
+domain: kubevirt.io
+layout: go.kubebuilder.io/v2
+projectName: nmo
+repo: github.com/kubevirt/node-maintenance-operator
+resources:
+- group: nodemaintenance
+  kind: NodeMaintenance
+  version: v1beta1
+version: 3-alpha
+plugins:
+  go.sdk.operatorframework.io/v2-alpha: {}

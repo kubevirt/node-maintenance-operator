@@ -13,4 +13,4 @@ LDFLAGS="-s -w "
 LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.Version=${VERSION} "
 LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.GitCommit=${COMMIT} "
 LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.BuildDate=${BUILD_DATE} "
-GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -ldflags="${LDFLAGS}" -o _out/node-maintenance-operator kubevirt.io/node-maintenance-operator/cmd/manager
+GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux go build -ldflags="${LDFLAGS}" -o _out/node-maintenance-operator kubevirt.io/node-maintenance-operator/

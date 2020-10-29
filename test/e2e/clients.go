@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	operatorsv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
-	nmoapi "kubevirt.io/node-maintenance-operator/pkg/apis"
+	nodemaintenancev1beta1 "kubevirt.io/node-maintenance-operator/api/v1beta1"
 )
 
 var (
@@ -35,7 +35,7 @@ func init() {
 	}
 
 	// for NMO types
-	if err := nmoapi.AddToScheme(scheme.Scheme); err != nil {
+	if err := nodemaintenancev1beta1.AddToScheme(scheme.Scheme); err != nil {
 		klog.Exit(err.Error())
 	}
 

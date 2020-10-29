@@ -21,8 +21,8 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	nmo "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
-	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
+	nmo "kubevirt.io/node-maintenance-operator/api/v1beta1"
+	nodemaintenance "kubevirt.io/node-maintenance-operator/controllers"
 )
 
 var (

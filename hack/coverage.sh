@@ -13,7 +13,7 @@ declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
 find . -name ${COVERAGE_FILE} | xargs rm -f
 
 # run ginkgo with coverage result line
-${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed '/coverage:.*$/d'
+${GINKGO} ${GINKGO_ARGS} ./api/ ./controllers/  | sed '/coverage:.*$/d'
 GSTAT=${PIPESTATUS[0]}
 
 if [[ $GSTAT != 0 ]]; then
