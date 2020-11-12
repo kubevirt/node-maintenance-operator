@@ -82,7 +82,7 @@ var _ = Describe("updateCondition", func() {
 		setFakeClients(s)
 
 		// Create a ReconcileNodeMaintenance object with the scheme and fake client
-		r = &ReconcileNodeMaintenance{client: cl, scheme: s}
+		r = &ReconcileNodeMaintenance{client: cl, scheme: s, clientset: cs}
 		initDrainer(r, &rest.Config{})
 		r.drainer.Client = cs
 

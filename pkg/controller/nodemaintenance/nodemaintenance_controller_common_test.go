@@ -96,6 +96,7 @@ const (
 	FakeClientReturnError        = 0
 	FakeClientReturnLeasePackage = 1
 	FakeClientReturnWrongPackage = 2
+	LeaseApiPackage              = "coordination.k8s.io"
 )
 
 type FakeClient struct {
@@ -113,7 +114,7 @@ func (self *FakeClient) Discovery() k8sdiscovery.DiscoveryInterface {
 				Name: "lease",
 				Versions: []metav1.GroupVersionForDiscovery{{
 					GroupVersion: LeaseApiPackage + "notQuite",
-					Version:      "v1beta1",
+					Version:      "v1",
 				}},
 			}},
 		}}
@@ -124,7 +125,7 @@ func (self *FakeClient) Discovery() k8sdiscovery.DiscoveryInterface {
 				Name: "lease",
 				Versions: []metav1.GroupVersionForDiscovery{{
 					GroupVersion: LeaseApiPackage,
-					Version:      "v1beta1",
+					Version:      "v1",
 				}},
 			}},
 		}}

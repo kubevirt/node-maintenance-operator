@@ -3,6 +3,7 @@
 package nodemaintenance
 
 import (
+	"k8s.io/client-go/kubernetes"
 	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -25,9 +26,14 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, err
+	}
 
-	err := initDrainer(r, mgr.GetConfig())
+	r := &ReconcileNodeMaintenance{client: mgr.GetClient(), scheme: mgr.GetScheme(), clientset: clientset}
+
+	err = initDrainer(r, mgr.GetConfig())
 	if err == nil {
 		err = r.checkLeaseSupported()
 	}
