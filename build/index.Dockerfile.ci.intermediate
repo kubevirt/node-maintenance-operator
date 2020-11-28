@@ -4,6 +4,7 @@ FROM quay.io/operator-framework/upstream-registry-builder
 ARG OPERATOR_VERSION_NEXT=9.9.9
 ARG REG_URL=registry.build01.ci.openshift.org
 
+USER root
 RUN mkdir -p /tmp/manifests
 COPY manifests/node-maintenance-operator/v"${OPERATOR_VERSION_NEXT}" /tmp/manifests/
 
@@ -11,5 +12,4 @@ COPY manifests/node-maintenance-operator/v"${OPERATOR_VERSION_NEXT}" /tmp/manife
 RUN find /tmp/manifests/ -type f -exec sed -i "s|IMAGE_REGISTRY/OPERATOR_IMAGE:IMAGE_TAG|${REG_URL}/${OPENSHIFT_BUILD_NAMESPACE}/stable:node-maintenance-operator|g" {} \; || :
 
 # Build index database
-RUN pwd
 RUN /bin/initializer -m /tmp/manifests -o ./index.db
