@@ -19,8 +19,11 @@ require (
 	k8s.io/kube-openapi v0.0.0-20200121204235-bf4fb3bd569c
 	k8s.io/kubectl v0.18.2
 	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
-	mvdan.cc/sh/v3 v3.1.2 // indirect
+	mvdan.cc/sh/v3 v3.2.0 // indirect
 	sigs.k8s.io/controller-runtime v0.6.0
 )
 
-replace k8s.io/client-go => k8s.io/client-go v0.18.2 // Required by prometheus-operator
+replace (
+	k8s.io/client-go => k8s.io/client-go v0.18.2 // Required by prometheus-operator
+	mvdan.cc/sh/v3 => mvdan.cc/sh/v3 v3.1.2 // v3.2.0 is broken: https://github.com/mvdan/sh/issues/625
+)
