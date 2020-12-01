@@ -68,8 +68,12 @@ shfmt:
 	shfmt -i 4 -w ./hack/
 	shfmt -i 4 -w ./build/
 
+.PHONY: check-all
+check-all: shfmt fmt vet generate-all verify-manifests verify-unchanged test
+
 .PHONY: check
-check: shfmt fmt vet generate-all verify-manifests verify-unchanged test
+check:
+	docker build -f build/check.Dockerfile .
 
 .PHONY: build
 build:

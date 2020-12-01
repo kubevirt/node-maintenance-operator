@@ -1,0 +1,2 @@
+# ignore all hidden files in root (e.g. .idea)
+./.*
