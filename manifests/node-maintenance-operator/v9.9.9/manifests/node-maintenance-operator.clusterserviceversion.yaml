@@ -147,13 +147,6 @@ spec:
               labels:
                 name: node-maintenance-operator
             spec:
-              affinity:
-                nodeAffinity:
-                  requiredDuringSchedulingIgnoredDuringExecution:
-                    nodeSelectorTerms:
-                    - matchExpressions:
-                      - key: node-role.kubernetes.io/master
-                        operator: Exists
               containers:
               - env:
                 - name: WATCH_NAMESPACE
