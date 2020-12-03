@@ -208,4 +208,3 @@ The phase is updated for each processing attempt on the CR.
 - Versioning
 - Enhance error handling
 - Operator integration and packaging
-
