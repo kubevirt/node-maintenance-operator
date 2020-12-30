@@ -4,6 +4,8 @@ go 1.13
 
 require (
 	github.com/go-openapi/spec v0.19.4
+	github.com/kr/pretty v0.2.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/onsi/ginkgo v1.12.2
 	github.com/onsi/gomega v1.10.1
 	github.com/operator-framework/api v0.3.8
@@ -19,7 +21,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20200121204235-bf4fb3bd569c
 	k8s.io/kubectl v0.18.2
 	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
-	mvdan.cc/sh/v3 v3.2.0 // indirect
 	sigs.k8s.io/controller-runtime v0.6.0
 )
 

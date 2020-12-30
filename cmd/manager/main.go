@@ -30,7 +30,6 @@ import (
 	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 	"kubevirt.io/node-maintenance-operator/version"
 )
-// Dummy Comment, meant for creating a Dummy commit - PLEASE REMOVE
 
 // Change below variables to serve metrics on different host or port.
 const (

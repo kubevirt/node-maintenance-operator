@@ -151,7 +151,6 @@ github.com/operator-framework/api/pkg/operators
 github.com/operator-framework/api/pkg/operators/v1alpha1
 # github.com/operator-framework/operator-sdk v0.18.2
 github.com/operator-framework/operator-sdk/pkg/k8sutil
-github.com/operator-framework/operator-sdk/pkg/leader
 github.com/operator-framework/operator-sdk/pkg/log/zap
 github.com/operator-framework/operator-sdk/pkg/metrics
 github.com/operator-framework/operator-sdk/version
