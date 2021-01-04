@@ -364,7 +364,7 @@ func createTestDeployment() {
 						Args:    []string{"-c", "while true; do echo hello; sleep 10;done"},
 					}},
 					// make sure we run into the drain timeout at least once
-					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nodemaintenance.DrainerTimeout.Seconds()) + 30),
+					TerminationGracePeriodSeconds: pointer.Int64Ptr(int64(nodemaintenance.DrainerTimeout.Seconds()) + 50),
 				},
 			},
 		},
