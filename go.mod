@@ -24,7 +24,4 @@ require (
 	sigs.k8s.io/controller-runtime v0.6.0
 )
 
-replace (
-	k8s.io/client-go => k8s.io/client-go v0.18.2 // Required by prometheus-operator
-	mvdan.cc/sh/v3 => mvdan.cc/sh/v3 v3.1.2 // v3.2.0 is broken: https://github.com/mvdan/sh/issues/625
-)
+replace k8s.io/client-go => k8s.io/client-go v0.18.2 // Required by prometheus-operator
