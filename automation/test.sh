@@ -4,7 +4,7 @@ echo "Setup Go paths"
 cd ..
 export GOROOT=/usr/local/go
 export GOPATH=$(pwd)/go
-export GIMME_GO_VERSION=1.13.5
+export GIMME_GO_VERSION=1.15
 export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 mkdir -p $GOPATH
 
