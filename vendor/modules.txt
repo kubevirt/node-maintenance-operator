@@ -73,6 +73,9 @@ github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
 # github.com/google/gofuzz v1.1.0
 github.com/google/gofuzz
+# github.com/google/renameio v1.0.0
+## explicit
+github.com/google/renameio
 # github.com/google/uuid v1.1.1
 github.com/google/uuid
 # github.com/googleapis/gnostic v0.3.1
@@ -93,8 +96,6 @@ github.com/inconshreveable/mousetrap
 github.com/json-iterator/go
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/kr/pretty v0.2.1
-## explicit
 # github.com/kr/text v0.2.0
 ## explicit
 # github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de
@@ -111,20 +112,29 @@ github.com/mitchellh/go-wordwrap
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
-# github.com/nxadm/tail v1.4.4
+# github.com/nxadm/tail v1.4.6
+## explicit
 github.com/nxadm/tail
 github.com/nxadm/tail/ratelimiter
 github.com/nxadm/tail/util
 github.com/nxadm/tail/watch
 github.com/nxadm/tail/winfile
-# github.com/onsi/ginkgo v1.12.2
+# github.com/onsi/ginkgo v1.14.2
 ## explicit
 github.com/onsi/ginkgo
 github.com/onsi/ginkgo/config
 github.com/onsi/ginkgo/extensions/table
+github.com/onsi/ginkgo/ginkgo
+github.com/onsi/ginkgo/ginkgo/convert
+github.com/onsi/ginkgo/ginkgo/interrupthandler
+github.com/onsi/ginkgo/ginkgo/nodot
+github.com/onsi/ginkgo/ginkgo/testrunner
+github.com/onsi/ginkgo/ginkgo/testsuite
+github.com/onsi/ginkgo/ginkgo/watch
 github.com/onsi/ginkgo/internal/codelocation
 github.com/onsi/ginkgo/internal/containernode
 github.com/onsi/ginkgo/internal/failer
+github.com/onsi/ginkgo/internal/global
 github.com/onsi/ginkgo/internal/leafnodes
 github.com/onsi/ginkgo/internal/remote
 github.com/onsi/ginkgo/internal/spec
@@ -165,6 +175,13 @@ github.com/operator-framework/operator-sdk/pkg/metrics
 github.com/operator-framework/operator-sdk/version
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 github.com/peterbourgon/diskv
+# github.com/pkg/diff v0.0.0-20200914180035-5b29258ca4f7
+github.com/pkg/diff
+github.com/pkg/diff/ctxt
+github.com/pkg/diff/edit
+github.com/pkg/diff/intern
+github.com/pkg/diff/myers
+github.com/pkg/diff/write
 # github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/prometheus/client_golang v1.5.1
@@ -204,6 +221,10 @@ go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
 # golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 golang.org/x/crypto/ssh/terminal
+# golang.org/x/mod v0.4.0
+## explicit
+golang.org/x/mod/module
+golang.org/x/mod/semver
 # golang.org/x/net v0.0.0-20201021035429-f5854403a974
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -220,11 +241,15 @@ golang.org/x/oauth2/google
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sys v0.0.0-20201029080932-201ba4db2418
+# golang.org/x/sys v0.0.0-20210112091331-59c308dcf3cc
 ## explicit
 golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+# golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf
+## explicit
+golang.org/x/term
 # golang.org/x/text v0.3.3
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
@@ -251,6 +276,16 @@ golang.org/x/text/width
 golang.org/x/time/rate
 # golang.org/x/tools v0.0.0-20210111221946-d33bae441459
 ## explicit
+golang.org/x/tools/cmd/goimports
+golang.org/x/tools/go/ast/astutil
+golang.org/x/tools/internal/event
+golang.org/x/tools/internal/event/core
+golang.org/x/tools/internal/event/keys
+golang.org/x/tools/internal/event/label
+golang.org/x/tools/internal/fastwalk
+golang.org/x/tools/internal/gocommand
+golang.org/x/tools/internal/gopathwalk
+golang.org/x/tools/internal/imports
 # golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
@@ -583,6 +618,13 @@ k8s.io/utils/exec
 k8s.io/utils/integer
 k8s.io/utils/pointer
 k8s.io/utils/trace
+# mvdan.cc/editorconfig v0.1.1-0.20200121172147-e40951bde157
+mvdan.cc/editorconfig
+# mvdan.cc/sh/v3 v3.2.1
+## explicit
+mvdan.cc/sh/v3/cmd/shfmt
+mvdan.cc/sh/v3/fileutil
+mvdan.cc/sh/v3/syntax
 # sigs.k8s.io/controller-runtime v0.6.0
 ## explicit
 sigs.k8s.io/controller-runtime/pkg/cache

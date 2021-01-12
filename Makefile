@@ -24,8 +24,6 @@ KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
 KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
 export KUBEVIRT_NUM_NODES ?= 3
 
-export GINKGO ?= build/_output/bin/ginkgo
-
 # --rm                                                          = remove container when stopped
 # -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator = bind mount current dir in container
 # -u $$(id -u)                                                  = use current user (else new / modified files will be owned by root)
@@ -53,7 +51,7 @@ fmt: whitespace go-imports
 
 .PHONY: go-imports
 go-imports:
-	go get golang.org/x/tools/cmd/goimports && goimports -w ./pkg ./cmd ./test
+	go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd ./test ./tools
 
 .PHONY: whitespace
 whitespace: $(all_sources)
@@ -61,7 +59,7 @@ whitespace: $(all_sources)
 
 .PHONY: go-vet
 go-vet: $(cmd_sources) $(pkg_sources)
-	go vet -mod=vendor ./pkg/... ./cmd/... ./test/...
+	go vet ./pkg/... ./cmd/... ./test/...
 
 .PHONY: go-vendor
 go-vendor:
@@ -81,9 +79,8 @@ test:
 
 .PHONY: shfmt
 shfmt:
-	go get mvdan.cc/sh/v3/cmd/shfmt@v3.2.1
-	shfmt -i 4 -w ./hack/
-	shfmt -i 4 -w ./build/
+	go run mvdan.cc/sh/v3/cmd/shfmt -i 4 -w ./hack/
+	go run mvdan.cc/sh/v3/cmd/shfmt -i 4 -w ./build/
 
 .PHONY: check-all
 check-all: shfmt fmt go-tidy go-vendor go-vet generate-all verify-manifests verify-unchanged test

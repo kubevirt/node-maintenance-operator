@@ -1,7 +1,5 @@
 #!/bin/bash -e
 
-[ -f ${GINKGO} ] || GOBIN=$PWD/build/_output/bin/ go install github.com/onsi/ginkgo/ginkgo
-
 COVERAGE_FILE=cover.out
 GINKGO_COVERAGE_ARGS="-cover -coverprofile=${COVERAGE_FILE} -outputdir=. --skipPackage ./vendor"
 GINKGO_ARGS="-v -r --progress ${GINKGO_EXTRA_ARGS} ${GINKGO_COVERAGE_ARGS}"
@@ -13,7 +11,7 @@ declare -a EXCLUDE_FILES_FROM_COVERAGE=("nodemaintenance_controller_init.go")
 find . -name ${COVERAGE_FILE} | xargs rm -f
 
 # run ginkgo with coverage result line
-${GINKGO} ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed '/coverage:.*$/d'
+go run github.com/onsi/ginkgo/ginkgo ${GINKGO_ARGS} ./pkg/ ./cmd/ | sed '/coverage:.*$/d'
 GSTAT=${PIPESTATUS[0]}
 
 if [[ $GSTAT != 0 ]]; then

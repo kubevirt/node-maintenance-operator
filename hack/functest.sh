@@ -36,15 +36,6 @@ else
 
 fi
 
-set +e
-which ginkgo
-if [ $? -ne 0 ]; then
-    echo "Downloading ginkgo tool"
-    set -e
-    # Disable vendor mode
-    GOFLAGS="" go install github.com/onsi/ginkgo/ginkgo
-fi
-
 # no colors in CI
 NO_COLOR=""
 set +e
@@ -59,7 +50,7 @@ export TEST_NAMESPACE=node-maintenance-test
 # -r: run suites recursively
 # --keepGoing: don't stop on failing suite
 # -requireSuite: fail if tests are not executed because of missing suite
-GOFLAGS=-mod=vendor ginkgo $NO_COLOR -v -r --keepGoing -requireSuite ./test/e2e
+go run github.com/onsi/ginkgo/ginkgo $NO_COLOR -v -r --keepGoing -requireSuite ./test/e2e
 
 if [[ $? != 0 ]]; then
     echo "E2e tests FAILED"
