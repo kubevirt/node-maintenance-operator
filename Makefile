@@ -1,12 +1,13 @@
+export GO_VERSION = 1.15
 export OPERATOR_SDK_VERSION = v0.18.2
 export OPM_VERSION = v1.12.7
 
 # The last released version (without v)
-export OPERATOR_VERSION_LAST ?= 0.7.0
+export OPERATOR_VERSION_LAST ?= 0.8.0
 # The version of the next release (without v)
-export OPERATOR_VERSION_NEXT ?= 0.8.0
+export OPERATOR_VERSION_NEXT ?= 0.9.0
 # The OLM channel this operator should be default of
-export OLM_CHANNEL ?= 4.7
+export OLM_CHANNEL ?= 4.8
 export OLM_NS ?= openshift-marketplace
 export OPERATOR_NS ?= openshift-node-maintenance-operator
 
@@ -23,7 +24,13 @@ KUBEVIRTCI_PATH=$$(pwd)/kubevirtci/cluster-up
 KUBEVIRTCI_CONFIG_PATH=$$(pwd)/_ci-configs
 export KUBEVIRT_NUM_NODES ?= 3
 
-export GINKGO ?= build/_output/bin/ginkgo
+# --rm                                                          = remove container when stopped
+# -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator = bind mount current dir in container
+# -u $$(id -u)                                                  = use current user (else new / modified files will be owned by root)
+# -w /home/go/src/kubevirt.io/node-maintenance-operator         = working dir
+# -e ...                                                        = some env vars, especially set cache to a user writable dir
+# --entrypoint /bin bash ... -c                                 = run bash -c on start; that means the actual command(s) need be wrapped in double quotes, see e.g. check target which will run: bash -c "make check-all"
+export DOCKER_GO=docker run --rm -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator -u $$(id -u) -w /home/go/src/kubevirt.io/node-maintenance-operator -e "GOPATH=/go" -e "GOFLAGS=-mod=vendor" -e "XDG_CACHE_HOME=/tmp/.cache" --entrypoint /bin/bash golang:$(GO_VERSION) -c
 
 # Make does not offer a recursive wildcard function, so here's one:
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
@@ -40,19 +47,27 @@ apis_sources=$(call rwildcard,pkg/apis,*.go)
 all: check
 
 .PHONY: fmt
-fmt: whitespace goimports
+fmt: whitespace go-imports
 
-.PHONY: goimports
-goimports:
-	go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd ./test
+.PHONY: go-imports
+go-imports:
+	go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd ./test ./tools
 
 .PHONY: whitespace
 whitespace: $(all_sources)
 	./hack/whitespace.sh
 
-.PHONY: vet
-vet: $(cmd_sources) $(pkg_sources)
-	go vet -mod=vendor ./pkg/... ./cmd/... ./test/...
+.PHONY: go-vet
+go-vet: $(cmd_sources) $(pkg_sources)
+	go vet ./pkg/... ./cmd/... ./test/...
+
+.PHONY: go-vendor
+go-vendor:
+	go mod vendor
+
+.PHONY: go-tidy
+go-tidy:
+	go mod tidy
 
 .PHONY: verify-unchanged
 verify-unchanged:
@@ -64,16 +79,15 @@ test:
 
 .PHONY: shfmt
 shfmt:
-	go get mvdan.cc/sh/v3/cmd/shfmt
-	shfmt -i 4 -w ./hack/
-	shfmt -i 4 -w ./build/
+	go run mvdan.cc/sh/v3/cmd/shfmt -i 4 -w ./hack/
+	go run mvdan.cc/sh/v3/cmd/shfmt -i 4 -w ./build/
 
 .PHONY: check-all
-check-all: shfmt fmt vet generate-all verify-manifests verify-unchanged test
+check-all: shfmt fmt go-tidy go-vendor go-vet generate-all verify-manifests verify-unchanged test
 
 .PHONY: check
 check:
-	docker build -f build/check.Dockerfile .
+	$(DOCKER_GO) "make check-all"
 
 .PHONY: build
 build:
