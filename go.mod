@@ -17,13 +17,13 @@ require (
 	golang.org/x/sys v0.0.0-20210112091331-59c308dcf3cc // indirect
 	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
 	golang.org/x/tools v0.0.0-20210111221946-d33bae441459
-	k8s.io/api v0.18.2
+	k8s.io/api v0.18.15
 	k8s.io/apiextensions-apiserver v0.18.2
-	k8s.io/apimachinery v0.18.2
+	k8s.io/apimachinery v0.18.15
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20200121204235-bf4fb3bd569c
-	k8s.io/kubectl v0.18.2
+	k8s.io/kube-openapi v0.0.0-20200410145947-61e04a5be9a6
+	k8s.io/kubectl v0.18.15
 	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
 	mvdan.cc/sh/v3 v3.2.1
 	sigs.k8s.io/controller-runtime v0.6.0
