@@ -2,20 +2,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: |-
-      [
-        {
-          "apiVersion": "nodemaintenance.kubevirt.io/v1beta1",
-          "kind": "NodeMaintenance",
-          "metadata": {
-            "name": "nodemaintenance-example"
-          },
-          "spec": {
-            "nodeName": "node02",
-            "reason": "Test node maintenance"
-          }
-        }
-      ]
+    alm-examples: '[]'
     capabilities: Basic Install
     categories: OpenShift Optional
     containerImage: IMAGE_REGISTRY/OPERATOR_IMAGE:IMAGE_TAG
@@ -30,7 +17,7 @@ spec:
     - description: NodeMaintenance is the Schema for the nodemaintenances API
       kind: NodeMaintenance
       name: nodemaintenances.nodemaintenance.kubevirt.io
-      version: v1beta1
+      version: v1
   description: |
     Node Maintenance Operator
 
@@ -202,7 +189,7 @@ spec:
   version: 9.9.9
   webhookdefinitions:
   - admissionReviewVersions:
-    - v1beta1
+    - v1
     containerPort: 8443
     deploymentName: node-maintenance-operator
     failurePolicy: Fail
@@ -211,7 +198,7 @@ spec:
     - apiGroups:
       - nodemaintenance.kubevirt.io
       apiVersions:
-      - v1beta1
+      - v1
       operations:
       - CREATE
       - UPDATE
@@ -221,4 +208,4 @@ spec:
     sideEffects: None
     timeoutSeconds: 15
     type: ValidatingAdmissionWebhook
-    webhookPath: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances
+    webhookPath: /validate-nodemaintenance-kubevirt-io-v1-nodemaintenances
