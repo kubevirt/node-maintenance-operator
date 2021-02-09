@@ -11,13 +11,13 @@ webhooks:
         # must match deployment name + "-service"!
         name: node-maintenance-operator-service
         port: 8443
-        path: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances
+        path: /validate-nodemaintenance-kubevirt-io-v1-nodemaintenances
     failurePolicy: Fail
     rules:
       - apiGroups:
           - nodemaintenance.kubevirt.io
         apiVersions:
-          - v1beta1
+          - v1
         operations:
           - CREATE
           - UPDATE
@@ -25,7 +25,7 @@ webhooks:
           - nodemaintenances
         scope: "Cluster"
     admissionReviewVersions:
-      - v1beta1
+      - v1
       # - v1 enable this as soon as we vendor a version of controller runtime which understands it
     sideEffects: None
     timeoutSeconds: 15
