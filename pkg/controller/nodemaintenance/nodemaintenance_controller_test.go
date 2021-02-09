@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nmoapis "kubevirt.io/node-maintenance-operator/pkg/apis"
-	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1"
 )
 
 var _ = Describe("updateCondition", func() {

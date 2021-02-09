@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -25,7 +25,7 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
 	"kubevirt.io/node-maintenance-operator/pkg/apis"
-	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1"
 	"kubevirt.io/node-maintenance-operator/pkg/controller"
 	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 	"kubevirt.io/node-maintenance-operator/version"
@@ -124,8 +124,8 @@ func main() {
 	}
 
 	// Create Service object to expose the metrics port.
-	servicePorts := []v1.ServicePort{
-		{Port: metricsPort, Name: metrics.OperatorPortName, Protocol: v1.ProtocolTCP, TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: metricsPort}},
+	servicePorts := []corev1.ServicePort{
+		{Port: metricsPort, Name: metrics.OperatorPortName, Protocol: corev1.ProtocolTCP, TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: metricsPort}},
 	}
 	_, err = metrics.CreateMetricsService(context.Background(), cfg, servicePorts)
 	if err != nil {
@@ -164,9 +164,9 @@ func setupWebhookServer(mgr manager.Manager) error {
 	server.CertName = WebhookCertName
 	server.KeyName = WebhookKeyName
 
-	server.Register("/validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenances", admission.ValidatingWebhookFor(&v1beta1.NodeMaintenance{}))
+	server.Register("/validate-nodemaintenance-kubevirt-io-v1-nodemaintenances", admission.ValidatingWebhookFor(&v1.NodeMaintenance{}))
 
-	v1beta1.InitValidator(mgr.GetClient())
+	v1.InitValidator(mgr.GetClient())
 
 	return nil
 

@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sdiscovery "k8s.io/client-go/discovery"
 	k8sfakeclient "k8s.io/client-go/kubernetes/fake"
-	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	nodemaintenanceapi "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1"
 )
 
 func getCommonTestObjs() (*nodemaintenanceapi.NodeMaintenance, []runtime.Object) {

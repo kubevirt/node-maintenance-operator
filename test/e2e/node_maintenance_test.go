@@ -21,7 +21,7 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	nmo "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	nmo "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1"
 	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
 )
 
@@ -287,7 +287,7 @@ func getNodeMaintenance(name, nodeName string) *nmo.NodeMaintenance {
 	return &nmo.NodeMaintenance{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "NodeMaintenance",
-			APIVersion: "nodemaintenance.kubevirt.io/v1beta1",
+			APIVersion: "nodemaintenance.kubevirt.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "nodemaintenance-" + name,

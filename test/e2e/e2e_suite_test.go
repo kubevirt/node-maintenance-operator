@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1"
 )
 
 const (
@@ -70,7 +70,7 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	// Delete nodeMaintenances
-	if err := Client.DeleteAllOf(context.TODO(), &v1beta1.NodeMaintenance{}); err != nil {
+	if err := Client.DeleteAllOf(context.TODO(), &v1.NodeMaintenance{}); err != nil {
 		logWarnf("failed to clean up node maintenances: %v", err)
 	}
 
