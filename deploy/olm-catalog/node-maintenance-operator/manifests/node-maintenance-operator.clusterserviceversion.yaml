@@ -203,6 +203,7 @@ spec:
   webhookdefinitions:
   - admissionReviewVersions:
     - v1beta1
+    - v1
     containerPort: 8443
     deploymentName: node-maintenance-operator
     failurePolicy: Fail

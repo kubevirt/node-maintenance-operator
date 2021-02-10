@@ -26,6 +26,7 @@ webhooks:
         scope: "Cluster"
     admissionReviewVersions:
       - v1beta1
+      - v1
       # - v1 enable this as soon as we vendor a version of controller runtime which understands it
     sideEffects: None
     timeoutSeconds: 15
