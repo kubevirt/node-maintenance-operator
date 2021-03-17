@@ -2,7 +2,7 @@ FROM quay.io/operator-framework/upstream-registry-builder
 
 # 9.9.9 points to the templated manifests for CI
 ARG OPERATOR_VERSION_NEXT=9.9.9
-ARG REG_URL=registry.build01.ci.openshift.org
+ARG REG_URL=registry.build02.ci.openshift.org
 
 USER root
 RUN mkdir -p /tmp/manifests
