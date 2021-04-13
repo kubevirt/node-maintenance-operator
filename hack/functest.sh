@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-if [ -n "${IMAGE_FORMAT}" ]; then
+if [ -n "${OPENSHIFT_CI}" ]; then
     echo "Running functest on OpenshiftCI"
     export CLUSTER_COMMAND="oc"
 else
