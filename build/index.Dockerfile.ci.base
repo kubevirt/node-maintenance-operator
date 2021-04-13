@@ -1,3 +1,0 @@
-FROM quay.io/operator-framework/upstream-registry-builder
-
-# This is needed for getting OPENSHIFT_BUILD_NAMESPACE populated for the intermediate image
