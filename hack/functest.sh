@@ -3,6 +3,7 @@
 if [ -n "${OPENSHIFT_CI}" ]; then
     echo "Running functest on OpenshiftCI"
     export CLUSTER_COMMAND="oc"
+    OPERATOR_NS="default"
 else
     # We are not on OpenshiftCI
     if [ -z "$KUBEVIRTCI_PATH" ]; then
