@@ -45,6 +45,11 @@ if ! which tput &>/dev/null 2>&1 || [[ $(tput -T$TERM colors) -lt 8 ]]; then
     NO_COLOR="-noColor"
 fi
 
+# never colors in OpenshiftCI?
+if [ -n "${OPENSHIFT_CI}" ]; then
+    NO_COLOR="-noColor"
+fi
+
 export TEST_NAMESPACE=node-maintenance-test
 
 # -v: print out the text and location for each spec before running it and flush output to stdout in realtime
