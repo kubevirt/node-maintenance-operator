@@ -3,6 +3,7 @@
 if [ -n "${OPENSHIFT_CI}" ]; then
     echo "Running functest on OpenshiftCI"
     export CLUSTER_COMMAND="oc"
+    OPERATOR_NS="default"
 else
     # We are not on OpenshiftCI
     if [ -z "$KUBEVIRTCI_PATH" ]; then
@@ -41,6 +42,11 @@ NO_COLOR=""
 set +e
 if ! which tput &>/dev/null 2>&1 || [[ $(tput -T$TERM colors) -lt 8 ]]; then
     echo "Terminal does not seem to support colored output, disabling it"
+    NO_COLOR="-noColor"
+fi
+
+# never colors in OpenshiftCI?
+if [ -n "${OPENSHIFT_CI}" ]; then
     NO_COLOR="-noColor"
 fi
 
