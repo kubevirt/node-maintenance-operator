@@ -4,7 +4,7 @@ metadata:
   name: node-maintenance-operator
   namespace: openshift-node-maintenance-operator
 spec:
-  channel: "4.8"
+  channel: "4.9"
   name: node-maintenance-operator
   source: node-maintenance-operator
   sourceNamespace: openshift-marketplace
