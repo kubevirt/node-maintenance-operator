@@ -200,11 +200,29 @@ The phase is updated for each processing attempt on the CR.
 1. Deploy the operator using OLM and KubeVirtCI as explained above
 2. run `make cluster-functest`
 
-## Next Steps
-- Handle unremoved pods and daemonsets
-- Check where should the operator be deployed (infra pods?)
-- Check behavior for storage pods
-- Fencing
-- Versioning
-- Enhance error handling
-- Operator integration and packaging
+## Releases
+
+### Creating a new release
+
+For new minor releases:
+
+  - create and push the `release-0.y` branch
+  - update KubeVirtCI and OpenshiftCI with new branches!
+
+For every release:
+
+  - create and push the `v0.y.z` tag
+  - this should trigger CI to build and push new images
+    - if it fails, the manual fallback is `IMAGE_TAG=v0.y.z make container-build container-push`
+  - make the git tag a release in the github UI
+
+### Preparing the next release(s)
+
+When a release is done, prepare the next release(s) with PRs for the master, and / or the relevant release branch
+with these changes:
+
+- update these Makefile vars:
+  - OPERATOR_VERSION_LAST
+  - OPERATOR_VERSION_NEXT
+  - OLM_CHANNEL
+- run `make` for generating updated manifests
