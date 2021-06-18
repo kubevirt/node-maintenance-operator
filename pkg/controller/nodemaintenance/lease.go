@@ -7,7 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	coordv1beta1 "k8s.io/api/coordination/v1beta1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +21,7 @@ const (
 	LeaseDuration         = 3600 * time.Second
 	LeaseHolderIdentity   = "node-maintenance"
 	LeaseNamespaceDefault = "node-maintenance"
-	LeaseApiPackage       = "coordination.k8s.io/v1beta1"
+	LeaseApiPackage       = "coordination.k8s.io/v1"
 )
 
 func checkLeaseSupportedInternal(cs kubernetes.Interface) (bool, error) {
@@ -50,18 +50,18 @@ func makeExpectedOwnerOfLease(node *corev1.Node) *metav1.OwnerReference {
 	}
 }
 
-func createOrGetExistingLease(client client.Client, node *corev1.Node, duration time.Duration) (*coordv1beta1.Lease, bool, error) {
+func createOrGetExistingLease(client client.Client, node *corev1.Node, duration time.Duration) (*coordv1.Lease, bool, error) {
 	holderIdentity := LeaseHolderIdentity
 	owner := makeExpectedOwnerOfLease(node)
 	microTimeNow := metav1.NowMicro()
 
-	lease := &coordv1beta1.Lease{
+	lease := &coordv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            node.ObjectMeta.Name,
 			Namespace:       LeaseNamespace,
 			OwnerReferences: []metav1.OwnerReference{*owner},
 		},
-		Spec: coordv1beta1.LeaseSpec{
+		Spec: coordv1.LeaseSpec{
 			HolderIdentity:       &holderIdentity,
 			LeaseDurationSeconds: pointer.Int32Ptr(int32(duration.Seconds())),
 			AcquireTime:          &microTimeNow,
@@ -86,11 +86,11 @@ func createOrGetExistingLease(client client.Client, node *corev1.Node, duration 
 	return lease, false, nil
 }
 
-func leaseDueTime(lease *coordv1beta1.Lease) time.Time {
+func leaseDueTime(lease *coordv1.Lease) time.Time {
 	return lease.Spec.RenewTime.Time.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
 }
 
-func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime metav1.MicroTime) (bool, bool) {
+func needUpdateOwnedLease(lease *coordv1.Lease, currentTime metav1.MicroTime) (bool, bool) {
 
 	if lease.Spec.RenewTime == nil || lease.Spec.LeaseDurationSeconds == nil {
 		log.Info("empty renew time or duration in sec")
@@ -110,7 +110,7 @@ func needUpdateOwnedLease(lease *coordv1beta1.Lease, currentTime metav1.MicroTim
 	return dueTime.Before(deadline), false
 }
 
-func isValidLease(lease *coordv1beta1.Lease, currentTime time.Time) bool {
+func isValidLease(lease *coordv1.Lease, currentTime time.Time) bool {
 
 	if lease.Spec.RenewTime == nil || lease.Spec.LeaseDurationSeconds == nil {
 		return false
@@ -123,7 +123,7 @@ func isValidLease(lease *coordv1beta1.Lease, currentTime time.Time) bool {
 	return !dueTime.Before(currentTime) && !renewTime.After(currentTime)
 }
 
-func updateLease(client client.Client, node *corev1.Node, lease *coordv1beta1.Lease, currentTime *metav1.MicroTime, duration time.Duration) (error, bool) {
+func updateLease(client client.Client, node *corev1.Node, lease *coordv1.Lease, currentTime *metav1.MicroTime, duration time.Duration) (error, bool) {
 
 	holderIdentity := LeaseHolderIdentity
 
@@ -177,7 +177,7 @@ func invalidateLease(client client.Client, nodeName string) error {
 	log.Info("Lease object supported, invalidating lease")
 
 	nName := apitypes.NamespacedName{Namespace: LeaseNamespace, Name: nodeName}
-	lease := &coordv1beta1.Lease{}
+	lease := &coordv1.Lease{}
 
 	if err := client.Get(context.TODO(), nName, lease); err != nil {
 

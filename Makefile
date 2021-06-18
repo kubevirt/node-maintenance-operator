@@ -3,7 +3,7 @@ export OPERATOR_SDK_VERSION = v0.18.2
 export OPM_VERSION = v1.12.7
 
 # The last released version (without v)
-export OPERATOR_VERSION_LAST ?= 0.9.0
+export OPERATOR_VERSION_LAST ?= 0.9.1
 # The version of the next release (without v)
 export OPERATOR_VERSION_NEXT ?= 0.10.0
 # The OLM channel this operator should be default of
