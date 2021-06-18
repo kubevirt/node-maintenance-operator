@@ -5,7 +5,7 @@ export OPM_VERSION = v1.12.7
 # The last released version (without v)
 export OPERATOR_VERSION_LAST ?= 0.8.0
 # The version of the next release (without v)
-export OPERATOR_VERSION_NEXT ?= 0.9.0
+export OPERATOR_VERSION_NEXT ?= 0.9.1
 # The OLM channel this operator should be default of
 export OLM_CHANNEL ?= 4.8
 export OLM_NS ?= openshift-marketplace
