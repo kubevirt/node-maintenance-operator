@@ -48,7 +48,7 @@ need_upgrade=$(check_need_upgrade "$TARGET_SDK_VERSION" "$DETECTED_SDK_VERSION")
 if [[ $need_upgrade == "1" ]]; then
 
     echo "operator-sdk current version $DETECTED_SDK_VERSION but need $TARGET_SDK_VERSION see https://github.com/operator-framework/operator-sdk)"
-    curl -JL https://github.com/operator-framework/operator-sdk/releases/download/${TARGET_SDK_VERSION}/operator-sdk-${TARGET_SDK_VERSION}-x86_64-linux-gnu -o ${BASEPATH}/../operator-sdk
+    curl -JL https://github.com/operator-framework/operator-sdk/releases/download/${TARGET_SDK_VERSION}/operator-sdk_linux_amd64 -o ${BASEPATH}/../operator-sdk
     chmod 0755 ${BASEPATH}/../operator-sdk
 
 fi

@@ -1,4 +1,0 @@
-packageName: node-maintenance-operator
-channels:
-- name: "9.9"
-  currentCSV: node-maintenance-operator.v9.9.9

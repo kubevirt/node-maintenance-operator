@@ -1,5 +1,5 @@
 export GO_VERSION = 1.15
-export OPERATOR_SDK_VERSION = v0.18.2
+export OPERATOR_SDK_VERSION = v1.10.0
 export OPM_VERSION = v1.12.7
 
 # The last released version (without v)
@@ -51,7 +51,7 @@ fmt: whitespace go-imports
 
 .PHONY: go-imports
 go-imports:
-	go run golang.org/x/tools/cmd/goimports -w ./pkg ./cmd ./test ./tools
+	go run golang.org/x/tools/cmd/goimports -w ./api ./controllers ./tools
 
 .PHONY: whitespace
 whitespace: $(all_sources)
@@ -59,7 +59,7 @@ whitespace: $(all_sources)
 
 .PHONY: go-vet
 go-vet: $(cmd_sources) $(pkg_sources)
-	go vet ./pkg/... ./cmd/... ./test/...
+	go vet ./api/... ./controllers/...
 
 .PHONY: go-vendor
 go-vendor:

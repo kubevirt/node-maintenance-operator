@@ -1,0 +1,19 @@
+domain: kubevirt.io
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: node-maintenance-operator
+repo: github.com/kubevirt/node-maintenance-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: kubevirt.io
+  group: nodemaintenance
+  kind: NodeMaintenance
+  path: github.com/kubevirt/node-maintenance-operator/api/v1beta1
+  version: v1beta1
+version: "3"
