@@ -1,0 +1,29 @@
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-nodemaintenance-kubevirt-io-v1beta1-nodemaintenance
+  failurePolicy: Fail
+  name: vnodemaintenance.kb.io
+  rules:
+  - apiGroups:
+    - nodemaintenance.kubevirt.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - nodemaintenances
+  sideEffects: None
