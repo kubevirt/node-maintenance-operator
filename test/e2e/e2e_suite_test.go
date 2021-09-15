@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
+	"kubevirt.io/node-maintenance-operator/api/v1beta1"
 )
 
 const (

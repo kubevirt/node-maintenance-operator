@@ -18,13 +18,21 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	nodemaintenancev1beta1 "github.com/kubevirt/node-maintenance-operator/api/v1beta1"
+	nodemaintenancev1beta1 "kubevirt.io/node-maintenance-operator/api/v1beta1"
+)
+
+const (
+	MaxAllowedErrorToUpdateOwnedLease = 3
+	DrainerTimeout                    = 30 * time.Second
+	WaitDurationOnDrainError          = 5 * time.Second
+	FixedDurationReconcileLog         = "Reconciling with fixed duration"
 )
 
 // NodeMaintenanceReconciler reconciles a NodeMaintenance object

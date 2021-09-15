@@ -2,6 +2,7 @@
 _out
 build/_output
 build/_test
+bin
 
 operator-sdk
 opm
