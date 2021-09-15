@@ -252,13 +252,9 @@ func initDrainer(r *NodeMaintenanceReconciler, config *rest.Config) error {
 	//Period of time in seconds given to each pod to terminate gracefully. If negative, the default value specified in the pod will be used.
 	r.drainer.GracePeriodSeconds = -1
 
-	// TODO - add logical value or attach from the maintancene CR
+	// TODO - add logical value or attach from the maintenance CR
 	//The length of time to wait before giving up, zero means infinite
 	r.drainer.Timeout = DrainerTimeout
-
-	// TODO - consider pod selectors (only for VMIs + others ?)
-	//Label selector to filter pods on the node
-	//r.drainer.PodSelector = "kubevirt.io=virt-launcher"
 
 	cs, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -266,6 +262,7 @@ func initDrainer(r *NodeMaintenanceReconciler, config *rest.Config) error {
 	}
 	r.drainer.Client = cs
 	r.drainer.DryRunStrategy = util.DryRunNone
+	r.drainer.Ctx = context.Background()
 
 	r.drainer.Out = writer{klog.Info}
 	r.drainer.ErrOut = writer{klog.Error}

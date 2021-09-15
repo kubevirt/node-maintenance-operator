@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+   http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,9 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"path/filepath"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -40,8 +42,9 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var ctxFromSignalHandler context.Context
 
-func TestAPIs(t *testing.T) {
+func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecsWithDefaultAndCustomReporters(t,
@@ -52,13 +55,19 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
+	// call start or refactor when moving to "normal" testEnv test
+
+}, 60)
+
+func startTestEnv() {
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 
-	cfg, err := testEnv.Start()
+	var err error
+	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
@@ -71,10 +80,35 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-}, 60)
+	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:             scheme.Scheme,
+		MetricsBindAddress: "0",
+	})
+	Expect(err).ToNot(HaveOccurred())
+
+	// comment in when moving to "normal" testEnv test
+	// this isn't needed atm, because the controller tests call relevant funcs of the controller themself
+	//err = (&NodeMaintenanceReconciler{
+	//	Client: k8sManager.GetClient(),
+	//	Scheme: k8sManager.GetScheme(),
+	//}).SetupWithManager(k8sManager)
+	//Expect(err).ToNot(HaveOccurred())
+
+	go func() {
+		if ctxFromSignalHandler == nil {
+			ctxFromSignalHandler = ctrl.SetupSignalHandler()
+		}
+		err = k8sManager.Start(ctxFromSignalHandler)
+		Expect(err).ToNot(HaveOccurred())
+	}()
+}
 
 var _ = AfterSuite(func() {
+	// call stop or refactor when moving to "normal" testEnv test
+})
+
+func stopTestEnv() {
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
-})
+}
