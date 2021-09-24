@@ -1,9 +1,35 @@
+GO_VERSION = 1.16
+IMAGE_REGISTRY ?= quay.io/kubevirt
+export IMAGE_REGISTRY
+
+# Workaround: KubeVirtCI postsubmit job uses OPERATOR_VERSION_NEXT, use it until updated to VERSION
+ifneq ($(origin OPERATOR_VERSION_NEXT), undefined)
+VERSION = $(OPERATOR_VERSION_NEXT)
+endif
+
+# When no version is set, use latest as image tags
+DEFAULT_VERSION := 0.0.1
+ifeq ($(origin VERSION), undefined)
+IMAGE_TAG = latest
+else ifeq ($(VERSION), $(DEFAULT_VERSION))
+IMAGE_TAG = latest
+else
+IMAGE_TAG = v$(VERSION)
+endif
+export IMAGE_TAG
+
+CHANNELS = stable
+export CHANNELS
+DEFAULT_CHANNEL = stable
+export DEFAULT_CHANNEL
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.1
+VERSION ?= $(DEFAULT_VERSION)
+export VERSION
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -29,14 +55,14 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # kubevirt/node-maintenance-operator-bundle:$VERSION and kubevirt/node-maintenance-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= quay.io/kubevirt/node-maintenance-operator
+IMAGE_TAG_BASE ?= $(IMAGE_REGISTRY)/node-maintenance-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(IMAGE_TAG)
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -62,8 +88,11 @@ SHELL = /usr/bin/env bash -o pipefail
 # -w /home/go/src/kubevirt.io/node-maintenance-operator         = working dir
 # -e ...                                                        = some env vars, especially set cache to a user writable dir
 # --entrypoint /bin bash ... -c                                 = run bash -c on start; that means the actual command(s) need be wrapped in double quotes, see e.g. check target which will run: bash -c "make test"
-export GO_VERSION = 1.16
-export DOCKER_GO=docker run --rm -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator -u $$(id -u) -w /home/go/src/kubevirt.io/node-maintenance-operator -e "GOPATH=/go" -e "GOFLAGS=-mod=vendor" -e "XDG_CACHE_HOME=/tmp/.cache" --entrypoint /bin/bash golang:$(GO_VERSION) -c
+export DOCKER_GO=docker run --rm -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator \
+	-u $$(id -u) -w /home/go/src/kubevirt.io/node-maintenance-operator \
+	-e "GOPATH=/go" -e "GOFLAGS=-mod=vendor" -e "XDG_CACHE_HOME=/tmp/.cache" \
+	-e "VERSION=$(VERSION)" -e "IMAGE_REGISTRY=$(IMAGE_REGISTRY)" \
+	--entrypoint /bin/bash golang:$(GO_VERSION) -c
 
 all: build
 
@@ -114,7 +143,7 @@ build: generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: check ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
@@ -216,7 +245,7 @@ endif
 BUNDLE_IMGS ?= $(BUNDLE_IMG)
 
 # The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
-CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:v$(VERSION)
+CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(IMAGE_TAG)
 
 # Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
 ifneq ($(origin CATALOG_BASE_IMG), undefined)
@@ -247,13 +276,12 @@ verify-unchanged:
 	./hack/verify-unchanged.sh
 
 .PHONY: container-build ## Build containers
-# vars available: $IMAGE_TAG and $OPERATOR_VERSION_NEXT
-container-build:
+container-build: check
 	$(DOCKER_GO) "make bundle"
-	make docker-build bundle-build catalog-build
+	make docker-build bundle-build
 
-.PHONY: container-push ## Push containers
-container-push: docker-push bundle-push catalog-push
+.PHONY: container-push ## Push containers (NOTE: catalog can't be build before bundle was pushed)
+container-push: docker-push bundle-push catalog-build catalog-push
 
 .PHONY: cluster-functest
 cluster-functest: ginkgo

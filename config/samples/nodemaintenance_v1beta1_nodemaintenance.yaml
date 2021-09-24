@@ -4,4 +4,5 @@ metadata:
   name: nodemaintenance-sample
 spec:
   # Add fields here
-  foo: bar
+  nodeName: node02
+  reason: "Test node maintenance"

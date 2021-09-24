@@ -1,0 +1,60 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+    categories: OpenShift Optional
+    description: Node Maintenance Operator for cordoning and draining nodes.
+    repository: https://github.com/kubevirt/node-maintenance-operator
+  name: node-maintenance-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: NodeMaintenance is the Schema for the nodemaintenances API
+      displayName: Node Maintenance
+      kind: NodeMaintenance
+      name: nodemaintenances.nodemaintenance.kubevirt.io
+      version: v1beta1
+  description: |
+    Node Maintenance Operator
+
+    This operator will keep nodes cordoned and drained while a matching node maintenance CR exists.
+    This is useful when investigating problems with a machine, or performing an operation on the underlying machine that might result in node failure.
+
+    Primarily used in bare-metal environments.
+  displayName: Node Maintenance Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: false
+    type: AllNamespaces
+  keywords:
+  - KubeVirt
+  - Virtualization
+  - Node-maintenance
+  links:
+  - name: KubeVirt
+    url: https://kubevirt.io
+  - name: Source Code
+    url: https://github.com/kubevirt/node-maintenance-operator
+  maintainers:
+  - email: kubevirt-dev@googlegroups.com
+    name: KubeVirt project
+  maturity: beta
+  provider:
+    name: Red Hat
+  version: 0.0.0
