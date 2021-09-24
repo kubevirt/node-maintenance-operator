@@ -28,8 +28,8 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# kubevirt.io/node-maintenance-operator-new-bundle:$VERSION and kubevirt.io/node-maintenance-operator-new-catalog:$VERSION.
-IMAGE_TAG_BASE ?= kubevirt.io/node-maintenance-operator-new
+# kubevirt/node-maintenance-operator-bundle:$VERSION and kubevirt/node-maintenance-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= quay.io/kubevirt/node-maintenance-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -54,6 +54,16 @@ endif
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
+
+# Run go in a container
+# --rm                                                          = remove container when stopped
+# -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator = bind mount current dir in container
+# -u $$(id -u)                                                  = use current user (else new / modified files will be owned by root)
+# -w /home/go/src/kubevirt.io/node-maintenance-operator         = working dir
+# -e ...                                                        = some env vars, especially set cache to a user writable dir
+# --entrypoint /bin bash ... -c                                 = run bash -c on start; that means the actual command(s) need be wrapped in double quotes, see e.g. check target which will run: bash -c "make test"
+export GO_VERSION = 1.16
+export DOCKER_GO=docker run --rm -v $$(pwd):/home/go/src/kubevirt.io/node-maintenance-operator -u $$(id -u) -w /home/go/src/kubevirt.io/node-maintenance-operator -e "GOPATH=/go" -e "GOFLAGS=-mod=vendor" -e "XDG_CACHE_HOME=/tmp/.cache" --entrypoint /bin/bash golang:$(GO_VERSION) -c
 
 all: build
 
@@ -81,24 +91,30 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
-fmt: ## Run go fmt against code.
-	go fmt ./...
+fmt: goimports ## Run go goimports against code.
+	$(GOIMPORTS) -w ./api ./controllers ./test
 
 vet: ## Run go vet against code.
-	go vet ./...
+	go vet ./api/... ./controllers/... ./test/...
 
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+go-vendor:
+	go mod vendor
+
+go-tidy:
+	go mod tidy
+
+test: manifests generate fmt vet go-tidy go-vendor verify-unchanged envtest ginkgo ## Run tests.
+	ACK_GINKGO_DEPRECATIONS=1.16.4 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path --bin-dir $(PROJECT_DIR)/bin)" $(GINKGO) -v -r --keepGoing -requireSuite ./api/... ./controllers/... -coverprofile cover.out
 
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	$(DOCKER_GO) "go build -o bin/manager main.go"
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: test ## Build docker image with the manager.
+docker-build: check ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
@@ -132,6 +148,14 @@ ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.
 	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
+GOIMPORTS = $(shell pwd)/bin/goimports
+goimports: ## Download goimports locally if necessary.
+	$(call go-get-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports@v0.1.6)
+
+GINKGO = $(shell pwd)/bin/ginkgo
+ginkgo: ## Download ginkgo locally if necessary.
+	$(call go-get-tool,$(GINKGO),github.com/onsi/ginkgo/ginkgo@v1.16.4)
+
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-get-tool
@@ -147,11 +171,11 @@ rm -rf $$TMP_DIR ;\
 endef
 
 .PHONY: bundle
-bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
-	operator-sdk generate kustomize manifests -q
+bundle: manifests operator-sdk kustomize ## Generate bundle manifests and metadata, then validate generated files.
+	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
-	operator-sdk bundle validate ./bundle
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	$(OPERATOR_SDK) bundle validate ./bundle
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
@@ -165,17 +189,26 @@ bundle-push: ## Push the bundle image.
 OPM = ./bin/opm
 opm: ## Download opm locally if necessary.
 ifeq (,$(wildcard $(OPM)))
-ifeq (,$(shell which opm 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
-	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	OS=linux && ARCH=amd64 && \
 	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.15.1/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
-else
-OPM = $(shell which opm)
 endif
+
+.PHONY: operator-sdk
+OPERATOR_SDK = ./bin/operator-sdk
+operator-sdk: ## Download operator-sdk locally if necessary.
+ifeq (,$(wildcard $(OPERATOR_SDK)))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPERATOR_SDK)) ;\
+	OS=linux && ARCH=amd64 && \
+	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/v1.12.0/operator-sdk_$${OS}_$${ARCH} ;\
+	chmod +x $(OPERATOR_SDK) ;\
+	}
 endif
 
 # A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
@@ -201,3 +234,27 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+
+##@ Targets used by CI
+
+.PHONY: check ## Dockerized version of make test
+check: # TODO add all code checks from old version
+	$(DOCKER_GO) "make test"
+
+.PHONY: verify-unchanged
+verify-unchanged:
+	./hack/verify-unchanged.sh
+
+.PHONY: container-build ## Build containers
+# vars available: $IMAGE_TAG and $OPERATOR_VERSION_NEXT
+container-build:
+	$(DOCKER_GO) "make bundle"
+	make docker-build bundle-build catalog-build
+
+.PHONY: container-push ## Push containers
+container-push: docker-push bundle-push catalog-push
+
+.PHONY: cluster-functest
+cluster-functest: ginkgo
+	./hack/functest.sh
