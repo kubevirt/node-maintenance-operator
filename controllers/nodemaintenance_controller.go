@@ -62,6 +62,17 @@ type NodeMaintenanceReconciler struct {
 //+kubebuilder:rbac:groups=nodemaintenance.kubevirt.io,resources=nodemaintenances/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=nodemaintenance.kubevirt.io,resources=nodemaintenances/finalizers,verbs=update
 
+// TODO check if all these are really needed!
+//+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;update;patch;watch
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+//+kubebuilder:rbac:groups="",resources=pods/eviction,verbs=create
+//+kubebuilder:rbac:groups="",resources=namespaces,verbs=get
+//+kubebuilder:rbac:groups="apps",resources=deployments;daemonsets;replicasets;statefulsets,verbs=get;list;watch
+//+kubebuilder:rbac:groups="coordination.k8s.io",resources=leases,verbs=get;list;update;patch;watch;create
+//+kubebuilder:rbac:groups="policy",resources=poddisruptionbudgets,verbs=get;list;watch
+//+kubebuilder:rbac:groups="monitoring.coreos.com",resources=servicemonitors,verbs=get;create
+//+kubebuilder:rbac:groups="oauth.openshift.io",resources=*,verbs=*
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
