@@ -3,6 +3,5 @@ kind: NodeMaintenance
 metadata:
   name: nodemaintenance-sample
 spec:
-  # Add fields here
   nodeName: node02
   reason: "Test node maintenance"
