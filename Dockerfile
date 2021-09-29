@@ -1,6 +1,6 @@
 # Build the manager binary
 FROM quay.io/centos/centos:stream8 AS builder
-RUN dnf install golang -y
+RUN dnf install git golang -y
 
 # Ensure go 1.16
 RUN go install golang.org/dl/go1.16@latest
@@ -14,11 +14,16 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 COPY main.go main.go
 COPY api/ api/
+COPY hack/ hack/
 COPY controllers/ controllers/
-COPY vendor vendor
+COPY version/ version/
+COPY vendor/ vendor/
+
+# for getting version info
+COPY .git/ .git/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+RUN ./hack/build.sh
 
 # Use ubi8 as minimal base image to package the manager binary
 FROM registry.access.redhat.com/ubi8/ubi-minimal
