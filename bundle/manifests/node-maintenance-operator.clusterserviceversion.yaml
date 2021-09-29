@@ -167,11 +167,13 @@ spec:
           selector:
             matchLabels:
               control-plane: controller-manager
+              node-maintenance-operator: ""
           strategy: {}
           template:
             metadata:
               labels:
                 control-plane: controller-manager
+                node-maintenance-operator: ""
             spec:
               affinity:
                 nodeAffinity:

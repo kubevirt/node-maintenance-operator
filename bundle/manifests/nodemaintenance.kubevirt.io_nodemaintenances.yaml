@@ -4,6 +4,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
+  labels:
+    node-maintenance-operator: ""
   name: nodemaintenances.nodemaintenance.kubevirt.io
 spec:
   group: nodemaintenance.kubevirt.io
