@@ -8,7 +8,7 @@ require (
 	github.com/onsi/gomega v1.13.0
 	github.com/sirupsen/logrus v1.8.1
 	k8s.io/api v0.22.1
-	k8s.io/apiextensions-apiserver v0.22.1
+	k8s.io/apiextensions-apiserver v0.22.1 // indirect
 	k8s.io/apimachinery v0.22.1
 	k8s.io/client-go v0.22.1
 	k8s.io/klog v1.0.0

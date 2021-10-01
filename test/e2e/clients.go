@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog"
@@ -23,16 +22,6 @@ var (
 
 func init() {
 	// Setup Scheme for all resources
-
-	// in case we need to work with CRDs
-	if err := apiextensionsv1beta1.AddToScheme(scheme.Scheme); err != nil {
-		klog.Exit(err.Error())
-	}
-
-	//// in case we need to work with OLM types
-	//if err := operatorsv1alpha1.AddToScheme(scheme.Scheme); err != nil {
-	//	klog.Exit(err.Error())
-	//}
 
 	// for NMO types
 	if err := nmoapi.AddToScheme(scheme.Scheme); err != nil {
