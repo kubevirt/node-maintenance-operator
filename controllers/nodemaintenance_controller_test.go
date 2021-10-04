@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -63,7 +64,11 @@ var _ = Describe("NodeMaintenance", func() {
 
 		// Create a ReconcileNodeMaintenance object with the scheme and fake client
 		// TODO add reconciler to manager in suite_test.go and don't call reconcile funcs manually
-		r = &NodeMaintenanceReconciler{Client: k8sClient, Scheme: scheme.Scheme}
+		r = &NodeMaintenanceReconciler{
+			Client: k8sClient,
+			Scheme: scheme.Scheme,
+			logger: ctrl.Log.WithName("unit test"),
+		}
 		initDrainer(r, cfg)
 
 		// in test pods are not evicted, so don't wait forever for them

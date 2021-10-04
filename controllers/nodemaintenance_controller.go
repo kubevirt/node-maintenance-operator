@@ -83,10 +83,8 @@ type NodeMaintenanceReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	r.logger = logger
-
-	logger.Info("Reconciling NodeMaintenance")
+	r.logger = log.FromContext(ctx)
+	r.logger.Info("Reconciling NodeMaintenance")
 
 	// Fetch the NodeMaintenance instance
 	instance := &nodemaintenancev1beta1.NodeMaintenance{}
@@ -96,11 +94,11 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			logger.Info("NodeMaintenance not found", "name", req.NamespacedName)
+			r.logger.Info("NodeMaintenance not found", "name", req.NamespacedName)
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		logger.Info("Error reading the request object, requeuing.")
+		r.logger.Info("Error reading the request object, requeuing.")
 		return reconcile.Result{}, err
 	}
 
@@ -113,13 +111,13 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 		}
 	} else {
-		logger.Info("Deletion timestamp not zero")
+		r.logger.Info("Deletion timestamp not zero")
 
 		// The object is being deleted
 		if ContainsString(instance.ObjectMeta.Finalizers, nodemaintenancev1beta1.NodeMaintenanceFinalizer) || ContainsString(instance.ObjectMeta.Finalizers, metav1.FinalizerOrphanDependents) {
 			// Stop node maintenance - uncordon and remove live migration taint from the node.
 			if err := r.stopNodeMaintenanceOnDeletion(instance.Spec.NodeName); err != nil {
-				logger.Error(err, "error stopping node maintenance")
+				r.logger.Error(err, "error stopping node maintenance")
 				if errors.IsNotFound(err) == false {
 					return r.onReconcileError(instance, err)
 				}
@@ -136,13 +134,13 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	err = r.initMaintenanceStatus(instance)
 	if err != nil {
-		logger.Error(err, "Failed to update NodeMaintenance with \"Running\" status")
+		r.logger.Error(err, "Failed to update NodeMaintenance with \"Running\" status")
 		return r.onReconcileError(instance, err)
 	}
 
 	nodeName := instance.Spec.NodeName
 
-	logger.Info("Applying maintenance mode", "node", nodeName, "reason", instance.Spec.Reason)
+	r.logger.Info("Applying maintenance mode", "node", nodeName, "reason", instance.Spec.Reason)
 	node, err := r.fetchNode(nodeName)
 	if err != nil {
 		return r.onReconcileError(instance, err)
@@ -154,7 +152,7 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err != nil && updateOwnedLeaseFailed {
 		instance.Status.ErrorOnLeaseCount += 1
 		if instance.Status.ErrorOnLeaseCount > MaxAllowedErrorToUpdateOwnedLease {
-			logger.Info("can't extend owned lease. uncordon for now")
+			r.logger.Info("can't extend owned lease. uncordon for now")
 
 			// Uncordon the node
 			err = r.stopNodeMaintenanceImp(node)
@@ -185,23 +183,23 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return r.onReconcileError(instance, err)
 	}
 
-	logger.Info("Evict all Pods from Node", "nodeName", nodeName)
+	r.logger.Info("Evict all Pods from Node", "nodeName", nodeName)
 
 	if err = drain.RunNodeDrain(r.drainer, nodeName); err != nil {
-		logger.Info("Not all pods evicted", "nodeName", nodeName, "error", err)
+		r.logger.Info("Not all pods evicted", "nodeName", nodeName, "error", err)
 		waitOnReconcile := WaitDurationOnDrainError
 		return r.onReconcileErrorWithRequeue(instance, err, &waitOnReconcile)
 	}
-	logger.Info("All pods evicted", "nodeName", nodeName)
+	r.logger.Info("All pods evicted", "nodeName", nodeName)
 
 	instance.Status.Phase = nodemaintenancev1beta1.MaintenanceSucceeded
 	instance.Status.PendingPods = nil
 	err = r.Client.Status().Update(context.TODO(), instance)
 	if err != nil {
-		logger.Error(err, "Failed to update NodeMaintenance with \"Succeeded\" status")
+		r.logger.Error(err, "Failed to update NodeMaintenance with \"Succeeded\" status")
 		return r.onReconcileError(instance, err)
 	}
-	logger.Info("Reconcile completed", "nodeName", nodeName)
+	r.logger.Info("Reconcile completed", "nodeName", nodeName)
 
 	return reconcile.Result{}, nil
 
@@ -299,7 +297,7 @@ func (r *NodeMaintenanceReconciler) setOwnerRefToNode(instance *nodemaintenancev
 		}
 	}
 
-	// logger is nil... r.logger.Info("setting owner ref to node")
+	r.logger.Info("setting owner ref to node")
 
 	nodeMeta := node.TypeMeta
 	ref := metav1.OwnerReference{
@@ -440,11 +438,6 @@ func (r *NodeMaintenanceReconciler) onReconcileError(nm *nodemaintenancev1beta1.
 	return r.onReconcileErrorWithRequeue(nm, err, nil)
 
 }
-
-//// set readable timestamp format in logs, not reference time
-//func init() {
-//	log.SetFormatter(&log.TextFormatter{TimestampFormat: "2006-01-02 15:04:05.000000", FullTimestamp: true})
-//}
 
 // writer implements io.Writer interface as a pass-through for klog.
 type writer struct {
