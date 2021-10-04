@@ -2,6 +2,7 @@ package v1beta1
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -69,9 +70,12 @@ var _ = Describe("NodeMaintenance Validation", func() {
 
 			It("should be rejected", func() {
 				nm := getTestNMO(existingNodeName)
-				err := nm.ValidateCreate()
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring(ErrorNodeMaintenanceExists, existingNodeName))
+				Eventually(func() error {
+					return nm.ValidateCreate()
+				}, time.Second, 200*time.Millisecond).Should(And(
+					HaveOccurred(),
+					WithTransform(func(err error) string { return err.Error() }, ContainSubstring(ErrorNodeMaintenanceExists, existingNodeName)),
+				))
 			})
 
 		})
@@ -136,8 +140,9 @@ var _ = Describe("NodeMaintenance Validation", func() {
 
 				It("should not be rejected", func() {
 					nm := getTestNMO(existingNodeName)
-					err := nm.ValidateCreate()
-					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() error {
+						return nm.ValidateCreate()
+					}, time.Second, 200*time.Millisecond).ShouldNot(HaveOccurred())
 				})
 
 			})
