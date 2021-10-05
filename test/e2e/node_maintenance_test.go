@@ -21,8 +21,8 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	nmo "kubevirt.io/node-maintenance-operator/pkg/apis/nodemaintenance/v1beta1"
-	"kubevirt.io/node-maintenance-operator/pkg/controller/nodemaintenance"
+	nmo "kubevirt.io/node-maintenance-operator/api/v1beta1"
+	nodemaintenance "kubevirt.io/node-maintenance-operator/controllers"
 )
 
 var (
@@ -416,7 +416,9 @@ func getTestDeploymentPods() *corev1.PodList {
 func getOperatorLogs() string {
 	pod := getOperatorPod()
 	podName := pod.ObjectMeta.Name
-	podLogOpts := corev1.PodLogOptions{}
+	podLogOpts := corev1.PodLogOptions{
+		Container: "manager",
+	}
 
 	req := KubeClient.CoreV1().Pods(pod.Namespace).GetLogs(podName, &podLogOpts)
 	podLogs, err := req.Stream(context.Background())
@@ -430,9 +432,9 @@ func getOperatorLogs() string {
 }
 
 func getOperatorPod() *corev1.Pod {
-	pods, err := KubeClient.CoreV1().Pods(operatorNsName).List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
+	pods, err := KubeClient.CoreV1().Pods(operatorNsName).List(context.Background(), metav1.ListOptions{LabelSelector: "node-maintenance-operator="})
 	ExpectWithOffset(2, err).ToNot(HaveOccurred(), "failed to get operator pods")
-	ExpectWithOffset(2, pods.Size()).ToNot(BeZero(), "no operator pod found")
+	ExpectWithOffset(2, len(pods.Items)).ToNot(BeZero(), "no operator pod found")
 	return &pods.Items[0]
 }
 

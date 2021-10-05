@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: SUBSCRIPTION_NAMESPACE
-  labels:
-    name: SUBSCRIPTION_NAMESPACE

@@ -2,7 +2,8 @@
 _out
 build/_output
 build/_test
-
+bin
+bundle_tmp*
 operator-sdk
 opm
 must-gather.local.*

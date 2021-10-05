@@ -1,8 +1,0 @@
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: node-maintenance-operator
-  namespace: node-maintenance
-spec:
-  targetNamespaces:
-    - node-maintenance

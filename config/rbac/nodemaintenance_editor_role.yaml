@@ -1,0 +1,24 @@
+# permissions for end users to edit nodemaintenances.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nodemaintenance-editor-role
+rules:
+- apiGroups:
+  - nodemaintenance.kubevirt.io
+  resources:
+  - nodemaintenances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - nodemaintenance.kubevirt.io
+  resources:
+  - nodemaintenances/status
+  verbs:
+  - get

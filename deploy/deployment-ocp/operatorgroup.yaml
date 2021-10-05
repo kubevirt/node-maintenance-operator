@@ -1,8 +1,0 @@
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: node-maintenance-operator
-  namespace: openshift-node-maintenance-operator
-spec:
-  targetNamespaces:
-    - openshift-node-maintenance-operator
