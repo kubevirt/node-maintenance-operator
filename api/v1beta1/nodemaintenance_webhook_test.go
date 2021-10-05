@@ -151,8 +151,9 @@ var _ = Describe("NodeMaintenance Validation", func() {
 
 				It("should not be rejected", func() {
 					nm := getTestNMO(existingNodeName)
-					err := nm.ValidateCreate()
-					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() error {
+						return nm.ValidateCreate()
+					}, time.Second, 200*time.Millisecond).ShouldNot(HaveOccurred())
 				})
 
 			})
