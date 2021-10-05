@@ -137,9 +137,8 @@ test: manifests generate fmt vet go-tidy go-vendor verify-unchanged envtest gink
 
 ##@ Build
 
-build: generate fmt vet ## Build manager binary.
-	$(DOCKER_GO) "./hack/build.sh"
-	mv manager ./bin/
+build: ## Build manager binary.
+	./hack/build.sh
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go

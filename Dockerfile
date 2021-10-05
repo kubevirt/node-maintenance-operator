@@ -32,7 +32,7 @@ RUN ./hack/build.sh
 # Use ubi8 as minimal base image to package the manager binary
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/bin/manager .
 USER 65532:65532
 
 # needed for HCO
