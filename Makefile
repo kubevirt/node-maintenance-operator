@@ -269,7 +269,7 @@ catalog-push: ## Push a catalog image.
 ##@ Targets used by CI
 
 .PHONY: check ## Dockerized version of make test
-check: # TODO add all code checks from old version
+check:
 	$(DOCKER_GO) "make test"
 
 .PHONY: verify-unchanged
@@ -284,6 +284,6 @@ container-build: check
 .PHONY: container-push ## Push containers (NOTE: catalog can't be build before bundle was pushed)
 container-push: docker-push bundle-push catalog-build catalog-push
 
-.PHONY: cluster-functest
+.PHONY: cluster-functest ## Run e2e tests in a real cluster
 cluster-functest: ginkgo
 	./hack/functest.sh

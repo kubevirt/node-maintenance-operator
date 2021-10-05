@@ -1,1 +1,0 @@
-Remove this dir after updating OpenShift CI Dockerfile locations!
