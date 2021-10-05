@@ -7,10 +7,10 @@ GIT_COMMIT=$(git rev-list -1 HEAD || true)
 COMMIT=${CI_UPSTREAM_COMMIT:-${GIT_COMMIT}}
 BUILD_DATE=$(date --utc -Iseconds)
 
-mkdir -p _out
+mkdir -p bin
 
 LDFLAGS="-s -w "
 LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.Version=${VERSION} "
 LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.GitCommit=${COMMIT} "
 LDFLAGS+="-X kubevirt.io/node-maintenance-operator/version.BuildDate=${BUILD_DATE} "
-GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o manager main.go
+GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/manager main.go
