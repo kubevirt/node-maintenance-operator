@@ -10,7 +10,7 @@ The purpose of this operator is to watch for new or deleted custom resources cal
 
 ## Build and run the operator
 
-There are three ways to run the operator:
+There are two ways to run the operator:
 
 - Deploy the latest version, which was built from master branch, to a running Openshift/Kubernetes cluster
 - Build and run or deploy from sources to a running or to be created Openshift/Kubernetes cluster
@@ -27,8 +27,7 @@ For deployment of NMO using these images you need
 Then run `operator-sdk run bundle quay.io/kubevirt/node-maintenance-operator-bundle:latest`
 
 ### Build and deploy from sources
-
-Follow the instructions on https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/#run-the-operator
+Run `make bundle bundle-build bundle-push` to build and push the bundle, and then `operator-sdk run bundle BUNDLE_IMG` where BUNDLE_IMG is the newly create bundle image (based on the instructions [here](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/#run-the-operator)).
 
 ## Setting Node Maintenance
 
