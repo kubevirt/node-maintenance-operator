@@ -1,15 +1,12 @@
 filters:
   ".*":
     reviewers:
-      - yanirq
-      - ksimon1
       - beekhof
       - slintes
       - n1r1
       - mshitrit
+      - razo7
     approvers:
-      - yanirq
-      - ksimon1
       - beekhof
       - slintes
       - n1r1
