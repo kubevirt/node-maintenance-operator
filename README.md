@@ -27,7 +27,8 @@ For deployment of NMO using these images you need
 Then run `operator-sdk run bundle quay.io/kubevirt/node-maintenance-operator-bundle:latest`
 
 ### Build and deploy from sources
-Run `make bundle bundle-build bundle-push` to build and push the bundle, and then `operator-sdk run bundle BUNDLE_IMG` where BUNDLE_IMG is the newly create bundle image (based on the instructions [here](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/#run-the-operator)).
+Follow the instructions [here](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/#3-deploy-your-operator-with-olm) for deploying the operator with OLM.
+> *Note*: Webhook cannot run using `make deploy`, because the volume mount of the webserver certificate is not found.
 
 ## Setting Node Maintenance
 
