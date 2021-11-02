@@ -3,7 +3,7 @@
 The node-maintenance-operator is an operator generated from the [operator-sdk](https://github.com/operator-framework/operator-sdk).
 The purpose of this operator is to watch for new or deleted custom resources called NodeMaintenance which indicate that a node in the cluster should either:
   - NodeMaintenance CR created: move node into maintenance, cordon the node - set it as unschedulable and evict the pods (which can be evicted) from that node.
-  - NodeMaintenance CR deleted: remove pod from maintenance and uncordon the node - set it as schedulable
+  - NodeMaintenance CR deleted: remove pod from maintenance and uncordon the node - set it as schedulable.
 
 > *Note*:  The current behavior of the operator is to mimic `kubectl drain <node name>`
 > as performed in [Kubevirt - evict all VMs and Pods on a node ](https://kubevirt.io/user-guide/docs/latest/administration/node-eviction.html#how-to-evict-all-vms-and-pods-on-a-node)
@@ -12,17 +12,17 @@ The purpose of this operator is to watch for new or deleted custom resources cal
 
 There are two ways to run the operator:
 
-- Deploy the latest version, which was built from master branch, to a running Openshift/Kubernetes cluster
-- Build and run or deploy from sources to a running or to be created Openshift/Kubernetes cluster
+- Deploy the latest version, which was built from master branch, to a running Openshift/Kubernetes cluster.
+- Build and run or deploy from sources to a running or to be created Openshift/Kubernetes cluster.
 
 ### Deploy the latest version
 
 After every PR merge to master images were build and pushed to `quay.io`.
-For deployment of NMO using these images you need
+For deployment of NMO using these images you need:
 
-- a running Openshift cluster, or a Kubernetes cluster with OLM installed
+- a running Openshift cluster, or a Kubernetes cluster with OLM installed.
 - `operator-sdk` binary installed, see https://sdk.operatorframework.io/docs/installation/
-- a valid `$KUBECONFIG` configured to access your cluster
+- a valid `$KUBECONFIG` configured to access your cluster.
 
 Then run `operator-sdk run bundle quay.io/kubevirt/node-maintenance-operator-bundle:latest`
 
@@ -36,8 +36,8 @@ Follow the instructions [here](https://sdk.operatorframework.io/docs/building-op
 
 To set maintenance on a node a `NodeMaintenance` CustomResource should be created.
 The `NodeMaintenance` CR spec contains:
-- nodeName: The name of the node which will be put into maintenance
-- reason: the reason for the node maintenance
+- nodeName: The name of the node which will be put into maintenance.
+- reason: the reason for the node maintenance.
 
 Create the example `NodeMaintenance` CR found at `config/samples/nodemaintenance_v1beta1_nodemaintenance.yaml`:
 
@@ -128,12 +128,12 @@ The phase is updated for each processing attempt on the CR.
 
 For new minor releases:
 
-  - create and push the `release-0.y` branch
+  - create and push the `release-0.y` branch.
   - update KubeVirtCI and OpenshiftCI with new branches!
 
 For every major / minor / patch release:
 
-  - create and push the `vx.y.z` tag
+  - create and push the `vx.y.z` tag.
   - this should trigger CI to build and push new images
     - if it fails, the manual fallback is `VERSION=x.y.z make container-build container-push`
-  - make the git tag a release in the github UI
+  - make the git tag a release in the github UI.
