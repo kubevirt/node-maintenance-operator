@@ -6,6 +6,7 @@ metadata:
     capabilities: Basic Install
     categories: OpenShift Optional
     description: Node Maintenance Operator for cordoning and draining nodes.
+    operators.openshift.io/infrastructure-features: '["disconnected"]'
     repository: https://github.com/kubevirt/node-maintenance-operator
   name: node-maintenance-operator.v0.0.0
   namespace: placeholder
