@@ -55,14 +55,17 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # kubevirt/node-maintenance-operator-bundle:$VERSION and kubevirt/node-maintenance-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= $(IMAGE_REGISTRY)/node-maintenance-operator
+IMAGE_TAG_BASE ?= $(IMAGE_REGISTRY)/node-maintenance
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(IMAGE_TAG)
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-operator-bundle:$(IMAGE_TAG)
 
 # Image URL to use all building/pushing image targets
-IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
+IMG ?= $(IMAGE_TAG_BASE)-operator:$(IMAGE_TAG)
+
+MUST_GATHER_IMAGE ?= $(IMAGE_TAG_BASE)-must-gather:$(IMAGE_TAG)
+
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -148,6 +151,12 @@ docker-build: ## Build docker image with the manager.
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+
+must-gather-build: ## Build must-gather image.
+	docker build -t ${MUST_GATHER_IMAGE} ./must-gather
+
+must-gather-push: ## Push must-gather image.
+	docker push ${MUST_GATHER_IMAGE}
 
 ##@ Deployment
 
