@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM quay.io/centos/centos:stream8 AS builder
+FROM quay.io/centos/centos:stream9 AS builder
 RUN dnf install git golang -y
 
 # Ensure go 1.16
