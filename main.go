@@ -35,16 +35,14 @@ import (
 	nodemaintenancev1beta1 "kubevirt.io/node-maintenance-operator/api/v1beta1"
 	"kubevirt.io/node-maintenance-operator/controllers"
 	"kubevirt.io/node-maintenance-operator/version"
+
 	//+kubebuilder:scaffold:imports
+	"kubevirt.io/node-maintenance-operator/controllers/rbac"
 )
 
 var (
 	scheme   = k8sruntime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-)
-
-const (
-	default_namespace = "default"
 )
 
 func init() {
@@ -54,15 +52,12 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
-var leaderElectionNamespace string
-
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.StringVar(&leaderElectionNamespace, "leader-elect-namespace", default_namespace, "The leader election namespace")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -83,7 +78,7 @@ func main() {
 		HealthProbeBindAddress:  probeAddr,
 		LeaderElection:          enableLeaderElection,
 		LeaderElectionID:        "135b1886.kubevirt.io",
-		LeaderElectionNamespace: leaderElectionNamespace,
+		LeaderElectionNamespace: rbac.GetLeaderElectionNamespace(),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -121,12 +116,36 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+
+	ns, err := getDeploymentNamespace()
+	if err != nil {
+		setupLog.Error(err, "unable to get the deployment namespace")
+	}
+	if err = rbac.NewAggregation(mgr, ns).CreateOrUpdateAggregation(); err != nil {
+		setupLog.Error(err, "failed to create or update RBAC aggregation role")
+	}
 }
+
 func printVersion() {
 	setupLog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	setupLog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	setupLog.Info(fmt.Sprintf("Operator Version: %s", version.Version))
 	setupLog.Info(fmt.Sprintf("Git Commit: %s", version.GitCommit))
 	setupLog.Info(fmt.Sprintf("Build Date: %s", version.BuildDate))
-	setupLog.Info(fmt.Sprintf("Leader Election Namespace: %s", leaderElectionNamespace))
+	// setupLog.Info(fmt.Sprintf("Current Namespace: %s", ns))
+	setupLog.Info(fmt.Sprintf("Leader Election Namespace: %s", rbac.GetLeaderElectionNamespace()))
+}
+
+// GetDeploymentNamespace returns the Namespace this operator is deployed on.
+func getDeploymentNamespace() (string, error) {
+	// deployNamespaceEnvVar is the constant for env variable DEPLOYMENT_NAMESPACE
+	// which specifies the Namespace to watch.
+	// An empty value means the operator is running with cluster scope.
+	var deployNamespaceEnvVar = "DEPLOYMENT_NAMESPACE"
+
+	ns, found := os.LookupEnv(deployNamespaceEnvVar)
+	if !found {
+		return "", fmt.Errorf("%s must be set", deployNamespaceEnvVar)
+	}
+	return ns, nil
 }

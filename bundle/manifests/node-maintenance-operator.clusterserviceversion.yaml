@@ -149,6 +149,22 @@ spec:
           - list
           - watch
         - apiGroups:
+          - rbac.authorization.k8s.io
+          resourceNames:
+          - node-maintenance-operator-role-binding
+          resources:
+          - rolebindings
+          verbs:
+          - '*'
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resourceNames:
+          - node-maintenance-operator-role
+          resources:
+          - roles
+          verbs:
+          - '*'
+        - apiGroups:
           - authentication.k8s.io
           resources:
           - tokenreviews
