@@ -167,14 +167,12 @@ spec:
           replicas: 1
           selector:
             matchLabels:
-              control-plane: controller-manager
-              node-maintenance-operator: ""
+              name: node-maintenance-operator
           strategy: {}
           template:
             metadata:
               labels:
-                control-plane: controller-manager
-                node-maintenance-operator: ""
+                name: node-maintenance-operator
             spec:
               affinity:
                 nodeAffinity:
@@ -294,7 +292,7 @@ spec:
     - v1
     - v1beta1
     containerPort: 443
-    deploymentName: node-maintenance-operator-controller-manager
+    deploymentName: node-maintenance-operator-webhook
     failurePolicy: Fail
     generateName: vnodemaintenance.kb.io
     rules:
