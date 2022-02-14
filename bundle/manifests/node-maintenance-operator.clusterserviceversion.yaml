@@ -292,7 +292,7 @@ spec:
     - v1
     - v1beta1
     containerPort: 443
-    deploymentName: node-maintenance-operator-webhook
+    deploymentName: node-maintenance-operator-controller-manager
     failurePolicy: Fail
     generateName: vnodemaintenance.kb.io
     rules:
