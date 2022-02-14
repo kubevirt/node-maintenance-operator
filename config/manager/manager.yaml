@@ -15,12 +15,12 @@ metadata:
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      name: node-maintenance-operator
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        name: node-maintenance-operator
     spec:
       affinity:
         nodeAffinity:
