@@ -4,7 +4,6 @@ metadata:
   creationTimestamp: null
   labels:
     control-plane: controller-manager
-    node-maintenance-operator: ""
   name: node-maintenance-operator-controller-manager-metrics-service
 spec:
   ports:
@@ -14,6 +13,5 @@ spec:
     targetPort: https
   selector:
     control-plane: controller-manager
-    node-maintenance-operator: ""
 status:
   loadBalancer: {}

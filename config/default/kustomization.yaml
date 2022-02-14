@@ -9,8 +9,8 @@ namespace: node-maintenance-operator-system
 namePrefix: node-maintenance-operator-
 
 # Labels to add to all resources and selectors.
-commonLabels:
-  node-maintenance-operator: ""
+#commonLabels:
+#  node-maintenance-operator: ""
 
 bases:
 - ../crd
