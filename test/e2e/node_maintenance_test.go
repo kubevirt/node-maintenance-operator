@@ -432,7 +432,7 @@ func getOperatorLogs() string {
 }
 
 func getOperatorPod() *corev1.Pod {
-	pods, err := KubeClient.CoreV1().Pods(operatorNsName).List(context.Background(), metav1.ListOptions{LabelSelector: "node-maintenance-operator="})
+	pods, err := KubeClient.CoreV1().Pods(operatorNsName).List(context.Background(), metav1.ListOptions{LabelSelector: "name=node-maintenance-operator"})
 	ExpectWithOffset(2, err).ToNot(HaveOccurred(), "failed to get operator pods")
 	ExpectWithOffset(2, len(pods.Items)).ToNot(BeZero(), "no operator pod found")
 	return &pods.Items[0]
