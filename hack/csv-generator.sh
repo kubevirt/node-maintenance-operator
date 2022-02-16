@@ -80,6 +80,9 @@ sed -i -E "s|image: .*node-maintenance.*|image: ${OPERATOR_IMAGE}|g" ${TMP_CSV}
 # fix deployment and service account name for HCO's deployment on k8s (with cert manager certs)
 sed -i "s/node-maintenance-operator-controller-manager/node-maintenance-operator/g" ${TMP_CSV}
 
+# switch priority class
+sed -i "s/priorityClassName: system-cluster-critical/priorityClassName: kubevirt-cluster-critical/g" ${TMP_CSV}
+
 # dump CSV and CRD manifests to stdout
 echo "---"
 cat ${TMP_CSV}
