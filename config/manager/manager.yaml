@@ -62,5 +62,6 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
+      priorityClassName: system-cluster-critical
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
