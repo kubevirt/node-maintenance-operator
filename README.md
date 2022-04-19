@@ -1,9 +1,15 @@
-# Node Maintenance Operator
+# Deprecation Notice
 
-The node-maintenance-operator is an operator generated from the [operator-sdk](https://github.com/operator-framework/operator-sdk).
-The purpose of this operator is to watch for new or deleted custom resources called NodeMaintenance which indicate that a node in the cluster should either:
-  - NodeMaintenance CR created: move node into maintenance, cordon the node - set it as unschedulable and evict the pods (which can be evicted) from that node.
-  - NodeMaintenance CR deleted: remove pod from maintenance and uncordon the node - set it as schedulable.
+**March 17, 2022**
+  
+**KubeVirt**'s Node Maintenance Operator (NMO) is deprecated in favor of [Medik8s's NMO](https://github.com/medik8s/node-maintenance-operator), 
+thus NMO under *KubeVirt* is moving to a maintenance mode only and we are not taking PRs except for urgent bug fixes. 
+# Node Maintenance Operator (NMO)
+
+The node-maintenance-operator (NMO) is an operator generated from the [operator-sdk](https://github.com/operator-framework/operator-sdk).
+The purpose of this operator is to watch for new or deleted custom resources (CRs) called `NodeMaintenance` which indicate that a node in the cluster should either:
+  - `NodeMaintenance` CR created: move node into maintenance, cordon the node - set it as unschedulable, and evict the pods (which can be evicted) from that node.
+  - `NodeMaintenance` CR deleted: remove pod from maintenance and uncordon the node - set it as schedulable.
 
 > *Note*:  The current behavior of the operator is to mimic `kubectl drain <node name>`
 > as performed in [Kubevirt - evict all VMs and Pods on a node ](https://kubevirt.io/user-guide/docs/latest/administration/node-eviction.html#how-to-evict-all-vms-and-pods-on-a-node)
