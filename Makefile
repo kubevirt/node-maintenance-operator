@@ -95,7 +95,7 @@ export DOCKER_GO=docker run --rm -v $$(pwd):/home/go/src/kubevirt.io/node-mainte
 	-u $$(id -u) -w /home/go/src/kubevirt.io/node-maintenance-operator \
 	-e "GOPATH=/go" -e "GOFLAGS=-mod=vendor" -e "XDG_CACHE_HOME=/tmp/.cache" \
 	-e "VERSION=$(VERSION)" -e "IMAGE_REGISTRY=$(IMAGE_REGISTRY)" \
-	--entrypoint /bin/bash golang:$(GO_VERSION) -c
+	--entrypoint /bin/bash docker.io/library/golang:$(GO_VERSION) -c
 
 all: build
 
