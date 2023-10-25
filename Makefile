@@ -1,4 +1,4 @@
-GO_VERSION = 1.16
+GO_VERSION = 1.17
 IMAGE_REGISTRY ?= quay.io/kubevirt
 export IMAGE_REGISTRY
 
@@ -184,7 +184,7 @@ kustomize: ## Download kustomize locally if necessary.
 
 ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.
-	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.12)
 
 GOIMPORTS = $(shell pwd)/bin/goimports
 goimports: ## Download goimports locally if necessary.
