@@ -2,10 +2,10 @@
 FROM quay.io/centos/centos:stream9 AS builder
 RUN dnf install git golang -y
 
-# Ensure go 1.16
-RUN go install golang.org/dl/go1.16@latest
-RUN ~/go/bin/go1.16 download
-RUN /bin/cp -f ~/go/bin/go1.16 /usr/bin/go
+# Ensure go 1.17
+RUN go install golang.org/dl/go1.17@latest
+RUN ~/go/bin/go1.17 download
+RUN /bin/cp -f ~/go/bin/go1.17 /usr/bin/go
 RUN go version
 
 WORKDIR /workspace
